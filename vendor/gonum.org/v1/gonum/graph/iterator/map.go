@@ -31,8 +31,6 @@ type emptyInterface struct {
 // Having a clone here allows us to embed a map iterator
 // inside type mapIter so that mapIters can be re-used
 // without doing any allocations.
-//
-//lint:ignore U1000 This is a verbatim copy of the runtime type.
 type hiter struct {
 	key         unsafe.Pointer
 	elem        unsafe.Pointer

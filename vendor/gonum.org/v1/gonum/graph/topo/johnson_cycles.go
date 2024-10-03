@@ -248,7 +248,7 @@ func (g johnsonGraph) Nodes() graph.Nodes {
 	return iterator.NewOrderedNodes(n)
 }
 
-// From is required to satisfy Tarjan.
+// Successors is required to satisfy Tarjan.
 func (g johnsonGraph) From(id int64) graph.Nodes {
 	adj := g.succ[id]
 	if len(adj) == 0 {

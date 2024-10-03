@@ -12,9 +12,7 @@ import (
 
 // Dgetc2 computes an LU factorization with complete pivoting of the n×n matrix
 // A. The factorization has the form
-//
-//	A = P * L * U * Q,
-//
+//  A = P * L * U * Q,
 // where P and Q are permutation matrices, L is lower triangular with unit
 // diagonal elements and U is upper triangular.
 //

@@ -131,13 +131,13 @@ func EdgesOf(it Edges) []Edge {
 type WeightedEdges interface {
 	Iterator
 
-	// WeightedEdge returns the current Edge from the iterator.
+	// Edge returns the current Edge from the iterator.
 	WeightedEdge() WeightedEdge
 }
 
 // WeightedEdgeSlicer wraps the WeightedEdgeSlice method.
 type WeightedEdgeSlicer interface {
-	// WeightedEdgeSlice returns the set of edges remaining
+	// EdgeSlice returns the set of edges remaining
 	// to be iterated by an Edges iterator.
 	// The holder of the iterator may arbitrarily
 	// change elements in the returned slice, but
@@ -224,14 +224,14 @@ func LinesOf(it Lines) []Line {
 type WeightedLines interface {
 	Iterator
 
-	// WeightedLine returns the current WeightedLine from the iterator.
+	// Line returns the current Line from the iterator.
 	WeightedLine() WeightedLine
 }
 
 // WeightedLineSlicer wraps the WeightedLineSlice method.
 type WeightedLineSlicer interface {
-	// WeightedLineSlice returns the set of lines remaining
-	// to be iterated by a WeightedLines iterator.
+	// LineSlice returns the set of lines remaining
+	// to be iterated by an Lines iterator.
 	// The holder of the iterator may arbitrarily
 	// change elements in the returned slice, but
 	// those changes may be reflected to other

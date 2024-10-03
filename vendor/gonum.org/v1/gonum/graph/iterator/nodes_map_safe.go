@@ -61,7 +61,8 @@ func (n *Nodes) Node() graph.Node {
 func (n *Nodes) Reset() {
 	n.curr = nil
 	n.pos = 0
-	n.iter.Reset(n.nodes)
+	// TODO(kortschak): Use n.iter.Reset(n.nodes) when it is available and Go1.17 is no longer supported.
+	n.iter = n.nodes.MapRange()
 }
 
 // NodeSlice returns all the remaining nodes in the iterator and advances
