@@ -16,6 +16,15 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 	tokens := t.Tokens
 	for i, token := range tokens {
 		switch {
+		case i < len(tokens)-1 && t.NerTag[i+1] == "COMMAND_VERB":
+			for j := i + 1; j < len(t.Tokens); j++ {
+				if t.NerTag[j] == "OBJECT_TYPE" || t.PosTag[j] == "NN" { // Find object
+					t.PhraseTag[i] = t.Tokens[i] + "Name:" + t.Tokens[j]
+					break
+				}
+			}
+		case i < len(tokens)-1 && t.NerTag[i+1] == "OBJECT_TYPE":
+			t.PhraseTag[i] = tokens[i] + "Name:" + tokens[i+1]
 		case t.NerTag[i] == "OBJECT_TYPE":
 			// Update t.PhraseTag or another appropriate field within tag.Tag
 			t.PhraseTag[i] = token + "Name:" + tokens[i+1]

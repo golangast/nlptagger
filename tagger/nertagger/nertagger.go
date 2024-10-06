@@ -9,6 +9,7 @@ import (
 )
 
 var nerTags = map[string]string{
+	`\bcat\b`: "Name",
 	`\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|string|byte|rune)\b`: "DATA_TYPE",
 	`\bcreate\b`:                                                 "ACTION",
 	`\b(webserver|database|handler)\b`:                           "OBJECT_TYPE",
@@ -39,6 +40,7 @@ var nerTags = map[string]string{
 	`\bwith\s+(\d+)\s+fields\b`:                                                                  "FIELDS",
 	`\b(?:[Tt]he\s+)?[A-Z][a-z]+(?:[\s-][A-Z][a-z]+)*\s+(?:[Ii]nc\.|[Ll]td\.|[Cc]orp\.)\b`:       "ORG",
 	`(the\s+)?[A-Z][a-zA-Z]+([\s-][A-Za-z0-9]+)*`:                                                "OBJECT_NAME",
+	`\bgenerate\s+a\s+(webserver|database|handler)\b`:                                            "ACTION", // For "generate a webserver"
 	`\bcreate\s+(?:a\s+)?(webserver|database|handler)\s+named\s+([a-zA-Z]+)\b`:                   "COMMAND",
 	// First and Last Names (with optional middle names/initials)
 	`[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}`: "PERSON",
@@ -68,6 +70,9 @@ func Nertagger(t tag.Tag) tag.Tag {
 			if t.NerTag[i] == "" {
 				// Utilize POS tags for better tagging
 				switch t.PosTag[i] {
+
+				case "DET": //
+					t.NerTag[i] = "DETERMINER" // Or another custom tag
 				case "NNP", "NNPS": // Proper nouns (singular/plural)
 					t.NerTag[i] = "NAME"
 				case "NN", "NNS": // Common nouns (singular/plural)

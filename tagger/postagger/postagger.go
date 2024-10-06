@@ -9,7 +9,12 @@ import (
 )
 
 var posTags = map[string]string{
+	`\b(?:with|of|in|on|at|by|for|from|to|through|over|under|around|between|among|across|near|behind|beside|against|along|up|down|inside|outside)\b`: "IN", // Prepositions
 	`\b(?:[Aa]n?|[Tt]he)\b`: "DET", // Article
+	`\b(?:a|an|the)\b`:      "DET", // Determiners
+	`\bwebserver\b`:         "NN",
+	`\b[A-Za-z]{3,}(?:ness|ment|tion|ance|ence|ship|ity|ism)\b`:                            "NN",
+	`\b[A-Za-z]{3,}[A-Za-z]+\b`:                                                            "NN",   // More gen
 	`\b(?:[Mm]y|[Yy]our|[Hh]is|[Hh]er|[Ii]ts|[Oo]ur|[Tt]heir)\b`:                           "PRP$", // Possessive pronoun
 	`\b(?:[Ii]|you|he|she|it|we|they)\b`:                                                   "PRP",  // Personal pronoun
 	` \b(?:[A-Za-z]{3,}(?:ness|ment|tion|ance|ence|ship|ity|ism)\b|[A-Za-z]{3,}[A-Za-z]+)`: "NN",   // Abstract nouns
@@ -333,14 +338,14 @@ func NounCheck(t tag.Tag) tag.Tag {
 	}
 	var commonNouns = map[string]bool{
 		// Basic Concepts
-		"person": true, "thing": true, "place": true, "time": true, "way": true,
+		"cat": true, "person": true, "thing": true, "place": true, "time": true, "way": true,
 		"year": true, "day": true, "man": true, "woman": true, "child": true,
 		// Objects
 		"book": true, "house": true, "car": true, "tree": true, "door": true,
 		"table": true, "chair": true, "window": true, "computer": true, "phone": true,
 		"pen": true, "pencil": true, "paper": true, "bag": true, "box": true,
 		// Living Things
-		"animal": true, "plant": true, "dog": true, "cat": true, "bird": true,
+		"animal": true, "plant": true, "dog": true, "bird": true,
 		"fish": true, "insect": true, "flower": true,
 		// Concepts and Ideas
 		"idea": true, "thought": true, "feeling": true, "opinion": true, "problem": true,
@@ -367,8 +372,21 @@ func NounCheck(t tag.Tag) tag.Tag {
 		isProper := knownProperNouns[token]
 		if !isProper && commonNouns[token] {
 			isProper = false
+			t.PosTag[i] = "NN" // Explicitly tag as NN if in commonNouns
 		}
-		if isProper && i > 1 {
+
+		if isProper && i > 1 && i < len(t.Tokens) {
+			t.PosTag[i] = "NNP"
+		} else if t.Tokens[i] == "the" {
+			t.PosTag[i] = "DET"
+
+		} else if t.Tokens[i] == "webserver" {
+			t.NerTag[i] = "WEBSERVER"
+			t.PosTag[i] = "NN"
+		} else if t.Tokens[i] == "with" {
+			t.PosTag[i] = "IN"
+
+		} else if isProper && i > 2 && i < len(t.Tokens) && (t.PosTag[i-1] == "VB" || t.Tokens[i-1] == "webserver" || t.PosTag[i-1] == "IN") {
 			t.PosTag[i] = "NNP"
 		} else if t.PosTag[i] == "NN" && token != "with" && token != "of" {
 			if i > 0 && (t.Tokens[i-1] == "named" || t.Tokens[i-1] == "handler" || t.Tokens[i-1] == "structure") {
@@ -391,6 +409,15 @@ func NounCheck(t tag.Tag) tag.Tag {
 				if i > 0 && (t.Tokens[i-1] == "is" || t.Tokens[i-1] == "are" || t.Tokens[i-1] == "was" || t.Tokens[i-1] == "were") {
 					t.PosTag[i] = "VBG"
 				}
+			}
+		} else if isProper && i > 2 && i < len(t.Tokens) && i > 0 && (t.Tokens[i-1] == "a" || t.Tokens[i-1] == "an" || t.Tokens[i-1] == "the") {
+			if i < len(t.Tokens)-1 && t.Tokens[i+1] == "of" {
+				t.NerTag[i] = "OBJECT_TYPE"
+			} else if t.PosTag[i] == "DET" && commonNouns[token] { // Check if tagged as DET but is a common noun
+				t.NerTag[i] = "OBJECT_NAME"
+				t.PosTag[i] = "NN" // Correct the POS tag
+			} else {
+				t.NerTag[i] = "OBJECT_NAME"
 			}
 		}
 	}
