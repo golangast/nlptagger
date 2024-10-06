@@ -67,7 +67,11 @@ go install golang.org/x/tools/cmd/gonew@latest
 gonew github.com/golangast/nlptagger example.com/nlptagger
 ```
 
+<<<<<<< HEAD
 * - cd into nlptagger
+=======
+* - cd into switchterm
+>>>>>>> 4874a1af51a33ce4ea85773515ae7f8471b6f846
 ```bash
 cd nlptagger
 ```
