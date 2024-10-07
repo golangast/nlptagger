@@ -41,6 +41,9 @@ When you need a program to understand context of commands.
 
 ## What does it do?
 * It tags words for commands.
+*I made an overview video on this project.
+[video](https://www.youtube.com/watch?v=QuY5tZj0CXI)
+
 
 
 ## Technologies
@@ -51,7 +54,30 @@ When you need a program to understand context of commands.
 * go 1.23 for gonew
 
 ## How to run as is?
+```go
+//import tagger.Tagging
+t := tagger.Tagging("please create handler named jim")
 
+//which returns a tag struct that you can pull apart.
+/*
+type Tag struct {
+	PosTag    []string
+	NerTag    []string
+	PhraseTag []string
+	Tokens    []string
+	Features  []Features
+	Epoch     int
+	Cost      gorgonia.Value
+	IsName    bool
+	Token     string
+	Tags      []Tag
+}
+*/
+	for i := range t.Tokens {
+		fmt.Printf("Tokens: %s\t\t\t Ner: %s\t\t Pos: %s\t\t PhraseTag: %s\t\t  \n", t.Tokens[i], t.NerTag[i], t.PosTag[i], t.PhraseTag[i])
+	}
+
+```
 
 *- clone it
 ```bash
@@ -67,11 +93,9 @@ go install golang.org/x/tools/cmd/gonew@latest
 gonew github.com/golangast/nlptagger example.com/nlptagger
 ```
 
-<<<<<<< HEAD
 * - cd into nlptagger
 =======
 * - cd into switchterm
->>>>>>> 4874a1af51a33ce4ea85773515ae7f8471b6f846
 ```bash
 cd nlptagger
 ```
