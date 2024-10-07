@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	t := tagger.Tagging("please create handler named jim")
+	t := tagger.Tagging("Create a database named Inventory with the data structure Product containing 2 string fields and 1 integer field.")
 	for i := range t.Tokens {
 		fmt.Printf("Tokens: %s\t\t\t Ner: %s\t\t Pos: %s\t\t PhraseTag: %s\t\t  \n", t.Tokens[i], t.NerTag[i], t.PosTag[i], t.PhraseTag[i])
 	}

@@ -25,7 +25,7 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 			}
 		case i < len(tokens)-1 && t.NerTag[i+1] == "OBJECT_TYPE":
 			t.PhraseTag[i] = tokens[i] + "Name:" + tokens[i+1]
-		case t.NerTag[i] == "OBJECT_TYPE":
+		case i < len(tokens)-1 && t.NerTag[i] == "OBJECT_TYPE":
 			// Update t.PhraseTag or another appropriate field within tag.Tag
 			t.PhraseTag[i] = token + "Name:" + tokens[i+1]
 		case t.NerTag[i] == "ACTION": // Call handleNamedAction for all "ACTION" tokens

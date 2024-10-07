@@ -10,14 +10,14 @@ import (
 
 var nerTags = map[string]string{
 	`\bcat\b`: "Name",
-	`\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|string|byte|rune)\b`: "DATA_TYPE",
-	`\bcreate\b`:                                                 "ACTION",
-	`\b(webserver|database|handler)\b`:                           "OBJECT_TYPE",
+	`\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|string|byte|rune|integer|boolean|float|double|char|bool|int)\b`: "DATA_TYPE",
+	`\bcreate\b`: "ACTION",
+	`\b(webserver|database|handler|structure|field|data)\b`:      "OBJECT_TYPE",
 	`\bnamed\s+([a-zA-Z]+)\b`:                                    "NAME",
 	`\bwith\s+the\s+handler\s+([a-zA-Z]+)\b`:                     "HANDLER_NAME",
 	`\b(?:that\s+)?has\s+the\s+data\s+structure\s+([a-zA-Z]+)\b`: "DATA_STRUCTURE_NAME",
 	`\bwith\s+(\d+)\s+([a-zA-Z]+)\s+fields?\b`:                   "FIELDS",
-	`\b(?:with|has|using)\b`:                                     "RELATION",
+	`\b(?:with|has|using|containing|contain)\b`:                  "RELATION",
 	`\b(?:of|for|in|on|to|from)\b`:                               "PREPOSITION",
 	`\b(?:and|or|but|nor|yet|so)\b`:                              "CONJUNCTION",
 	`\b(?:is|are|was|were|be|being|been|have|has|had|do|does|did|shall|will|should|would|may|might|must|can|could)\b`:       "AUXILIARY_VERB",
@@ -68,6 +68,10 @@ func Nertagger(t tag.Tag) tag.Tag {
 			}
 			// 2. If no exact match, use context and POS tags:
 			if t.NerTag[i] == "" {
+				switch t.Tokens[i] {
+				case "field", "fields", "Fields", "Field":
+					t.NerTag[i] = "DATA_STRUCTURE_FIELD"
+				}
 				// Utilize POS tags for better tagging
 				switch t.PosTag[i] {
 

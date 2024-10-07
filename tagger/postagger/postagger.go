@@ -63,7 +63,14 @@ var posTags = map[string]string{
 
 // take in text and return a map of tokens to NER tags
 func Postagger(text string) tag.Tag {
-	tokens := strings.Fields(text)
+
+	// Create a regular expression to match periods and commas
+	// Regular expression to match all punctuation characters
+	re := regexp.MustCompile(`[[:punct:]]`)
+	// Replace all matches with an empty string
+	striptext := re.ReplaceAllString(text, "")
+
+	tokens := strings.Fields(striptext)
 	t := tag.Tag{}
 	for _, token := range tokens { // Iterate over each token
 
