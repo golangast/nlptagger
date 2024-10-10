@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golangast/nlptagger/tagger/stem"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
@@ -73,10 +74,13 @@ func Postagger(text string) tag.Tag {
 	tokens := strings.Fields(striptext)
 	t := tag.Tag{}
 	for _, token := range tokens { // Iterate over each token
+		// Split the sentence into words using space as the delimiter
+
+		stemtoken := stem.Stem(token)
 
 		for pattern, tag := range posTags {
 			re := regexp.MustCompile(pattern)
-			if re.MatchString(token) {
+			if re.MatchString(stemtoken) {
 
 				t.PosTag = append(t.PosTag, tag)
 				t.Tokens = append(t.Tokens, token)

@@ -33,6 +33,22 @@ When you need a program to understand context of commands.
 *This project is used for tagging cli commands.  It is not a LLM or trying to be.  I am using it to generate go code but I made this completely separate so others can enjoy it.
 *I will keep working on it and hopefully improving the phrase tagging and hopefully adding neural networks in the future.
 
+-Background
+1. Tokenization: This is the very first step in most NLP pipelines. It involves breaking down text into individual units called tokens (words, punctuation marks, etc.). Tokenization is fundamental because it creates the building blocks for further analysis.
+
+2. Part-of-Speech (POS) Tagging: POS tagging assigns grammatical categories (noun, verb, adjective, etc.) to each token. It's a crucial step for understanding sentence structure and is often used as input for more complex tasks like phrase tagging.
+
+3. Named Entity Recognition (NER): NER identifies and classifies named entities (people, organizations, locations, dates, etc.) in text. This is more specific than POS tagging but still more generic than phrase tagging, as it focuses on individual entities rather than complete phrases.
+
+4. Dependency Parsing: Dependency parsing analyzes the grammatical relationships between words in a sentence, creating a tree-like structure that shows how words depend on each other. It provides a deeper understanding of sentence structure than phrase tagging, which focuses on contiguous chunks.
+
+5. Lemmatization and Stemming: These techniques reduce words to their base or root forms (e.g., "running" to "run"). They help to normalize text and improve the accuracy of other NLP tasks.
+
+*Phrase tagging often uses the output of these more generic techniques as input. For example:
+
+POS tags are commonly used to define rules for identifying phrases (e.g., a noun phrase might be defined as a sequence of words starting with a determiner followed by one or more adjectives and a noun).
+NER can be used to identify specific types of phrases (e.g., a phrase tagged as "PERSON" might indicate a person's name).
+
 
 ## Why build this?
 * Go never changes

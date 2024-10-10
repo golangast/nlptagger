@@ -9,6 +9,7 @@ import (
 
 // checking and returning the tags
 func Tagging(text string) tag.Tag {
+
 	//start tagging
 	tag := postagger.Postagger(text)
 
