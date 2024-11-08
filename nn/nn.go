@@ -6,20 +6,21 @@ import (
 	"strings"
 
 	"github.com/golangast/nlptagger/nn/nnu"
+	"github.com/golangast/nlptagger/nn/simplenn"
 )
 
 // Global variables for vocabularies
 var tokenVocab map[string]int
 var posTagVocab map[string]int
 
-func LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*nnu.SimpleNN, error) {
+func LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*simplenn.SimpleNN, error) {
 	nn, err := nnu.LoadModelFromGOB("trained_model.gob")
 	if err != nil {
 		fmt.Println("Error loading model, creating a new one:", err)
 		inputSize := len(tokenVocab)
 		hiddenSize := 5 // Adjust as needed
 		outputSize := len(posTagVocab)
-		nn = nnu.NewSimpleNN(inputSize, hiddenSize, outputSize)
+		nn = nn.NewSimpleNN(inputSize, hiddenSize, outputSize)
 		// Load training data
 		trainingData, err := nnu.LoadTrainingDataFromJSON("data/training_data.json")
 		if err != nil {
@@ -28,7 +29,7 @@ func LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*nnu.SimpleNN, err
 		// Train the network
 		epochs := 100       // Adjust as needed
 		learningRate := 0.1 // Adjust as needed
-		accuracy := nn.Train(trainingData.Sentences, epochs, learningRate)
+		accuracy := nnu.Train(trainingData.Sentences, epochs, learningRate, nn)
 		fmt.Printf("Final Accuracy: %.2f%%\n", accuracy*100)
 		// Save the newly trained model
 		err = nnu.SaveModelToGOB(nn, "trained_model.gob")
@@ -41,7 +42,7 @@ func LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*nnu.SimpleNN, err
 	}
 	return nn, nil
 }
-func PredictTags(nn *nnu.SimpleNN, sentence string) []string {
+func PredictTags(nn *simplenn.SimpleNN, sentence string) []string {
 	// Tokenize the sentence into individual words.
 	tokens := strings.Fields(sentence)
 	// Create a slice to store the predicted POS tags.
@@ -65,7 +66,7 @@ func PredictTags(nn *nnu.SimpleNN, sentence string) []string {
 		inputs[tokenIndex] = 1 // Set the element corresponding to the token index to 1.
 
 		// Get the predicted output from the neural network.
-		predictedOutput := nn.Predict(inputs)
+		predictedOutput := nn.ForwardPass(inputs)
 		// Get the index of the predicted POS tag.
 		predictedTagIndex := nnu.MaxIndex(predictedOutput)
 		// Get the actual POS tag string using the predicted index.
@@ -85,7 +86,7 @@ func PredictTags(nn *nnu.SimpleNN, sentence string) []string {
 	// Return the list of predicted POS tags.
 	return predictedTags
 }
-func NN() *nnu.SimpleNN {
+func NN() *simplenn.SimpleNN {
 	// Delete existing model file
 	if _, err := os.Stat("trained_model.gob"); err == nil {
 		err = os.Remove("trained_model.gob")
@@ -102,7 +103,7 @@ func NN() *nnu.SimpleNN {
 
 	// Create vocabularies
 	tokenVocab = nnu.CreateTokenVocab(trainingData.Sentences)
-	posTagVocab = nnu.CreatePosTagVocab(trainingData.Sentences)
+	posTagVocab = simplenn.CreatePosTagVocab(trainingData.Sentences)
 
 	// Load or train the model
 	nn, err := LoadModelOrTrainNew(trainingData)
@@ -113,7 +114,7 @@ func NN() *nnu.SimpleNN {
 	// Further training (if needed)
 	epochs := 100       // Adjust as needed
 	learningRate := 0.1 // Adjust as needed
-	nn.Train(trainingData.Sentences, epochs, learningRate)
+	nnu.Train(trainingData.Sentences, epochs, learningRate, nn)
 
 	// Save model
 	err = nnu.SaveModelToGOB(nn, "trained_model.gob")

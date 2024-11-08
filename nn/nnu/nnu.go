@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math"
-	"math/rand"
 	"os"
 
+	"github.com/golangast/nlptagger/nn/simplenn"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
@@ -84,23 +83,46 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	return tokenVocab
 }
 
+// Function to calculate accuracy
+func calculateAccuracy(nn *simplenn.SimpleNN, trainingData []tag.Tag, tokenVocab map[string]int, posTagVocab map[string]int) float64 {
+	correctPredictions := 0
+	totalPredictions := 0
+
+	for _, taggedSentence := range trainingData {
+		for i := range taggedSentence.Tokens {
+			inputs := make([]float64, nn.InputSize)
+			tokenIndex, ok := tokenVocab[taggedSentence.Tokens[i]]
+			if ok {
+				inputs[tokenIndex] = 1
+			} else {
+				inputs[tokenVocab["UNK"]] = 1 // Handle unknown tokens
+			}
+
+			predictedTag := predict(nn, inputs, posTagVocab)
+
+			if predictedTag == taggedSentence.PosTag[i] {
+				correctPredictions++
+			}
+			totalPredictions++
+		}
+	}
+	return float64(correctPredictions) / float64(totalPredictions)
+}
+
 // Training function
-func (nn *SimpleNN) Train(trainingData []tag.Tag, epochs int, learningRate float64) float64 {
+func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *simplenn.SimpleNN) float64 {
 	var accuracy float64
 	for epoch := 0; epoch < epochs; epoch++ {
 		for _, taggedSentence := range trainingData {
 			for i := range taggedSentence.Tokens {
 				token := taggedSentence.Tokens[i]
 				targetTag := taggedSentence.PosTag[i]
-				correctPredictions := 0
-				totalPredictions := 0
 
 				// Convert token to one-hot encoded input
 				inputs := make([]float64, nn.InputSize)
 				tokenVocab := CreateTokenVocab(trainingData)
 				tokenIndex, ok := tokenVocab[token]
 				if ok {
-					//fmt.Printf("Token: %s, Token Index: %d, Input Size: %d\n", token, tokenIndex, len(inputs))
 					if _, ok := tokenVocab[token]; !ok {
 						fmt.Printf("Token '%s' not found in vocabulary!\n", token)
 					}
@@ -108,60 +130,14 @@ func (nn *SimpleNN) Train(trainingData []tag.Tag, epochs int, learningRate float
 				}
 
 				// Forward pass
-				outputs := nn.Predict(inputs)
+				outputs := nn.ForwardPass(inputs)
 
-				// Calculate error
-				targetOutput := make([]float64, nn.OutputSize)
-				posTagVocab := CreatePosTagVocab(trainingData)
-				targetTagIndex, ok := posTagVocab[targetTag]
-				if ok {
-					targetOutput[targetTagIndex] = 1
-				}
-				errors := make([]float64, nn.OutputSize)
-				for i := range errors {
-					errors[i] = targetOutput[i] - outputs[i]
-				}
+				errors, posTagVocab := nn.CalculateError(targetTag, outputs, trainingData)
 
-				// Backpropagation
-				// 1. Output layer weight updates
-				for i := 0; i < nn.OutputSize; i++ {
-					gradient := errors[i] * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-					for j := 0; j < nn.HiddenSize; j++ {
-						nn.WeightsHO[i][j] += learningRate * gradient * outputs[j] //Hidden Layer is input to Output Layer
-					}
-				}
+				nn.Backpropagate(errors, outputs, learningRate, inputs)
 
-				// 2. Hidden layer weight updates
-				hiddenErrors := make([]float64, nn.HiddenSize)
-				for i := 0; i < nn.HiddenSize; i++ {
-					errorSum := 0.0
-					for j := 0; j < nn.OutputSize; j++ {
-						errorSum += errors[j] * nn.WeightsHO[j][i]
-					}
-					hiddenErrors[i] = errorSum * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-				}
-				for i := 0; i < nn.HiddenSize; i++ {
-					for j := 0; j < nn.InputSize; j++ {
-						nn.WeightsIH[i][j] += learningRate * hiddenErrors[i] * inputs[j] //Input Layer is input to Hidden Layer
-					}
-				}
-				for _, taggedSentence := range trainingData {
-					for i := range taggedSentence.Tokens {
-						// ... (your existing code for forward pass, error calculation, backpropagation)
-
-						// Accuracy Calculation
-						predictedOutput := nn.Predict(inputs)
-						predictedTagIndex := MaxIndex(predictedOutput)
-						predictedTag, _ := IndexToPosTag(posTagVocab, predictedTagIndex) // Assuming indexToPosTag handles unknown tags
-
-						if predictedTag == taggedSentence.PosTag[i] {
-							correctPredictions++
-						}
-						totalPredictions++
-					}
-				}
-
-				accuracy = float64(correctPredictions) / float64(totalPredictions)
+				// Calculate accuracy for this epoch
+				accuracy = calculateAccuracy(nn, trainingData, tokenVocab, posTagVocab)
 				//fmt.Printf("Epoch %d: Accuracy = %.2f%%\n", epoch+1, accuracy*100)
 			}
 
@@ -171,82 +147,17 @@ func (nn *SimpleNN) Train(trainingData []tag.Tag, epochs int, learningRate float
 	return accuracy
 }
 
-func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
-	posTagVocab := make(map[string]int)
-	index := 0
-
-	for _, taggedSentence := range trainingData {
-		for _, posTag := range taggedSentence.PosTag {
-			if _, ok := posTagVocab[posTag]; !ok { // Check if POS tag is already in the vocabulary
-				posTagVocab[posTag] = index
-				index++
-			}
-		}
-	}
-
-	return posTagVocab
+// Function to make a prediction
+func predict(nn *simplenn.SimpleNN, inputs []float64, posTagVocab map[string]int) string {
+	predictedOutput := nn.ForwardPass(inputs)
+	predictedTagIndex := MaxIndex(predictedOutput)
+	predictedTag, _ := IndexToPosTag(posTagVocab, predictedTagIndex)
+	return predictedTag
 }
 
-// Forward pass
-func (nn *SimpleNN) Predict(inputs []float64) []float64 {
-	hidden := make([]float64, nn.HiddenSize)
-	for i := range hidden {
-		sum := 0.0
-		for j := range inputs {
-			sum += nn.WeightsIH[i][j] * inputs[j]
-		}
-		hidden[i] = sigmoid(sum)
-	}
-
-	output := make([]float64, nn.OutputSize)
-	for i := range output {
-		sum := 0.0
-		for j := range hidden {
-			sum += nn.WeightsHO[i][j] * hidden[j]
-		}
-		output[i] = sigmoid(sum)
-	}
-
-	return output
-}
-
-// Activation function (sigmoid)
-func sigmoid(x float64) float64 {
-	return 1 / (1 + math.Exp(-x))
-}
-
-type SimpleNN struct {
-	InputSize  int
-	HiddenSize int
-	OutputSize int
-	WeightsIH  [][]float64 // Input to hidden weights
-	WeightsHO  [][]float64 // Hidden to output weights
-}
-
-func NewSimpleNN(inputSize, hiddenSize, outputSize int) *SimpleNN {
-	nn := &SimpleNN{
-		InputSize:  inputSize,
-		HiddenSize: hiddenSize,
-		OutputSize: outputSize,
-	}
-	nn.WeightsIH = make([][]float64, hiddenSize)
-	for i := range nn.WeightsIH {
-		nn.WeightsIH[i] = make([]float64, inputSize)
-		for j := range nn.WeightsIH[i] {
-			nn.WeightsIH[i][j] = rand.Float64()*2 - 1 // Initialize with random weights
-		}
-	}
-	nn.WeightsHO = make([][]float64, outputSize)
-	for i := range nn.WeightsHO {
-		nn.WeightsHO[i] = make([]float64, hiddenSize)
-		for j := range nn.WeightsHO[i] {
-			nn.WeightsHO[i][j] = rand.Float64()*2 - 1
-		}
-	}
-	return nn
-}
-func SaveModelToGOB(model *SimpleNN, filePath string) error {
+func SaveModelToGOB(model *simplenn.SimpleNN, filePath string) error {
 	file, err := os.Create(filePath)
+
 	if err != nil {
 		return err
 	}
@@ -260,7 +171,7 @@ func SaveModelToGOB(model *SimpleNN, filePath string) error {
 
 	return nil
 }
-func LoadModelFromGOB(filePath string) (*SimpleNN, error) {
+func LoadModelFromGOB(filePath string) (*simplenn.SimpleNN, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -268,7 +179,7 @@ func LoadModelFromGOB(filePath string) (*SimpleNN, error) {
 	defer file.Close()
 
 	decoder := gob.NewDecoder(file)
-	var model SimpleNN
+	var model simplenn.SimpleNN
 	err = decoder.Decode(&model)
 	if err != nil {
 		return nil, err
