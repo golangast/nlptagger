@@ -1,0 +1,151 @@
+{
+  "sentences": [
+    {
+      "tokens": ["generate", "a", "webserver", "that", "has", "the", "handler", "named", "dog", "with", "the", "data", "structure", "pedagree"],
+      "posTag": ["VERB", "DET", "NOUN", "PRON", "VERB", "DET", "NOUN", "VERB", "NOUN", "ADP", "DET", "NOUN", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O", "O", "DATA_STRUCTURE", "O", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["create", "a", "function", "called", "cat", "that", "takes", "in", "a", "string"],
+      "posTag": ["VERB", "DET", "NOUN", "VERB", "NOUN", "PRON", "VERB", "ADP", "DET", "NOUN"],
+      "nerTag": ["ACTION_CREATE", "O", "TOOL", "O", "DATA_STRUCTURE", "O", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["the", "cat", "function", "should", "return", "a", "string"],
+      "posTag": ["DET", "NOUN", "NOUN", "AUX", "VERB", "DET", "NOUN"],
+      "nerTag": ["O", "DATA_STRUCTURE", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["generate", "a", "webserver", "with", "a", "handler", "for", "users"],
+      "posTag": ["VERB", "DET", "NOUN", "ADP", "DET", "NOUN", "ADP", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL", "O", "O"]
+    },
+    {
+      "tokens": ["create", "a", "handler", "named", "products", "that", "fetches", "data"],
+      "posTag": ["VERB", "DET", "NOUN", "VERB", "NOUN", "PRON", "VERB", "NOUN"],
+      "nerTag": ["ACTION_CREATE", "O", "TOOL", "O", "DATA_STRUCTURE", "O", "O", "O"]
+    },
+    {
+      "tokens": ["add", "a", "data", "structure", "for", "storing", "customer", "information"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "VERB", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "O", "O", "O", "O", "O", "O"]
+    }, 
+    {
+      "tokens": ["define", "a", "web", "endpoint", "to", "handle", "user", "login"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "PRT", "VERB", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["implement", "a", "function", "to", "validate", "user", "input"],
+      "posTag": ["VERB", "DET", "NOUN", "PRT", "VERB", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["create", "a", "webserver", "listening", "on", "port", "8080"],
+      "posTag": ["VERB", "DET", "NOUN", "VERB", "ADP", "NOUN", "NUM"],
+      "nerTag": ["ACTION_CREATE", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["build", "a", "website", "with", "login", "functionality"],
+      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "TOOL", "O"]
+    },
+    {
+      "tokens": ["create", "an", "API", "endpoint", "for", "user", "registration"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "NOUN", "NOUN"],
+      "nerTag": ["ACTION_CREATE", "O", "TOOL", "TOOL", "O", "O", "O"]
+    },
+    {
+      "tokens": ["the", "server", "should", "handle", "HTTP", "requests"],
+      "posTag": ["DET", "NOUN", "AUX", "VERB", "NOUN", "NOUN"],
+      "nerTag": ["O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["implement", "a", "search", "feature", "using", "elasticsearch"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "VERB", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL"]
+    },
+    {
+      "tokens": ["add", "a", "database", "connection", "to", "the", "application"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "DET", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["define", "a", "route", "for", "product", "details"],
+      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O"]
+    },
+    {
+      "tokens": ["write", "a", "function", "to", "calculate", "the", "total", "price"],
+      "posTag": ["VERB", "DET", "NOUN", "PRT", "VERB", "DET", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["the", "website", "needs", "a", "contact", "form"],
+      "posTag": ["DET", "NOUN", "VERB", "DET", "NOUN", "NOUN"],
+      "nerTag": ["O", "TOOL", "O", "O", "TOOL", "O"]
+    },
+    {
+      "tokens": ["generate", "a", "report", "of", "user", "activity"],
+      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O"]
+    },
+    {
+      "tokens": ["create", "a", "backup", "system", "for", "the", "data"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "DET", "NOUN"],
+      "nerTag": ["ACTION_CREATE", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["create", "a", "website", "with", "a", "login", "page"],
+      "posTag": ["VERB", "DET", "NOUN", "ADP", "DET", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL", "O"]
+    },
+    {
+      "tokens": ["implement", "a", "search", "function", "using", "elasticsearch"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "VERB", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "TOOL", "O", "TOOL"]
+    },
+    {
+      "tokens": ["add", "a", "database", "connection", "for", "user", "data"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["define", "an", "API", "endpoint", "to", "fetch", "products"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "PRT", "VERB", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "TOOL", "O", "O", "O"]
+    },
+    {
+      "tokens": ["write", "a", "function", "to", "validate", "user", "input"],
+      "posTag": ["VERB", "DET", "NOUN", "PRT", "VERB", "NOUN", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["build", "a", "web", "application", "with", "react"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "NOUN"],
+      "nerTag": ["ACTION", "O", "O", "TOOL", "O", "TOOL"]
+    },
+    {
+      "tokens": ["configure", "nginx", "to", "serve", "static", "files"],
+      "posTag": ["VERB", "NOUN", "PRT", "VERB", "ADJ", "NOUN"],
+      "nerTag": ["ACTION", "TOOL", "O", "O", "O", "O"]
+    },
+    {
+      "tokens": ["set", "up", "a", "database", "with", "postgresql"],
+      "posTag": ["VERB", "PRT", "DET", "NOUN", "ADP", "NOUN"],
+      "nerTag": ["ACTION", "O", "O", "TOOL", "O", "TOOL"]
+    },
+    {
+      "tokens": ["create", "a", "user", "model", "with", "name", "and", "email"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "NOUN", "CC", "NOUN"],
+      "nerTag": ["ACTION", "O", "O", "O", "O", "DATA_STRUCTURE", "O", "DATA_STRUCTURE"]
+    },
+    {
+      "tokens": ["implement", "a", "payment", "gateway", "using", "stripe"],
+      "posTag": ["VERB", "DET", "NOUN", "NOUN", "VERB", "NOUN"],
+      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL"]
+    }
+  
+  ]
+
+}
