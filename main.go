@@ -4,16 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golangast/nlptagger/nn"
+	modeldata "github.com/golangast/nlptagger/nn"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
 func main() {
-	nnn := nn.NN()
+	//actual model data loaded
+	md, err := modeldata.ModelData()
+	if err != nil {
+		fmt.Println("Error loading or training model:", err)
+	}
 	// Example prediction
 	sentence := "generate a webserver with the handler dog with the data structure people"
-	predictedTags := nn.PredictTags(nnn, sentence)
-
+	//making prediction
+	predictedTags := md.PredictTags(sentence)
+	//getting tags
 	predictedTagStruct := tag.Tag{
 		PosTag: predictedTags, // Assign the predicted POS tags to the PosTag field
 	}
