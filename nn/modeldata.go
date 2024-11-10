@@ -9,7 +9,7 @@ import (
 func ModelData() (*simplenn.SimpleNN, error) {
 
 	nn := simplenn.SimpleNN{}
-	_, _, trainingData := simplenn.CreateVocab()
+	_, _, _, trainingData := simplenn.CreateVocab()
 	// Train and save the model
 
 	return nn.TrainAndSaveModel(trainingData)

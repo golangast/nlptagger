@@ -20,6 +20,7 @@ type SimpleNN struct {
 	WeightsHO   [][]float64
 	TokenVocab  map[string]int
 	PosTagVocab map[string]int
+	NerTagVocab map[string]int
 }
 
 // Activation function (sigmoid)
@@ -30,53 +31,62 @@ func (nn SimpleNN) Sigmoid(x float64) float64 {
 // Forward pass
 func (nn *SimpleNN) ForwardPass(inputs []float64) []float64 {
 	// Create a slice to store the activations of the hidden layer.
-	hidden := make([]float64, nn.HiddenSize) 
+	hidden := make([]float64, nn.HiddenSize)
 	// Iterate over each neuron in the hidden layer.
-	for i := range hidden { 
+	for i := range hidden {
 		// Initialize the sum of weighted inputs for the current neuron.
-		sum := 0.0 
+		sum := 0.0
 		// Iterate over each input neuron.
-		for j := range inputs { 
+		for j := range inputs {
 			// Calculate the weighted input and add it to the sum.
-			sum += nn.WeightsIH[i][j] * inputs[j] 
+			sum += nn.WeightsIH[i][j] * inputs[j]
 		}
 		// Apply the sigmoid activation function to the sum and store the result in the hidden layer.
-		hidden[i] = nn.Sigmoid(sum) 
+		hidden[i] = nn.Sigmoid(sum)
 	}
 	// Create a slice to store the activations of the output layer.
-	output := make([]float64, nn.OutputSize) 
+	output := make([]float64, nn.OutputSize)
 	// Iterate over each neuron in the output layer.
-	for i := range output { 
+	for i := range output {
 		// Initialize the sum of weighted inputs for the current neuron.
-		sum := 0.0 
+		sum := 0.0
 		// Iterate over each neuron in the hidden layer.
-		for j := range hidden { 
+		for j := range hidden {
 			// Calculate the weighted input and add it to the sum.
-			sum += nn.WeightsHO[i][j] * hidden[j] 
+			sum += nn.WeightsHO[i][j] * hidden[j]
 		}
 		// Apply the sigmoid activation function to the sum and store the result in the output layer.
-		output[i] = nn.Sigmoid(sum) 
+		output[i] = nn.Sigmoid(sum)
 	}
 	// Return the activations of the output layer.
-	return output 
+	return output
 }
-func (nn *SimpleNN) CalculateError(targetTag string, outputs []float64, trainingData []tag.Tag) ([]float64, map[string]int) {
+func (nn *SimpleNN) CalculateError(targetTag string, outputs []float64, trainingData []tag.Tag) ([]float64, map[string]int, map[string]int) {
 	// Create a slice to store the target output values.
 	targetOutput := make([]float64, nn.OutputSize)
 	// Create a vocabulary of POS tags from the training data.
 	posTagVocab := CreatePosTagVocab(trainingData)
 	// Get the index of the target POS tag in the vocabulary.
 	targetTagIndex, ok := posTagVocab[targetTag]
-	// If the target POS tag is found in the vocabulary...
 	if ok {
 		// Set the corresponding element in the target output to 1.
 		targetOutput[targetTagIndex] = 1
 	}
+
+	nerTagVocab := CreateNerTagVocab(trainingData) // Use NER vocab
+	targetNerTagIndex, ok := nerTagVocab[targetTag]
+	// If the target POS tag is found in the vocabulary...
+	if ok {
+		// Set the corresponding element in the target output to 1.
+		targetOutput[targetNerTagIndex] = 1
+	}
 	// Create a slice to store the errors for each output neuron.
 	errors := make([]float64, nn.OutputSize)
 	// Calculate the error for each output neuron.
-	for i := range errors { errors[i] = targetOutput[i] - outputs[i] }
-	return errors, posTagVocab
+	for i := range errors {
+		errors[i] = targetOutput[i] - outputs[i]
+	}
+	return errors, posTagVocab, nerTagVocab
 }
 
 func (nn *SimpleNN) Backpropagate(errors []float64, outputs []float64, learningRate float64, inputs []float64) {
@@ -119,7 +129,21 @@ func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
 
 	return posTagVocab
 }
+func CreateNerTagVocab(trainingData []tag.Tag) map[string]int {
+	nerTagVocab := make(map[string]int)
+	index := 0
 
+	for _, taggedSentence := range trainingData {
+		for _, nerTag := range taggedSentence.NerTag {
+			if _, ok := nerTagVocab[nerTag]; !ok { // Check if POS tag is already in the vocabulary
+				nerTagVocab[nerTag] = index
+				index++
+			}
+		}
+	}
+
+	return nerTagVocab
+}
 func (nn *SimpleNN) NewSimpleNN(inputSize, hiddenSize, outputSize int) *SimpleNN {
 	nnn := &SimpleNN{
 		InputSize:  inputSize,
@@ -159,7 +183,7 @@ func LoadModelFromGOB(filePath string) (*SimpleNN, error) {
 }
 
 func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*SimpleNN, error) {
-	tokenVocab, posTagVocab, _ := CreateVocab()
+	tokenVocab, posTagVocab, _, _ := CreateVocab()
 	nn, err := LoadModelFromGOB("trained_model.gob")
 	if err != nil {
 		fmt.Println("Error loading model, creating a new one:", err)
@@ -175,8 +199,9 @@ func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*Si
 		// Train the network
 		epochs := 100       // Adjust as needed
 		learningRate := 0.1 // Adjust as needed
-		accuracy := Train(trainingData.Sentences, epochs, learningRate, nn)
-		fmt.Printf("Final Accuracy: %.2f%%\n", accuracy*100)
+		posaccuracy, neraccuracy := Train(trainingData.Sentences, epochs, learningRate, nn)
+		fmt.Printf("Final POS Accuracy: %.2f%%\n", posaccuracy*100)
+		fmt.Printf("Final NER Accuracy: %.2f%%\n", neraccuracy*100)
 		// Save the newly trained model
 		err = SaveModelToGOB(nn, "trained_model.gob")
 		if err != nil {
@@ -189,12 +214,12 @@ func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*Si
 	return nn, nil
 }
 
-func (nn *SimpleNN) PredictTags(sentence string) []string {
-	tokenVocab, posTagVocab, _ := CreateVocab()
+func (nn *SimpleNN) PredictTags(sentence string) ([]string, []string) {
+	tokenVocab, posTagVocab, nerTagVocab, _ := CreateVocab()
 	// Tokenize the sentence into individual words.
 	tokens := strings.Fields(sentence)
 	// Create a slice to store the predicted POS tags.
-	var predictedTags []string
+	var predictedPosTags, predictedNerTags []string
 	// Iterate over each token in the sentence.
 	for _, token := range tokens {
 		// Get the index of the token in the vocabulary.
@@ -204,7 +229,8 @@ func (nn *SimpleNN) PredictTags(sentence string) []string {
 			// Print a message indicating the token was not found.
 			fmt.Printf("Token '%s' not found in vocabulary\n", token)
 			// Assign "UNK" (unknown) as the POS tag for this token.
-			predictedTags = append(predictedTags, "UNK")
+			predictedPosTags = append(predictedPosTags, "UNK")
+			predictedNerTags = append(predictedNerTags, "O") // Default NER tag for unknown tokens
 			// Move on to the next token.
 			continue
 		}
@@ -219,20 +245,35 @@ func (nn *SimpleNN) PredictTags(sentence string) []string {
 		predictedTagIndex := nnu.MaxIndex(predictedOutput)
 		// Get the actual POS tag string using the predicted index.
 		predictedTag, ok := nnu.IndexToPosTag(posTagVocab, predictedTagIndex)
-		// If the predicted tag index is not found in the vocabulary...
 		if !ok {
 			// Print an error message.
 			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
 			// Append "UNK" to the predicted tags.
-			predictedTags = append(predictedTags, "UNK")
+			predictedPosTags = append(predictedPosTags, "UNK")
 			// Continue to the next token.
 			continue
 		}
 		// Append the predicted tag to the list of predicted tags.
-		predictedTags = append(predictedTags, predictedTag)
+		predictedPosTags = append(predictedPosTags, predictedTag)
+
+		// Get the index of the predicted NER tag.
+		predictedNerTagIndex := nnu.MaxIndex(predictedOutput[len(nerTagVocab):]) // Consider the second part for NER
+		// Get the actual NER tag string using the predicted index.
+		predictedTagNer, ok := nnu.IndexToNerTag(nerTagVocab, predictedNerTagIndex)
+		// If the predicted tag index is not found in the vocabulary...
+		if !ok {
+			// Print an error message.
+			fmt.Printf("NER tag index %d not found in vocabulary\n", predictedNerTagIndex)
+			// Append "O" (outside of any named entity) to the predicted NER tags.
+			predictedNerTags = append(predictedNerTags, "O")
+			// Continue to the next token.
+			continue
+		}
+		// Append the predicted tag to the list of predicted NER tags.
+		predictedNerTags = append(predictedNerTags, predictedTagNer)
 	}
-	// Return the list of predicted POS tags.
-	return predictedTags
+	// Return the list of predicted POS and NER tags.
+	return predictedPosTags, predictedNerTags
 }
 
 // trainAndSaveModel trains a new neural network model, or loads an existing one if available.
@@ -271,7 +312,7 @@ func (nn *SimpleNN) TrainAndSaveModel(trainingData *nnu.TrainingDataJSON) (*Simp
 	return nn, nil
 }
 
-func CreateVocab() (map[string]int, map[string]int, *nnu.TrainingDataJSON) {
+func CreateVocab() (map[string]int, map[string]int, map[string]int, *nnu.TrainingDataJSON) {
 	trainingData, err := nnu.LoadTrainingDataFromJSON("data/training_data.json")
 	if err != nil {
 		fmt.Println("error loading training data: %w", err)
@@ -279,13 +320,15 @@ func CreateVocab() (map[string]int, map[string]int, *nnu.TrainingDataJSON) {
 	// Create vocabularies
 	tokenVocab := nnu.CreateTokenVocab(trainingData.Sentences)
 	posTagVocab := CreatePosTagVocab(trainingData.Sentences)
+	nerTagVocab := CreateNerTagVocab(trainingData.Sentences)
 
-	return tokenVocab, posTagVocab, trainingData
+	return tokenVocab, posTagVocab, nerTagVocab, trainingData
 }
 
 // Training function
-func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *SimpleNN) float64 {
-	var accuracy float64
+func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *SimpleNN) (float64, float64) {
+	var posaccuracy float64
+	var neraccuracy float64
 	for epoch := 0; epoch < epochs; epoch++ {
 		for _, taggedSentence := range trainingData {
 			for i := range taggedSentence.Tokens {
@@ -306,19 +349,19 @@ func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *SimpleN
 				// Forward pass
 				outputs := nn.ForwardPass(inputs)
 
-				errors, posTagVocab := nn.CalculateError(targetTag, outputs, trainingData)
+				errors, posTagVocab, nerTagVocab := nn.CalculateError(targetTag, outputs, trainingData)
 
 				nn.Backpropagate(errors, outputs, learningRate, inputs)
 
 				// Calculate accuracy for this epoch
-				accuracy = calculateAccuracy(nn, trainingData, tokenVocab, posTagVocab)
+				posaccuracy, neraccuracy = calculateAccuracy(nn, trainingData, tokenVocab, posTagVocab, nerTagVocab)
 				//fmt.Printf("Epoch %d: Accuracy = %.2f%%\n", epoch+1, accuracy*100)
 			}
 
 		}
 
 	}
-	return accuracy
+	return posaccuracy, neraccuracy
 }
 
 func SaveModelToGOB(model *SimpleNN, filePath string) error {
@@ -339,17 +382,20 @@ func SaveModelToGOB(model *SimpleNN, filePath string) error {
 }
 
 // Function to make a prediction
-func predict(nn *SimpleNN, inputs []float64, posTagVocab map[string]int) string {
+func predict(nn *SimpleNN, inputs []float64, posTagVocab map[string]int, nerTagVocab map[string]int) (string, string) {
 	predictedOutput := nn.ForwardPass(inputs)
 	predictedTagIndex := nnu.MaxIndex(predictedOutput)
-	predictedTag, _ := nnu.IndexToPosTag(posTagVocab, predictedTagIndex)
-	return predictedTag
+	predictedPosTag, _ := nnu.IndexToPosTag(posTagVocab, predictedTagIndex)
+	predictedNerTag, _ := nnu.IndexToNerTag(nerTagVocab, predictedTagIndex)
+	return predictedPosTag, predictedNerTag
 }
 
 // Function to calculate accuracy
-func calculateAccuracy(nn *SimpleNN, trainingData []tag.Tag, tokenVocab map[string]int, posTagVocab map[string]int) float64 {
-	correctPredictions := 0
-	totalPredictions := 0
+func calculateAccuracy(nn *SimpleNN, trainingData []tag.Tag, tokenVocab map[string]int, posTagVocab map[string]int, nerTagVocab map[string]int) (float64, float64) {
+	poscorrectPredictions := 0
+	nercorrectPredictions := 0
+	postotalPredictions := 0
+	nertotalPredictions := 0
 
 	for _, taggedSentence := range trainingData {
 		for i := range taggedSentence.Tokens {
@@ -361,13 +407,17 @@ func calculateAccuracy(nn *SimpleNN, trainingData []tag.Tag, tokenVocab map[stri
 				inputs[tokenVocab["UNK"]] = 1 // Handle unknown tokens
 			}
 
-			predictedTag := predict(nn, inputs, posTagVocab)
+			predictedPosTag, predictedNerTag := predict(nn, inputs, posTagVocab, nerTagVocab)
 
-			if predictedTag == taggedSentence.PosTag[i] {
-				correctPredictions++
+			if predictedPosTag == taggedSentence.PosTag[i] {
+				poscorrectPredictions++
 			}
-			totalPredictions++
+			if predictedNerTag == taggedSentence.NerTag[i] {
+				nercorrectPredictions++
+			}
+			postotalPredictions++
+			nertotalPredictions++
 		}
 	}
-	return float64(correctPredictions) / float64(totalPredictions)
+	return float64(poscorrectPredictions) / float64(postotalPredictions), float64(nercorrectPredictions) / float64(nertotalPredictions)
 }
