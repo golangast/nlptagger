@@ -311,7 +311,7 @@ func (nn *SimpleNN) PredictTags(sentence string) ([]string, []string, []string, 
 		predictedPosTags = append(predictedPosTags, predictedTag)
 
 		// Get the index of the predicted NER tag.
-		predictedNerTagIndex := nnu.MaxIndex(predictedOutput[len(nerTagVocab):]) // Consider the second part for NER
+		predictedNerTagIndex := nnu.MaxIndex(predictedOutput)
 		// Get the actual NER tag string using the predicted index.
 		predictedTagNer, ok := nnu.IndexToNerTag(nerTagVocab, predictedNerTagIndex)
 		// If the predicted tag index is not found in the vocabulary...
