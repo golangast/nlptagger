@@ -61,6 +61,22 @@ func IndexToNerTag(nerTagVocab map[string]int, predictedTagIndex int) (string, b
 	}
 	return "", false
 }
+func IndexToPhraseTag(phraseTagVocab map[string]int, predictedTagIndex int) (string, bool) {
+	for tag, index := range phraseTagVocab {
+		if index == predictedTagIndex {
+			return tag, true
+		}
+	}
+	return "", false
+}
+func IndexToDRTag(drTagVocab map[string]int, predictedTagIndex int) (string, bool) {
+	for tag, index := range drTagVocab {
+		if index == predictedTagIndex {
+			return tag, true
+		}
+	}
+	return "", false
+}
 func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	tokenVocab := make(map[string]int)
 	tokenVocab["UNK"] = 0 // Add "UNK" token initially

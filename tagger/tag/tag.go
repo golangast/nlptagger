@@ -15,15 +15,21 @@ type Features struct {
 	IsNoun            float64
 }
 type Tag struct {
-	PosTag     []string
-	NerTag     []string
-	PhraseTag  []string
-	Tokens     []string
-	Features   []Features
-	Dependency []string
-	Epoch      int
-	IsName     bool
-	Token      string
-	Sentence   string
-	Tags       []Tag
+	PosTag          []string
+	NerTag          []string
+	PhraseTag       []string
+	Tokens          []string
+	DepRelationsTag []string
+	Features        []Features
+	Dependencies    []Dependency `json:"dependencies"` // Or "dependencyTag" if that's what the key is in your json
+	Epoch           int
+	IsName          bool
+	Token           string
+	Sentence        string
+	Tags            []Tag
+}
+type Dependency struct {
+	Head int    `json:"head"`
+	Dep  string `json:"dep"` // or Dependent if that's what your JSON has
+
 }
