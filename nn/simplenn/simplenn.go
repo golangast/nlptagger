@@ -268,7 +268,6 @@ func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*Si
 func (nn *SimpleNN) PredictTags(sentence string) ([]string, []string, []string, []string) {
 	tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab, _ := CreateVocab()
 	// Tokenize the sentence into individual words.
-	fmt.Println("drTagVocab:", drTagVocab)
 
 	tokens := strings.Fields(sentence)
 	// Create a slice to store the predicted POS tags.
@@ -456,7 +455,7 @@ func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *SimpleN
 				// fmt.Printf("Epoch %d: POS Accuracy = %.2f%%\n", epoch+1, posaccuracy*100)
 				// fmt.Printf("Epoch %d: NER Accuracy = %.2f%%\n", epoch+1, neraccuracy*100)
 				// fmt.Printf("Epoch %d: PHRASE Accuracy = %.2f%%\n", epoch+1, phraseaccuracy*100)
-				// fmt.Printf("Epoch %d: Dependency Accuracy = %.2f%%\n", epoch+1, draccuracy*100)
+				//fmt.Printf("Epoch %d: Dependency Accuracy = %.2f%%\n", epoch+1, draccuracy*100)
 			}
 
 		}
@@ -525,8 +524,8 @@ func calculateAccuracy(nn *SimpleNN, trainingData []tag.Tag, tokenVocab map[stri
 			if predictedPhraseTag == taggedSentence.PhraseTag[i] {
 				phrasecorrectPredictions++
 			}
-			if len(taggedSentence.DepRelationsTag) > i { // Check if Dependency slice has an element at index i
-				if predictedDRTag == taggedSentence.DepRelationsTag[i] {
+			if len(taggedSentence.Dependencies) > i { // Check if Dependency slice has an element at index i
+				if predictedDRTag == taggedSentence.Dependencies[i].Dep {
 					drcorrectPredictions++
 				}
 			} else {
