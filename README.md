@@ -71,7 +71,6 @@ NER can be used to identify specific types of phrases (e.g., a phrase tagged as 
 
 ## How to run as is?
 
-You do need a training file in data/
 
 ```go
 package main
@@ -86,8 +85,8 @@ import (
 
 func main() {
 
-//just a way to print it 
-	md, err := modeldata.ModelData()
+	//you have to create a trainig file
+	md, err := modeldata.ModelData("data/training_data.json")
 	if err != nil {
 		fmt.Println("Error loading or training model:", err)
 	}
@@ -111,6 +110,7 @@ func main() {
 	fmt.Println("Predicted NER Tag Types:", strings.Join(predictedTagStruct.NerTag, " "))
 	fmt.Println("Predicted Phrase Tag Types:", strings.Join(predictedTagStruct.PhraseTag, " "))
 	fmt.Println("Predicted Dependency Relation Tag Types:", strings.Join(predictedTagStruct.DepRelationsTag, " "))
+
 }
 
 ```
