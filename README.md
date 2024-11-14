@@ -70,6 +70,9 @@ NER can be used to identify specific types of phrases (e.g., a phrase tagged as 
 * go 1.23 for gonew
 
 ## How to run as is?
+
+You do need a training file in data/
+
 ```go
 package main
 
@@ -108,7 +111,7 @@ func main() {
 	fmt.Println("Predicted NER Tag Types:", strings.Join(predictedTagStruct.NerTag, " "))
 	fmt.Println("Predicted Phrase Tag Types:", strings.Join(predictedTagStruct.PhraseTag, " "))
 	fmt.Println("Predicted Dependency Relation Tag Types:", strings.Join(predictedTagStruct.DepRelationsTag, " "))
-
+}
 
 ```
 
