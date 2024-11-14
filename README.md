@@ -71,45 +71,44 @@ NER can be used to identify specific types of phrases (e.g., a phrase tagged as 
 
 ## How to run as is?
 ```go
-//import tagger.Tagging
-	t := tagger.Tagging("Create a database named Inventory with the data structure Product containing 2 string fields and 1 integer field.")
-	d, err := dependencyrelation.PredictDependencies(t)
-	if err != nil {
-		fmt.Println(err)
-	}
-//which returns a tag struct that you can pull apart.
-/*
-type Tag struct {
-	PosTag    []string
-	NerTag    []string
-	PhraseTag []string
-	Tokens    []string
-	Features  []Features
-	Epoch     int
-	Cost      gorgonia.Value
-	IsName    bool
-	Token     string
-	Tags      []Tag
-}
-*/
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	modeldata "github.com/golangast/nlptagger/nn"
+	"github.com/golangast/nlptagger/tagger/tag"
+)
+
+func main() {
 
 //just a way to print it 
-	combined := append(t.Tokens, t.PosTag...)
-	table(combined, 2)
-	fmt.Println("Pos is done")
-	fmt.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-	combined2 := append(t.Tokens, t.NerTag...)
-	table(combined2, 2)
-	fmt.Println("Ner is done")
-	fmt.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-	combined3 := append(t.Tokens, t.PhraseTag...)
-	table(combined3, 2)
-	fmt.Println("Phrase is done")
-	fmt.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-	com := append(t.Tokens, d.Dependency...)
-	table(com, 2)
-	fmt.Println("Dependency is done")
-	fmt.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+	md, err := modeldata.ModelData()
+	if err != nil {
+		fmt.Println("Error loading or training model:", err)
+	}
+	// Example prediction
+	sentence := "generate a webserver with the handler dog with the data structure people"
+	//making prediction
+	predictedPosTags, predictedNerTags, predictedPhraseTags, predictedDRTags := md.PredictTags(sentence)
+	//getting tags
+
+	predictedTagStruct := tag.Tag{
+		PosTag:          predictedPosTags, // Assign the predicted POS tags to the PosTag field
+		NerTag:          predictedNerTags,
+		PhraseTag:       predictedPhraseTags,
+		DepRelationsTag: predictedDRTags,
+	}
+
+	// Print the sentence again for clarity
+	fmt.Println("Sentence:", sentence)
+	// Print the predicted POS tags in a space-separated format
+	fmt.Println("Predicted POS Tag Types:", strings.Join(predictedTagStruct.PosTag, " "))
+	fmt.Println("Predicted NER Tag Types:", strings.Join(predictedTagStruct.NerTag, " "))
+	fmt.Println("Predicted Phrase Tag Types:", strings.Join(predictedTagStruct.PhraseTag, " "))
+	fmt.Println("Predicted Dependency Relation Tag Types:", strings.Join(predictedTagStruct.DepRelationsTag, " "))
+
 
 ```
 
@@ -140,11 +139,21 @@ go run main.go
 
 ## Repository overview
 ```bash
-├── nertagger #ner tagging which is kinda more general then pos tagging
-├── phrasetagger  #phrase tagging
-├── postagger   #pos tagging
-├── tag #data structure for tag
-├── tagger.go #where it is processed
+├── data #training data
+│   └── training_data.json
+├── nn #neural network
+│   ├── modeldata.go
+│   ├── nnu #neural network utils
+│   └── simplenn #simple neural network
+├── tagger #tagger folder
+│   ├── dependencyrelation #dependency relation
+│   ├── nertagger	#ner tagging
+│   ├── phrasetagger #phraase tagging
+│   ├── postagger #pos tagging
+│   ├── stem #stemming tokens before tagging
+│   ├── tag #tag data structure
+│   └── tagger.go
+└── trained_model.gob #model
 
 ```
 

@@ -1,12 +1,12 @@
 package main
 
-import (
-	//"fmt"
-	//"strings"
+// import (
+// 	"fmt"
+// 	"strings"
 
-	//modeldata "github.com/golangast/nlptagger/nn"
-	//"github.com/golangast/nlptagger/tagger/tag"
-)
+// 	modeldata "github.com/golangast/nlptagger/nn"
+// 	"github.com/golangast/nlptagger/tagger/tag"
+// )
 
 func main() {
 	//actual model data loaded
