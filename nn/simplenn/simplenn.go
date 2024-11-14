@@ -231,7 +231,7 @@ func LoadModelFromGOB(filePath string) (*SimpleNN, error) {
 	return &model, nil
 }
 
-func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*SimpleNN, error) {
+func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON, modeldirectory string) (*SimpleNN, error) {
 	tokenVocab, posTagVocab, _, _, _, _ := CreateVocab()
 	nn, err := LoadModelFromGOB("trained_model.gob")
 	if err != nil {
@@ -241,7 +241,7 @@ func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*Si
 		outputSize := len(posTagVocab)
 		nn = nn.NewSimpleNN(inputSize, hiddenSize, outputSize)
 		// Load training data
-		trainingData, err := nnu.LoadTrainingDataFromJSON("data/training_data.json")
+		trainingData, err := nnu.LoadTrainingDataFromJSON(modeldirectory)
 		if err != nil {
 			fmt.Println("Error loading training data:", err)
 		}
@@ -371,7 +371,7 @@ func (nn *SimpleNN) PredictTags(sentence string) ([]string, []string, []string, 
 
 // trainAndSaveModel trains a new neural network model, or loads an existing one if available.
 // It then saves the trained model to a file.
-func (nn *SimpleNN) TrainAndSaveModel(trainingData *nnu.TrainingDataJSON) (*SimpleNN, error) {
+func (nn *SimpleNN) TrainAndSaveModel(trainingData *nnu.TrainingDataJSON, modeldirectory string) (*SimpleNN, error) {
 	// Delete existing model file if it exists.
 	if _, err := os.Stat("trained_model.gob"); err == nil {
 		// If the file exists, remove it.
@@ -382,7 +382,7 @@ func (nn *SimpleNN) TrainAndSaveModel(trainingData *nnu.TrainingDataJSON) (*Simp
 	}
 
 	// Load or train the neural network model.
-	nn, err := nn.LoadModelOrTrainNew(trainingData)
+	nn, err := nn.LoadModelOrTrainNew(trainingData, modeldirectory)
 	if err != nil {
 		// If there's an error during loading or training, return an error.
 		return nil, fmt.Errorf("error loading or training model: %w", err)

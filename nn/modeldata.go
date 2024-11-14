@@ -6,11 +6,11 @@ import (
 
 // NN loads or trains a neural network model for POS tagging.
 
-func ModelData() (*simplenn.SimpleNN, error) {
+func ModelData(modeldirectory string) (*simplenn.SimpleNN, error) {
 
 	nn := simplenn.SimpleNN{}
 	_, _, _, _, _, trainingData := simplenn.CreateVocab()
 	// Train and save the model
 
-	return nn.TrainAndSaveModel(trainingData)
+	return nn.TrainAndSaveModel(trainingData, modeldirectory)
 }
