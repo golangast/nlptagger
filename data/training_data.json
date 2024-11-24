@@ -1,248 +1,1880 @@
 {
   "sentences": [
-    {
-      "tokens": ["create", "a", "function", "called", "cat", "that", "takes", "in", "a", "string"],
-      "posTag": ["VERB", "DET", "NOUN", "VERB", "NOUN", "PRON", "VERB", "ADP", "DET", "NOUN"],
-      "nerTag": ["ACTION_CREATE", "O", "TOOL_FUNCTION", "O", "DATA_STRUCTURE", "O", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_CREATE_TOOL", "O", "O", "O", "DATA_STRUCTURE", "O", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "acl:relcl"},
-        {"head": 4, "dep": "nsubj"},
-        {"head": 4, "dep": "relcl"},
-        {"head": 6, "dep": "aux"},
-        {"head": 6, "dep": "prep"},
-        {"head": 8, "dep": "det"},
-        {"head": 8, "dep": "pobj"}
-      ]
-    },
-    {
-      "tokens": ["the", "cat", "function", "should", "return", "a", "string"],
-      "posTag": ["DET", "NOUN", "NOUN", "AUX", "VERB", "DET", "NOUN"],
-      "nerTag": ["O", "DATA_STRUCTURE", "TOOL", "O", "O", "O", "O"],
-      "phraseTag": ["O", "DATA_STRUCTURE", "TOOL", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 2, "dep": "det"},
-        {"head": 2, "dep": "nsubj"},
-        {"head": 2, "dep": "root"},
-        {"head": 4, "dep": "aux"},
-        {"head": 4, "dep": "xcomp"},
-        {"head": 6, "dep": "det"},
-        {"head": 6, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["generate", "a", "webserver", "with", "a", "handler", "for", "users"],
-      "posTag": ["VERB", "DET", "NOUN", "ADP", "DET", "NOUN", "ADP", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL", "O", "O"],
-      "phraseTag": ["ACTION_CREATE_TOOL", "O", "O", "O", "O", "TOOL_HANDLER", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "det"},
-        {"head": 4, "dep": "pobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 8, "dep": "pobj"}
-      ]
-    },
-    {
-      "tokens": ["create", "a", "handler", "named", "products", "that", "fetches", "data"],
-      "posTag": ["VERB", "DET", "NOUN", "VERB", "NOUN", "PRON", "VERB", "NOUN"],
-      "nerTag": ["ACTION_CREATE", "O", "TOOL", "O", "DATA_STRUCTURE", "O", "O", "O"],
-      "phraseTag": ["ACTION_CREATE_TOOL", "O", "O", "O", "DATA_STRUCTURE", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "acl:relcl"},
-        {"head": 4, "dep": "nsubj"},
-        {"head": 4, "dep": "relcl"},
-        {"head": 6, "dep": "aux"},
-        {"head": 6, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["add", "a", "data", "structure", "for", "storing", "customer", "information"],
-      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "VERB", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "O", "O", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_ADD_DATA_STRUCTURE", "O", "O", "O", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "compound"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pcomp"},
-        {"head": 6, "dep": "nsubj"},
-        {"head": 6, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["define", "a", "web", "endpoint", "to", "handle", "user", "login"],
-      "posTag": ["VERB", "DET", "NOUN", "NOUN", "PRT", "VERB", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "O", "TOOL", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_DEFINE_TOOL", "O", "O", "TOOL", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "compound"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pcomp"},
-        {"head": 6, "dep": "nsubj"},
-        {"head": 6, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["implement", "a", "function", "to", "validate", "user", "input"],
-      "posTag": ["VERB", "DET", "NOUN", "PRT", "VERB", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_IMPLEMENT_TOOL", "O", "TOOL_FUNCTION", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pcomp"},
-        {"head": 6, "dep": "nsubj"},
-        {"head": 6, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["build", "a", "website", "with", "login", "functionality"],
-      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "TOOL", "O"],
-      "phraseTag": ["ACTION_BUILD_TOOL", "O", "O", "O", "TOOL", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pobj"},
-        {"head": 4, "dep": "compound"}
-      ]
-    },
-    {
-      "tokens": ["create", "an", "API", "endpoint", "for", "user", "registration"],
-      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "NOUN", "NOUN"],
-      "nerTag": ["ACTION_CREATE", "O", "TOOL", "TOOL", "O", "O", "O"],
-      "phraseTag": ["ACTION_CREATE_TOOL", "O", "O", "TOOL", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "compound"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pobj"},
-        {"head": 4, "dep": "compound"}
-      ]
-    },
-    {
-      "tokens": ["the", "server", "should", "handle", "HTTP", "requests"],
-      "posTag": ["DET", "NOUN", "AUX", "VERB", "NOUN", "NOUN"],
-      "nerTag": ["O", "TOOL", "O", "O", "O", "O"],
-      "phraseTag": ["O", "TOOL", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 2, "dep": "det"},
-        {"head": 2, "dep": "nsubj"},
-        {"head": 2, "dep": "root"},
-        {"head": 2, "dep": "xcomp"},
-        {"head": 4, "dep": "dobj"},
-        {"head": 4, "dep": "compound"}
-      ]
-    },
-    {
-      "tokens": ["implement", "a", "search", "feature", "using", "elasticsearch"],
-      "posTag": ["VERB", "DET", "NOUN", "NOUN", "VERB", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "TOOL"],
-      "phraseTag": ["ACTION_IMPLEMENT_TOOL", "O", "TOOL", "TOOL", "O", "TOOL"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "compound"},
-        {"head": 2, "dep": "prep"},
-        {"head": 6, "dep": "pobj"}
-      ]
-    },
-    {
-      "tokens": ["add", "a", "database", "connection", "to", "the", "application"],
-      "posTag": ["VERB", "DET", "NOUN", "NOUN", "ADP", "DET", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_ADD_TOOL", "O", "TOOL_DATABASE", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "compound"},
-        {"head": 2, "dep": "prep"},
-        {"head": 6, "dep": "det"},
-        {"head": 6, "dep": "pobj"}
-      ]
-    },
-    {
-      "tokens": ["define", "a", "route", "for", "product", "details"],
-      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O"],
-      "phraseTag": ["ACTION_DEFINE_TOOL", "O", "TOOL", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pobj"},
-        {"head": 4, "dep": "compound"}
-      ]
-    },
-    {
-      "tokens": ["write", "a", "function", "to", "calculate", "the", "total", "price"],
-      "posTag": ["VERB", "DET", "NOUN", "PRT", "VERB", "DET", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O", "O", "O"],
-      "phraseTag": ["ACTION_WRITE_TOOL", "O", "TOOL_FUNCTION", "O", "O", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pcomp"},
-        {"head": 6, "dep": "det"},
-        {"head": 6, "dep": "dobj"},
-        {"head": 6, "dep": "compound"}
-      ]
-    },
-    {
-      "tokens": ["the", "website", "needs", "a", "contact", "form"],
-      "posTag": ["DET", "NOUN", "VERB", "DET", "NOUN", "NOUN"],
-      "nerTag": ["O", "TOOL", "O", "O", "TOOL", "O"],
-      "phraseTag": ["O", "TOOL_WEBSITE", "O", "O", "TOOL_FORM", "O"],
-      "dependencies": [
-        {"head": 2, "dep": "det"},
-        {"head": 2, "dep": "nsubj"},
-        {"head": 2, "dep": "root"},
-        {"head": 2, "dep": "xcomp"},
-        {"head": 4, "dep": "det"},
-        {"head": 4, "dep": "dobj"}
-      ]
-    },
-    {
-      "tokens": ["generate", "a", "report", "of", "user", "activity"],
-      "posTag": ["VERB", "DET", "NOUN", "ADP", "NOUN", "NOUN"],
-      "nerTag": ["ACTION", "O", "TOOL", "O", "O", "O"],
-      "phraseTag": ["ACTION_GENERATE_TOOL", "O", "TOOL_REPORT", "O", "O", "O"],
-      "dependencies": [
-        {"head": 0, "dep": "root"},
-        {"head": 0, "dep": "det"},
-        {"head": 0, "dep": "dobj"},
-        {"head": 2, "dep": "prep"},
-        {"head": 4, "dep": "pobj"},
-        {"head": 4, "dep": "compound"}
-      ]
-    }
-  
+      {
+          "tokens": [
+              "create",
+              "a",
+              "function",
+              "called",
+              "cat",
+              "that",
+              "takes",
+              "in",
+              "a",
+              "string"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "VERB",
+              "NOUN",
+              "PRON",
+              "VERB",
+              "ADP",
+              "DET",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL_FUNCTION",
+              "O",
+              "DATA_STRUCTURE",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "acl:relcl"
+              },
+              {
+                  "head": 4,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 4,
+                  "dep": "relcl"
+              },
+              {
+                  "head": 6,
+                  "dep": "aux"
+              },
+              {
+                  "head": 6,
+                  "dep": "prep"
+              },
+              {
+                  "head": 8,
+                  "dep": "det"
+              },
+              {
+                  "head": 8,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "the",
+              "cat",
+              "function",
+              "should",
+              "return",
+              "a",
+              "string"
+          ],
+          "posTag": [
+              "DET",
+              "NOUN",
+              "NOUN",
+              "AUX",
+              "VERB",
+              "DET",
+              "NOUN"
+          ],
+          "nerTag": [
+              "O",
+              "DATA_STRUCTURE",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "O",
+              "DATA_STRUCTURE",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 2,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 2,
+                  "dep": "root"
+              },
+              {
+                  "head": 4,
+                  "dep": "aux"
+              },
+              {
+                  "head": 4,
+                  "dep": "xcomp"
+              },
+              {
+                  "head": 6,
+                  "dep": "det"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "generate",
+              "a",
+              "webserver",
+              "with",
+              "a",
+              "handler",
+              "for",
+              "users"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "O",
+              "O",
+              "TOOL_HANDLER",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "det"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 8,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "handler",
+              "named",
+              "products",
+              "that",
+              "fetches",
+              "data"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "VERB",
+              "NOUN",
+              "PRON",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL",
+              "O",
+              "DATA_STRUCTURE",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "acl:relcl"
+              },
+              {
+                  "head": 4,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 4,
+                  "dep": "relcl"
+              },
+              {
+                  "head": 6,
+                  "dep": "aux"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "a",
+              "data",
+              "structure",
+              "for",
+              "storing",
+              "customer",
+              "information"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "VERB",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_DATA_STRUCTURE",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pcomp"
+              },
+              {
+                  "head": 6,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "define",
+              "a",
+              "web",
+              "endpoint",
+              "to",
+              "handle",
+              "user",
+              "login"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "PRT",
+              "VERB",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_DEFINE_TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pcomp"
+              },
+              {
+                  "head": 6,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "a",
+              "function",
+              "to",
+              "validate",
+              "user",
+              "input"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "PRT",
+              "VERB",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "O",
+              "TOOL_FUNCTION",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pcomp"
+              },
+              {
+                  "head": 6,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "build",
+              "a",
+              "website",
+              "with",
+              "login",
+              "functionality"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_BUILD_TOOL",
+              "O",
+              "O",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 4,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "an",
+              "API",
+              "endpoint",
+              "for",
+              "user",
+              "registration"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 4,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "the",
+              "server",
+              "should",
+              "handle",
+              "HTTP",
+              "requests"
+          ],
+          "posTag": [
+              "DET",
+              "NOUN",
+              "AUX",
+              "VERB",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 2,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 2,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "xcomp"
+              },
+              {
+                  "head": 4,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 4,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "a",
+              "search",
+              "feature",
+              "using",
+              "elasticsearch"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "O",
+              "TOOL",
+              "TOOL",
+              "O",
+              "TOOL"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 6,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "a",
+              "database",
+              "connection",
+              "to",
+              "the",
+              "application"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "O",
+              "TOOL_DATABASE",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 6,
+                  "dep": "det"
+              },
+              {
+                  "head": 6,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "define",
+              "a",
+              "route",
+              "for",
+              "product",
+              "details"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_DEFINE_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 4,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "write",
+              "a",
+              "function",
+              "to",
+              "calculate",
+              "the",
+              "total",
+              "price"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "PRT",
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_WRITE_TOOL",
+              "O",
+              "TOOL_FUNCTION",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pcomp"
+              },
+              {
+                  "head": 6,
+                  "dep": "det"
+              },
+              {
+                  "head": 6,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 6,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "the",
+              "website",
+              "needs",
+              "a",
+              "contact",
+              "form"
+          ],
+          "posTag": [
+              "DET",
+              "NOUN",
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "O",
+              "TOOL_WEBSITE",
+              "O",
+              "O",
+              "TOOL_FORM",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 2,
+                  "dep": "nsubj"
+              },
+              {
+                  "head": 2,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "xcomp"
+              },
+              {
+                  "head": 4,
+                  "dep": "det"
+              },
+              {
+                  "head": 4,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "generate",
+              "a",
+              "report",
+              "of",
+              "user",
+              "activity"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_GENERATE_TOOL",
+              "O",
+              "TOOL_REPORT",
+              "O",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 4,
+                  "dep": "compound"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "tls",
+              "to",
+              "my",
+              "project",
+              "jim"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "ADP",
+              "PRON",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "poss"
+              },
+              {
+                  "head": 2,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 0,
+                  "dep": "nmod"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "user",
+              "authentication",
+              "with",
+              "JWT"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "TOOL"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "compound"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "database",
+              "schema",
+              "for",
+              "products"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "TOOL_DATABASE",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 3,
+                  "dep": "det"
+              },
+              {
+                  "head": 3,
+                  "dep": "compound"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 3,
+                  "dep": "prep"
+              },
+              {
+                  "head": 5,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "a",
+              "new",
+              "field",
+              "to",
+              "the",
+              "user",
+              "model"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "ADJ",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_DATA_STRUCTURE",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 3,
+                  "dep": "det"
+              },
+              {
+                  "head": 3,
+                  "dep": "amod"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 3,
+                  "dep": "prep"
+              },
+              {
+                  "head": 7,
+                  "dep": "det"
+              },
+              {
+                  "head": 7,
+                  "dep": "compound"
+              },
+              {
+                  "head": 5,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "write",
+              "unit",
+              "tests",
+              "for",
+              "the",
+              "login",
+              "function"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_WRITE_TOOL",
+              "TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "TOOL"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "compound"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 6,
+                  "dep": "det"
+              },
+              {
+                  "head": 6,
+                  "dep": "compound"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "deploy",
+              "the",
+              "application",
+              "to",
+              "production"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_DEPLOY_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "update",
+              "the",
+              "dependencies",
+              "in",
+              "package.json"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_UPDATE_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "pobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "refactor",
+              "the",
+              "code",
+              "to",
+              "improve",
+              "performance"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "ACTION",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_REFACTOR_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "ACTION",
+              "O"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 2,
+                  "dep": "det"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 2,
+                  "dep": "prep"
+              },
+              {
+                  "head": 4,
+                  "dep": "xcomp"
+              },
+              {
+                  "head": 5,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "set",
+              "up",
+              "a",
+              "continuous",
+              "integration",
+              "pipeline"
+          ],
+          "posTag": [
+              "VERB",
+              "ADP",
+              "DET",
+              "ADJ",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "O",
+              "TOOL",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_SET_UP_TOOL",
+              "O",
+              "O",
+              "O",
+              "TOOL",
+              "TOOL"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "prt"
+              },
+              {
+                  "head": 5,
+                  "dep": "det"
+              },
+              {
+                  "head": 5,
+                  "dep": "amod"
+              },
+              {
+                  "head": 5,
+                  "dep": "compound"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "tls",
+              "certificate",
+              "to",
+              "project",
+              "alpha"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "nmod"
+              },
+              {
+                  "head": 2,
+                  "dep": "case"
+              },
+              {
+                  "head": 2,
+                  "dep": "nmod"
+              },
+              {
+                  "head": 0,
+                  "dep": "nmod"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "enable",
+              "tls",
+              "for",
+              "domain",
+              "beta"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_ENABLE_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "prep"
+              },
+              {
+                  "head": 2,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 0,
+                  "dep": "nmod"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "setup",
+              "tls",
+              "with",
+              "parameters",
+              "for",
+              "delta"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_SETUP_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "prep"
+              },
+              {
+                  "head": 2,
+                  "dep": "pobj"
+              },
+              {
+                  "head": 3,
+                  "dep": "prep"
+              },
+              {
+                  "head": 0,
+                  "dep": "nmod"
+              }
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "tls",
+              "1.3",
+              "in",
+              "project",
+              "epsilon"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NUM",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "DATA_STRUCTURE"
+          ],
+          "dependencies": [
+              {
+                  "head": 0,
+                  "dep": "root"
+              },
+              {
+                  "head": 0,
+                  "dep": "dobj"
+              },
+              {
+                  "head": 1,
+                  "dep": "nmod"
+              },
+              {
+                  "head": 2,
+                  "dep": "case"
+              },
+              {
+                  "head": 2,
+                  "dep": "nmod"
+              },
+              {
+                  "head": 0,
+                  "dep": "nmod"
+              }
+          ]
+      }
   ]
-
 }

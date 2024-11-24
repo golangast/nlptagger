@@ -29,7 +29,9 @@ type Tag struct {
 	Tags            []Tag
 }
 type Dependency struct {
-	Head int    `json:"head"`
-	Dep  string `json:"dep"` // or Dependent if that's what your JSON has
+	Dependent int    `json:"dependent"`
+	Relation  string `json:"relation"`
+	Head      int    `json:"head"`
+	Dep       string `json:"dep"` // or Dependent if that's what your JSON has
 
 }
