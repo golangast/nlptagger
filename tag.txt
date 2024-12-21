@@ -6,1408 +6,589 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"math/rand/v2"
+	"math/rand"
 	"os"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger/tag"
+	modeldata "github.com/golangast/nlptagger/neural"
+	"github.com/golangast/nlptagger/neural/nn/g"
+	"github.com/golangast/nlptagger/neural/nnu"
+	"github.com/golangast/nlptagger/neural/nnu/predict"
 )
 
-// Global variables for vocabularies
-var tokenVocab map[string]int
-var posTagVocab map[string]int
+// WordVectors represents the word embeddings
+type WordVectors map[int][]float64
 
-// Structure to represent training data in JSON
-type TrainingDataJSON struct {
-	Sentences []tag.Tag `json:"sentences"`
+// Vector represents a word vector
+type Vector []float64
+
+type SimpleWord2Vec struct {
+	Vocabulary        map[string]int
+	WordVectors       WordVectors
+	VectorSize        int
+	Window            int
+	contextEmbeddings map[string][]float64
+	ContextLabels     map[string]string
+	// Add fields to store POS tags, NER tags, etc.
+	SentenceTags        map[string][]string
+	UNKToken            string // Token for unknown words
+	LearningRate        float64
+	MaxGrad             float64 // Maximum gradient for clipping
+	HiddenSize          int     // Size of the hidden layer in the neural network
+	Weights             [][]float64
+	Biases              [][]float64
+	ann                 *g.ANN
+	similarityThreshold float64
+
+	// Add other necessary fields for the neural network
 }
 
-func main() {
-	if _, err := os.Stat("trained_model.gob"); err == nil {
-		// If the model file exists, delete it
-		err = os.Remove("trained_model.gob")
-		if err != nil {
-			fmt.Println("Error deleting model file:", err)
-			return
-		}
+// convertToMap converts WordVectors to a map[string][]float64.
+func convertToMap(wv WordVectors, vocab map[string]int) map[string][]float64 {
+	result := make(map[string][]float64)
+	for word, index := range vocab {
+		result[word] = wv[index]
 	}
-	// 1. Load training data from JSON file
-	trainingData, err := loadTrainingDataFromJSON("data/training_data.json")
-	if err != nil {
-		fmt.Println("Error loading training data:", err)
-		return
-	}
-
-	// 2. Create vocabularies
-	tokenVocab = createTokenVocab(trainingData.Sentences)
-	posTagVocab = createPosTagVocab(trainingData.Sentences)
-
-	// Load the trained model (if it exists)
-	nn, err := loadModelFromGOB("trained_model.gob")
-	if err != nil {
-		// If the model file doesn't exist or there's an error loading it,
-		// create a new model and train it.
-		fmt.Println("Error loading model, creating a new one:", err)
-		inputSize := len(tokenVocab)
-		hiddenSize := 5 // Adjust as needed
-		outputSize := len(posTagVocab)
-		nn = NewSimpleNN(inputSize, hiddenSize, outputSize)
-
-		// Train the network
-		epochs := 100       // Adjust as needed
-		learningRate := 0.1 // Adjust as needed
-		accuracy := nn.Train(trainingData.Sentences, epochs, learningRate)
-		fmt.Printf("Final Accuracy: %.2f%%\n", accuracy*100)
-		// Save the newly trained model
-		err = saveModelToGOB(nn, "trained_model.gob")
-		if err != nil {
-			fmt.Println("Error saving model:", err)
-			return
-		}
-		fmt.Println("New model saved to trained_model.gob")
-	} else {
-		fmt.Println("Loaded model from trained_model.gob")
-	}
-
-	// 3. Create and train the neural network
-	inputSize := len(tokenVocab)
-
-	// Train the network
-	epochs := 100       // Adjust as needed
-	learningRate := 0.1 // Adjust as needed
-	nn.Train(trainingData.Sentences, epochs, learningRate)
-	// Save the trained model
-	err = saveModelToGOB(nn, "trained_model.gob")
-	if err != nil {
-		fmt.Println("Error saving model:", err)
-		return
-	}
-
-	fmt.Println("Model saved to trained_model.gob")
-
-	// 4. Example prediction (using a new sentence)
-	sentence := "generate a webserver with the handler dog with the data structure people"
-	tokens := strings.Fields(sentence) // Tokenize the sentence
-
-	var predictedTags []string
-	for _, token := range tokens {
-		tokenIndex, ok := tokenVocab[token]
-		if !ok {
-			fmt.Printf("Token '%s' not found in vocabulary\n", token)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		inputs := make([]float64, inputSize)
-		inputs[tokenIndex] = 1
-
-		predictedOutput := nn.Predict(inputs)
-		predictedTagIndex := maxIndex(predictedOutput)
-		predictedTag, ok := indexToPosTag(posTagVocab, predictedTagIndex)
-		if !ok {
-			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		predictedTags = append(predictedTags, predictedTag)
-	}
-
-	fmt.Println("Sentence:", sentence)
-	fmt.Println("Predicted Tags:", strings.Join(predictedTags, " "))
-	// 5. Example prediction (using a new sentence)
-	//command to tag
-	//t := tagger.Tagging("generate a webserver that has the handler named dog with the data structure pedagree")
-	//print the tags
-
-	for _, token := range tokens {
-		tokenIndex, ok := tokenVocab[token]
-		if !ok {
-			fmt.Printf("Token '%s' not found in vocabulary\n", token)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		inputs := make([]float64, nn.InputSize)
-		inputs[tokenIndex] = 1
-
-		predictedOutput := nn.Predict(inputs)
-		predictedTagIndex := maxIndex(predictedOutput)
-		predictedTag, ok := indexToPosTag(posTagVocab, predictedTagIndex)
-		if !ok {
-			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		predictedTags = append(predictedTags, predictedTag)
-	}
-
-	// Create a tag.Tag struct with the predicted tags
-	predictedTagStruct := tag.Tag{
-		Tokens: tokens,
-		PosTag: predictedTags, // Use predictedTags for the Type field
-	}
-
-	// Print the predicted tag types along with the original sentence
-	fmt.Println("Sentence:", sentence)
-	fmt.Println("Predicted Tag Types:", strings.Join(predictedTagStruct.PosTag, " "))
-
-	// Access and print individual tag types
-	for i, token := range predictedTagStruct.Tokens {
-		fmt.Printf("Token: %s, Predicted Tag Type: %s\n", token, predictedTagStruct.PosTag[i])
-	}
-	// 2. Train the network (add training logic here)
-	// This would involve:
-	//   - Iterating through your training data (tokens and POS tags)
-	//   - Converting tokens to one-hot encoded inputs
-	//   - Feeding inputs to the network to get predictions
-	//   - Calculating the error between predictions and actual POS tags
-	//   - Updating the network's weights using backpropagation
-	//   - Repeating the process for multiple epochs
-	// ... (Training loop and backpropagation implementation)
-	// Define posTagVocab as a slice
-
+	return result
 }
 
-// Function to load training data from a JSON file
-func loadTrainingDataFromJSON(filePath string) (*TrainingDataJSON, error) {
+// ReadTrainingData reads the training data from a JSON file.
+func ReadTrainingData(filePath string) ([]string, error) {
+	// Open the JSON file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error opening training data file: %w", err)
 	}
 	defer file.Close()
 
+	// Read the file content
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading training data file: %w", err)
 	}
 
-	var trainingData TrainingDataJSON
-	err = json.Unmarshal(data, &trainingData)
+	// Unmarshal the JSON data
+	var sentences []struct {
+		Sentence string `json:"sentence"`
+	}
+	err = json.Unmarshal(data, &sentences)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling training data: %w", err)
 	}
 
-	return &trainingData, nil
-}
-func maxIndex(values []float64) int {
-	maxIndex := 0
-	maxValue := values[0]
-	for i, val := range values {
-		if val > maxValue {
-			maxValue = val
-			maxIndex = i
-		}
+	var sentenceTexts []string
+	for _, item := range sentences {
+		sentenceTexts = append(sentenceTexts, item.Sentence)
 	}
-	return maxIndex
-}
-func indexToPosTag(posTagVocab map[string]int, predictedTagIndex int) (string, bool) {
-	for tag, index := range posTagVocab {
-		if index == predictedTagIndex {
-			return tag, true
-		}
-	}
-	return "", false
+	return sentenceTexts, nil
 }
 
-func createTokenVocab(trainingData []tag.Tag) map[string]int {
-	tokenVocab := make(map[string]int)
-	tokenVocab["UNK"] = 0 // Add "UNK" token initially
-	index := 1
-	for _, sentence := range trainingData { // Iterate through tag.Tag slice
-		for _, token := range sentence.Tokens {
-			if _, ok := tokenVocab[token]; !ok {
-				tokenVocab[token] = index
-				index++
+func (sw2v *SimpleWord2Vec) TrainSentenceContext(sentences []string) map[string][]float64 {
+	for _, sentence := range sentences {
+		words := strings.Fields(sentence)
+		context := make([]float64, sw2v.VectorSize)
+
+		for _, word := range words {
+			wordIndex, ok := sw2v.Vocabulary[word]
+			if !ok {
+				// Handle unknown words, e.g., using UNK token
+				wordIndex, ok = sw2v.Vocabulary[sw2v.UNKToken]
+				if !ok {
+					fmt.Printf("Warning: Unknown word '%s' and no UNK token found\n", word)
+					continue
+				}
+			}
+			for i := 0; i < sw2v.VectorSize; i++ {
+				context[i] += sw2v.WordVectors[wordIndex][i]
 			}
 		}
+		sw2v.contextEmbeddings[sentence] = context
 	}
 
-	// If index exceeded vocabulary size
-	if index > len(tokenVocab)-1 { // Dynamically determine vocabulary size
-		// Handle unknown tokens
-		tokenVocab["UNK"] = len(tokenVocab) // Add "UNK" token
-		index = len(tokenVocab)             // Update index to reflect new vocabulary size
-
-		// Optionally, print a warning message
-		//fmt.Println("Warning: Vocabulary size exceeded. Adding 'UNK' token.")
-	}
-
-	return tokenVocab
+	return sw2v.contextEmbeddings
 }
 
-// Training function
-func (nn *SimpleNN) Train(trainingData []tag.Tag, epochs int, learningRate float64) float64 {
-	var accuracy float64
-	for epoch := 0; epoch < epochs; epoch++ {
-		for _, taggedSentence := range trainingData {
-			for i := range taggedSentence.Tokens {
-				token := taggedSentence.Tokens[i]
-				targetTag := taggedSentence.PosTag[i]
-				correctPredictions := 0
-				totalPredictions := 0
+// forwardPass performs the forward pass of the RNN.
+func (sw2v *SimpleWord2Vec) forwardPass(words []string) []float64 {
+	hiddenState := make([]float64, sw2v.VectorSize) // Initialize hidden state
 
-				// Convert token to one-hot encoded input
-				inputs := make([]float64, nn.InputSize)
-				tokenVocab := createTokenVocab(trainingData)
-				tokenIndex, ok := tokenVocab[token]
-				if ok {
-					//fmt.Printf("Token: %s, Token Index: %d, Input Size: %d\n", token, tokenIndex, len(inputs))
-					if _, ok := tokenVocab[token]; !ok {
-						fmt.Printf("Token '%s' not found in vocabulary!\n", token)
-					}
-					inputs[tokenIndex] = 1
-				}
-
-				// Forward pass
-				outputs := nn.Predict(inputs)
-
-				// Calculate error
-				targetOutput := make([]float64, nn.OutputSize)
-				posTagVocab := createPosTagVocab(trainingData)
-				targetTagIndex, ok := posTagVocab[targetTag]
-				if ok {
-					targetOutput[targetTagIndex] = 1
-				}
-				errors := make([]float64, nn.OutputSize)
-				for i := range errors {
-					errors[i] = targetOutput[i] - outputs[i]
-				}
-
-				// Backpropagation
-				// 1. Output layer weight updates
-				for i := 0; i < nn.OutputSize; i++ {
-					gradient := errors[i] * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-					for j := 0; j < nn.HiddenSize; j++ {
-						nn.WeightsHO[i][j] += learningRate * gradient * outputs[j] //Hidden Layer is input to Output Layer
-					}
-				}
-
-				// 2. Hidden layer weight updates
-				hiddenErrors := make([]float64, nn.HiddenSize)
-				for i := 0; i < nn.HiddenSize; i++ {
-					errorSum := 0.0
-					for j := 0; j < nn.OutputSize; j++ {
-						errorSum += errors[j] * nn.WeightsHO[j][i]
-					}
-					hiddenErrors[i] = errorSum * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-				}
-				for i := 0; i < nn.HiddenSize; i++ {
-					for j := 0; j < nn.InputSize; j++ {
-						nn.WeightsIH[i][j] += learningRate * hiddenErrors[i] * inputs[j] //Input Layer is input to Hidden Layer
-					}
-				}
-				for _, taggedSentence := range trainingData {
-					for i := range taggedSentence.Tokens {
-						// ... (your existing code for forward pass, error calculation, backpropagation)
-
-						// Accuracy Calculation
-						predictedOutput := nn.Predict(inputs)
-						predictedTagIndex := maxIndex(predictedOutput)
-						predictedTag, _ := indexToPosTag(posTagVocab, predictedTagIndex) // Assuming indexToPosTag handles unknown tags
-
-						if predictedTag == taggedSentence.PosTag[i] {
-							correctPredictions++
-						}
-						totalPredictions++
-					}
-				}
-
-				accuracy = float64(correctPredictions) / float64(totalPredictions)
-				//fmt.Printf("Epoch %d: Accuracy = %.2f%%\n", epoch+1, accuracy*100)
-			}
-
-		}
-
-	}
-	return accuracy
-}
-
-func createPosTagVocab(trainingData []tag.Tag) map[string]int {
-	posTagVocab := make(map[string]int)
-	index := 0
-
-	for _, taggedSentence := range trainingData {
-		for _, posTag := range taggedSentence.PosTag {
-			if _, ok := posTagVocab[posTag]; !ok { // Check if POS tag is already in the vocabulary
-				posTagVocab[posTag] = index
-				index++
+	for _, word := range words {
+		wordIndex, ok := sw2v.Vocabulary[word]
+		if !ok {
+			wordIndex, ok = sw2v.Vocabulary[sw2v.UNKToken]
+			if !ok {
+				fmt.Printf("Warning: Unknown word '%s' and no UNK token found\n", word)
+				continue
 			}
 		}
-	}
 
-	return posTagVocab
-}
-
-// Forward pass
-func (nn *SimpleNN) Predict(inputs []float64) []float64 {
-	hidden := make([]float64, nn.HiddenSize)
-	for i := range hidden {
-		sum := 0.0
-		for j := range inputs {
-			sum += nn.WeightsIH[i][j] * inputs[j]
+		inputVector := sw2v.WordVectors[wordIndex]
+		if inputVector == nil {
+			fmt.Printf("Error: Word index %d not found in WordVectors for word '%s'\n", wordIndex, word)
+			continue
 		}
-		hidden[i] = sigmoid(sum)
-	}
 
-	output := make([]float64, nn.OutputSize)
-	for i := range output {
-		sum := 0.0
-		for j := range hidden {
-			sum += nn.WeightsHO[i][j] * hidden[j]
+		newHiddenState := make([]float64, sw2v.VectorSize)
+		for i := 0; i < sw2v.VectorSize; i++ {
+			weightedSum := 0.0
+			for j := 0; j < len(inputVector); j++ {
+				weightedSum += sw2v.Weights[i%sw2v.HiddenSize][j] * inputVector[j]
+			}
+			weightedSum += sw2v.Biases[i%sw2v.HiddenSize][0]
+			weightedSum += hiddenState[i]
+
+			newHiddenState[i] = math.Tanh(weightedSum)
 		}
-		output[i] = sigmoid(sum)
+		hiddenState = newHiddenState
 	}
 
+	output := make([]float64, sw2v.VectorSize)
+	copy(output, hiddenState)
 	return output
 }
 
-// Activation function (sigmoid)
-func sigmoid(x float64) float64 {
-	return 1 / (1 + math.Exp(-x))
-}
-func PrintTable(tokens, pos, ner, phrase, dependency []string, message string) {
-	fmt.Println("Token Index | Token        | pos Tag       | ner Tag       | dependency Tag      | phrase Tag")
-	fmt.Println("------------|--------------|---------------|---------------|-----------------|--------------")
-
-	// Print table rows
-	for i := range tokens {
-		fmt.Printf("%-12d| %-13s| %-14s| %-14s| %-16s| %-10s\n", i,
-			tokens[i],
-			pos[i],
-			ner[i],
-			dependency[i],
-			phrase[i])
-		fmt.Println(strings.Repeat("-", 90))
-
+// Function to create a map with sequential integer values
+func createSequentialMap(keys []string) map[string]int {
+	m := make(map[string]int)
+	for i, key := range keys {
+		m[key] = i
 	}
-	fmt.Println(message)
-
+	return m
 }
 
-type SimpleNN struct {
-	InputSize  int
-	HiddenSize int
-	OutputSize int
-	WeightsIH  [][]float64 // Input to hidden weights
-	WeightsHO  [][]float64 // Hidden to output weights
-}
+// getContextVector calculates the context vector for a sentence.
+func (sw2v *SimpleWord2Vec) getContextVector(sentence string, md *nnu.SimpleNN) []float64 {
+	words := strings.Fields(sentence)
+	predictedPosTags, predictedNerTags, predictedPhraseTags, predictedDRTags := predict.PredictTags(md, sentence)
+	context := make([]float64, sw2v.VectorSize*len(words)+len(predictedPosTags)+len(predictedNerTags)+len(predictedPhraseTags)+len(predictedDRTags))
+	offset := 0
 
-func NewSimpleNN(inputSize, hiddenSize, outputSize int) *SimpleNN {
-	nn := &SimpleNN{
-		InputSize:  inputSize,
-		HiddenSize: hiddenSize,
-		OutputSize: outputSize,
-	}
-	nn.WeightsIH = make([][]float64, hiddenSize)
-	for i := range nn.WeightsIH {
-		nn.WeightsIH[i] = make([]float64, inputSize)
-		for j := range nn.WeightsIH[i] {
-			nn.WeightsIH[i][j] = rand.Float64()*2 - 1 // Initialize with random weights
+	for i, word := range words {
+		wordIndex, wordExists := sw2v.Vocabulary[word]
+		if !wordExists {
+			wordIndex, unkExists := sw2v.Vocabulary[sw2v.UNKToken]
+			if !unkExists {
+				fmt.Printf("Warning: Word '%s' and UNK token not found in vocabulary, skipping\n", word)
+				continue
+			}
+			wordIndex = wordIndex
 		}
-	}
-	nn.WeightsHO = make([][]float64, outputSize)
-	for i := range nn.WeightsHO {
-		nn.WeightsHO[i] = make([]float64, hiddenSize)
-		for j := range nn.WeightsHO[i] {
-			nn.WeightsHO[i][j] = rand.Float64()*2 - 1
+
+		if _, ok := sw2v.WordVectors[wordIndex]; !ok {
+			fmt.Printf("Warning: Word index '%d' not found in WordVectors, skipping\n", wordIndex)
+			continue
 		}
-	}
-	return nn
-}
-func saveModelToGOB(model *SimpleNN, filePath string) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(model)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-func loadModelFromGOB(filePath string) (*SimpleNN, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	decoder := gob.NewDecoder(file)
-	var model SimpleNN
-	err = decoder.Decode(&model)
-	if err != nil {
-		return nil, err
-	}
-
-	return &model, nil
-}
-
-
-
-#ffff
-
-
-
-
-
-
-
-
-
-package main
-
-import (
-	"encoding/gob"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"math"
-	"math/rand/v2"
-	"os"
-	"strings"
-
-	"github.com/golangast/nlptagger/tagger/tag"
-)
-
-// Global variables for vocabularies
-var tokenVocab map[string]int
-var posTagVocab map[string]int
-var nerTagVocab map[string]int
-
-// Structure to represent training data in JSON
-type TrainingDataJSON struct {
-	Sentences []tag.Tag `json:"sentences"`
-}
-
-func main() {
-	if _, err := os.Stat("trained_model.gob"); err == nil {
-		// If the model file exists, delete it
-		err = os.Remove("trained_model.gob")
+		// Use sw2v.ann here to find nearest neighbors!
+		neighbors, err := sw2v.ann.NearestNeighbors(sw2v.WordVectors[wordIndex], 5)
 		if err != nil {
-			fmt.Println("Error deleting model file:", err)
-			return
-		}
-	}
-	// 1. Load training data from JSON file
-	trainingData, err := loadTrainingDataFromJSON("data/training_data.json")
-	if err != nil {
-		fmt.Println("Error loading training data:", err)
-		return
-	}
-
-	// 2. Create vocabularies
-	tokenVocab = createTokenVocab(trainingData.Sentences)
-	posTagVocab = createPosTagVocab(trainingData.Sentences)
-	nerTagVocab = createNerTagVocab(trainingData.Sentences)
-
-	// Load the trained model (if it exists)
-	nn, err := loadModelFromGOB("trained_model.gob")
-	if err != nil {
-		// If the model file doesn't exist or there's an error loading it,
-		// create a new model and train it.
-		fmt.Println("Error loading model, creating a new one:", err)
-		inputSize := len(tokenVocab)
-		hiddenSize := 5 // Adjust as needed
-		outputSize := len(posTagVocab)
-		nn = NewSimpleNN(inputSize, hiddenSize, outputSize)
-
-		// Train the network
-		epochs := 100       // Adjust as needed
-		learningRate := 0.1 // Adjust as needed
-		posAccuracy, nerAccuracy := nn.Train(trainingData.Sentences, epochs, learningRate)
-		fmt.Printf("Final POS Accuracy: %.2f%%\n", posAccuracy*100)
-		fmt.Printf("Final Ner Accuracy: %.2f%%\n", nerAccuracy*100)
-
-		// Save the newly trained model
-		err = saveModelToGOB(nn, "trained_model.gob")
-		if err != nil {
-			fmt.Println("Error saving model:", err)
-			return
-		}
-		fmt.Println("New model saved to trained_model.gob")
-	} else {
-		fmt.Println("Loaded model from trained_model.gob")
-	}
-
-	// 3. Create and train the neural network
-	inputSize := len(tokenVocab)
-
-	// Train the network
-	epochs := 100       // Adjust as needed
-	learningRate := 0.1 // Adjust as needed
-	nn.Train(trainingData.Sentences, epochs, learningRate)
-	// Save the trained model
-	err = saveModelToGOB(nn, "trained_model.gob")
-	if err != nil {
-		fmt.Println("Error saving model:", err)
-		return
-	}
-
-	fmt.Println("Model saved to trained_model.gob")
-
-	// 4. Example prediction (using a new sentence)
-	sentence := "generate a webserver with the handler dog with the data structure people"
-	tokens := strings.Fields(sentence) // Tokenize the sentence
-	var predictedNerTags []string
-	var predictedTags []string
-	for _, token := range tokens {
-		tokenIndex, ok := tokenVocab[token]
-		if !ok {
-			fmt.Printf("Token '%s' not found in vocabulary\n", token)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		inputs := make([]float64, inputSize)
-		inputs[tokenIndex] = 1
-
-		predictedOutput := nn.Predict(inputs)
-		predictedTagIndex := maxIndex(predictedOutput)
-		predictedTag, ok := indexToPosTag(posTagVocab, predictedTagIndex)
-		if !ok {
-			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		predictedTags = append(predictedTags, predictedTag)
-
-		// NER Tag Prediction
-		predictedNerTag, ok := indexToNerTag(nerTagVocab, predictedTagIndex)
-		if !ok {
-			fmt.Printf("NER Tag index %d not found in vocabulary\n", predictedTagIndex)
-			predictedNerTags = append(predictedNerTags, "UNK")
-			continue
-		}
-
-		predictedNerTags = append(predictedNerTags, predictedNerTag) // Store predicted NER tags
-
-	}
-
-	if len(predictedNerTags) < len(tokens) {
-		paddingSize := len(tokens) - len(predictedNerTags)
-		padding := make([]string, paddingSize)
-		predictedNerTags = append(predictedNerTags, padding...)
-	}
-
-	fmt.Println("Sentence:", sentence)
-	fmt.Println("Predicted POS Tags:", strings.Join(predictedTags, " "))
-	fmt.Println("Predicted Ner Tags:", strings.Join(predictedNerTags, " "))
-
-	for _, token := range tokens {
-		tokenIndex, ok := tokenVocab[token]
-		if !ok {
-			fmt.Printf("Token '%s' not found in vocabulary\n", token)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		inputs := make([]float64, nn.InputSize)
-		inputs[tokenIndex] = 1
-
-		predictedOutput := nn.Predict(inputs)
-		predictedTagIndex := maxIndex(predictedOutput)
-		predictedTag, ok := indexToPosTag(posTagVocab, predictedTagIndex)
-		if !ok {
-			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-			predictedTags = append(predictedTags, "UNK")
-			continue
-		}
-
-		predictedTags = append(predictedTags, predictedTag)
-	}
-
-	// Create a tag.Tag struct with the predicted tags
-	predictedTagStruct := tag.Tag{
-		Tokens: tokens,
-		PosTag: predictedTags, // Use predictedTags for the Type field
-		NerTag: predictedNerTags,
-	}
-
-	// Print the predicted tag types along with the original sentence
-	fmt.Println("Sentence:", sentence)
-	fmt.Println("Predicted POS Tag Types:", strings.Join(predictedTagStruct.PosTag, " "))
-	fmt.Println("Predicted NER Tag Types:", strings.Join(predictedTagStruct.NerTag, " "))
-	if len(predictedTagStruct.Tokens) != len(predictedTagStruct.NerTag) || len(predictedTagStruct.Tokens) != len(predictedTagStruct.PosTag) {
-		// Handle data length mismatch, for example, by printing an error message
-		fmt.Println("Error: Data length mismatch in predictedTagStruct")
-
-	}
-	// Access and print individual tag types
-	for i, token := range predictedTagStruct.Tokens {
-		fmt.Printf("Token: %s, Predicted POS Tag Type: %s\n", token, predictedTagStruct.PosTag[i])
-		if predictedTagStruct.NerTag[i] == "" {
-			predictedTagStruct.NerTag[i] = "UNK"
-			fmt.Printf("Token: %s, Predicted NER Tag Type: %s\n", token, predictedTagStruct.NerTag[i])
-
+			fmt.Printf("Error getting nearest neighbors: %v\n", err)
 		} else {
-			fmt.Printf("Token: %s, Predicted NER Tag Type: %s\n", token, predictedTagStruct.NerTag[i])
-		}
-
-	}
-
-}
-func createNerTagVocab(trainingData []tag.Tag) map[string]int {
-	nerTagVocab := make(map[string]int)
-	index := 0
-
-	for _, taggedSentence := range trainingData {
-		for _, nerTag := range taggedSentence.NerTag { // Access NerTag field
-			if _, ok := nerTagVocab[nerTag]; !ok {
-				nerTagVocab[nerTag] = index
-				index++
-			}
-		}
-	}
-
-	return nerTagVocab
-}
-
-// Function to convert index to NER tag (similar to indexToPosTag)
-func indexToNerTag(nerTagVocab map[string]int, predictedTagIndex int) (string, bool) {
-	for tag, index := range nerTagVocab {
-		if index == predictedTagIndex {
-			return tag, true
-		}
-	}
-	return "", false
-}
-
-// Function to load training data from a JSON file
-func loadTrainingDataFromJSON(filePath string) (*TrainingDataJSON, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	var trainingData TrainingDataJSON
-	err = json.Unmarshal(data, &trainingData)
-	if err != nil {
-		return nil, err
-	}
-
-	return &trainingData, nil
-}
-func maxIndex(values []float64) int {
-	maxIndex := 0
-	maxValue := values[0]
-	for i, val := range values {
-		if val > maxValue {
-			maxValue = val
-			maxIndex = i
-		}
-	}
-	return maxIndex
-}
-func indexToPosTag(posTagVocab map[string]int, predictedTagIndex int) (string, bool) {
-	for tag, index := range posTagVocab {
-		if index == predictedTagIndex {
-			return tag, true
-		}
-	}
-	return "", false
-}
-
-func createTokenVocab(trainingData []tag.Tag) map[string]int {
-	tokenVocab := make(map[string]int)
-	tokenVocab["UNK"] = 0 // Add "UNK" token initially
-	index := 1
-	for _, sentence := range trainingData { // Iterate through tag.Tag slice
-		for _, token := range sentence.Tokens {
-			if _, ok := tokenVocab[token]; !ok {
-				tokenVocab[token] = index
-				index++
-			}
-		}
-	}
-
-	// If index exceeded vocabulary size
-	if index > len(tokenVocab)-1 { // Dynamically determine vocabulary size
-		// Handle unknown tokens
-		tokenVocab["UNK"] = len(tokenVocab) // Add "UNK" token
-		index = len(tokenVocab)             // Update index to reflect new vocabulary size
-
-		// Optionally, print a warning message
-		//fmt.Println("Warning: Vocabulary size exceeded. Adding 'UNK' token.")
-	}
-
-	return tokenVocab
-}
-
-// Training function
-func (nn *SimpleNN) Train(trainingData []tag.Tag, epochs int, learningRate float64) (float64, float64) {
-	// Create vocabularies outside the training loop
-	tokenVocab := createTokenVocab(trainingData)
-	posTagVocab := createPosTagVocab(trainingData)
-	nerTagVocab := createNerTagVocab(trainingData)
-
-	// Create reverse vocabularies
-	reversePosTagVocab := make(map[int]string, len(posTagVocab))
-	for tag, index := range posTagVocab {
-		reversePosTagVocab[index] = tag
-	}
-	reverseNerTagVocab := make(map[int]string, len(nerTagVocab))
-	for tag, index := range nerTagVocab {
-		reverseNerTagVocab[index] = tag
-	}
-
-	for epoch := 0; epoch < epochs; epoch++ {
-		for _, taggedSentence := range trainingData {
-			for i := range taggedSentence.Tokens {
-				token := taggedSentence.Tokens[i]
-				targetPosTag := taggedSentence.PosTag[i]
-				targetNerTag := taggedSentence.NerTag[i]
-
-				// Convert token to one-hot encoded input
-				inputs := make([]float64, nn.InputSize)
-				tokenIndex, ok := tokenVocab[token]
-				if ok {
-					inputs[tokenIndex] = 1
-				}
-
-				// Forward pass (shared for POS and NER)
-				outputs := nn.Predict(inputs)
-
-				// Calculate error and backpropagate for POS tagging
-				posTargetOutput := make([]float64, nn.OutputSize)
-				posTagIndex, ok := posTagVocab[targetPosTag]
-				if ok {
-					posTargetOutput[posTagIndex] = 1
-				}
-				posErrors := make([]float64, nn.OutputSize)
-				for j := range posErrors {
-					posErrors[j] = posTargetOutput[j] - outputs[j]
-				}
-				nn.Backpropagate(inputs, posTargetOutput, learningRate) // Use posTargetOutput
-
-				// Calculate error and backpropagate for NER tagging
-				nerTargetOutput := make([]float64, nn.OutputSize)
-				nerTagIndex, ok := nerTagVocab[targetNerTag]
-				if ok {
-					nerTargetOutput[nerTagIndex] = 1
-				}
-				nerErrors := make([]float64, nn.OutputSize)
-				for j := range nerErrors {
-					nerErrors[j] = nerTargetOutput[j] - outputs[j]
-				}
-				nn.Backpropagate(inputs, nerTargetOutput, learningRate) // Use nerTargetOutput
-			}
-		}
-
-	}
-	// Inside the Train function
-	tposAccuracy, tnerAccuracy := calculateAccuracy(trainingData, nn, reversePosTagVocab, reverseNerTagVocab)
-	return tposAccuracy, tnerAccuracy
-}
-func (nn *SimpleNN) Backpropagate(inputs, targets []float64, learningRate float64) {
-	// 1. Calculate output layer errors
-	outputErrors := make([]float64, nn.OutputSize)
-	for i := 0; i < nn.OutputSize; i++ {
-		outputErrors[i] = targets[i] - nn.Outputs[i]
-	}
-
-	// 2. Calculate hidden layer errors
-	hiddenErrors := make([]float64, nn.HiddenSize)
-	for i := 0; i < nn.HiddenSize; i++ {
-		errorSum := 0.0
-		for j := 0; j < nn.OutputSize; j++ {
-			errorSum += outputErrors[j] * nn.WeightsHO[j][i]
-		}
-		hiddenErrors[i] = errorSum * nn.HiddenOutputs[i] * (1 - nn.HiddenOutputs[i]) // Sigmoid derivative
-	}
-
-	// 3. Update output layer weights
-	for i := 0; i < nn.OutputSize; i++ {
-		for j := 0; j < nn.HiddenSize; j++ {
-			nn.WeightsHO[i][j] += learningRate * outputErrors[i] * nn.HiddenOutputs[j]
-		}
-	}
-
-	// 4. Update hidden layer weights
-	for i := 0; i < nn.HiddenSize; i++ {
-		for j := 0; j < nn.InputSize; j++ {
-			nn.WeightsIH[i][j] += learningRate * hiddenErrors[i] * inputs[j]
-		}
-	}
-}
-func calculateAccuracy(trainingData []tag.Tag, nn *SimpleNN, reversePosTagVocab, reverseNerTagVocab map[int]string) (float64, float64) {
-	posAccuracy := 0.0
-	nerAccuracy := 0.0
-	posCorrectPredictions := 0
-	nerCorrectPredictions := 0
-	totalPredictions := 0
-
-	for _, taggedSentence := range trainingData {
-		for i := range taggedSentence.Tokens {
-			token := taggedSentence.Tokens[i]
-
-			// Convert token to one-hot encoded input
-			inputs := make([]float64, nn.InputSize)
-			tokenIndex, ok := tokenVocab[token]
-			if ok {
-				inputs[tokenIndex] = 1
-			}
-
-			// Forward pass
-			predictedOutput := nn.Predict(inputs)
-			predictedTagIndex := maxIndex(predictedOutput)
-
-			for _, taggedSentence := range trainingData {
-				for i := range taggedSentence.Tokens {
-					// ... (forward pass and prediction code) ...
-
-					// Get predicted tag labels using reverse vocabularies
-					predictedPosTag, _ := reversePosTagVocab[predictedTagIndex]
-					predictedNerTag, _ := reverseNerTagVocab[predictedTagIndex]
-
-					// Compare predicted tags with actual tags
-					if predictedPosTag == taggedSentence.PosTag[i] {
-						posCorrectPredictions++
-					}
-					if predictedNerTag == taggedSentence.NerTag[i] {
-						nerCorrectPredictions++
-					}
-					totalPredictions++
-
+			// Augment the target word vector with neighbor vectors
+			for _, neighbor := range neighbors {
+				if len(neighbor.Vector) != sw2v.VectorSize {
+					fmt.Printf("Warning: Neighbor vector length (%d) does not match VectorSize (%d) for word '%s'. Skipping neighbor.\n",
+						len(neighbor.Vector), sw2v.VectorSize, neighbor.Word)
+					continue // Skip this neighbor
 				}
 			}
-		}
-	}
-	// Calculate accuracy for POS and NER tags
-	posAccuracy = float64(posCorrectPredictions) / float64(totalPredictions)
-	nerAccuracy = float64(nerCorrectPredictions) / float64(totalPredictions)
+			// Augment the target word vector with neighbor vectors
+			augmentedVector := make([]float64, sw2v.VectorSize)
+			copy(augmentedVector, sw2v.WordVectors[wordIndex]) // Start with the original vector
 
-	return posAccuracy, nerAccuracy
-}
-func createPosTagVocab(trainingData []tag.Tag) map[string]int {
-	posTagVocab := make(map[string]int)
-	index := 0
-
-	for _, taggedSentence := range trainingData {
-		for _, posTag := range taggedSentence.PosTag {
-			if _, ok := posTagVocab[posTag]; !ok { // Check if POS tag is already in the vocabulary
-				posTagVocab[posTag] = index
-				index++
+			for _, neighbor := range neighbors {
+				for j := 0; j < sw2v.VectorSize; j++ {
+					augmentedVector[j] += neighbor.Vector[j]
+				}
 			}
-		}
-	}
 
-	return posTagVocab
-}
-
-// Forward pass
-func (nn *SimpleNN) Predict(inputs []float64) []float64 {
-	hidden := make([]float64, nn.HiddenSize)
-	for i := range hidden {
-		sum := 0.0
-		for j := range inputs {
-			sum += nn.WeightsIH[i][j] * inputs[j]
-		}
-		hidden[i] = sigmoid(sum)
-	}
-
-	output := make([]float64, nn.OutputSize)
-	for i := range output {
-		sum := 0.0
-		for j := range hidden {
-			sum += nn.WeightsHO[i][j] * hidden[j]
-		}
-		output[i] = sigmoid(sum)
-	}
-
-	// Get the predicted tag index (assuming maxIndex function exists)
-	predictedTagIndex := maxIndex(output)
-
-	// Check if predicted tag is unknown
-	if _, ok := posTagVocab["<UNK>"]; ok && predictedTagIndex == posTagVocab["<UNK>"] {
-		// Handle unknown tag (e.g., assign a specific probability)
-		// You might want to adjust this based on your specific needs
-		output[predictedTagIndex] = 0.5 // Example: Assign 0.5 probability
-	}
-
-	return output
-}
-
-// Activation function (sigmoid)
-func sigmoid(x float64) float64 {
-	return 1 / (1 + math.Exp(-x))
-}
-func PrintTable(tokens, pos, ner, phrase, dependency []string, message string) {
-	fmt.Println("Token Index | Token        | pos Tag       | ner Tag       | dependency Tag      | phrase Tag")
-	fmt.Println("------------|--------------|---------------|---------------|-----------------|--------------")
-
-	// Print table rows
-	for i := range tokens {
-		fmt.Printf("%-12d| %-13s| %-14s| %-14s| %-16s| %-10s\n", i,
-			tokens[i],
-			pos[i],
-			ner[i],
-			dependency[i],
-			phrase[i])
-		fmt.Println(strings.Repeat("-", 90))
-
-	}
-	fmt.Println(message)
-
-}
-
-type SimpleNN struct {
-	InputSize     int
-	HiddenSize    int
-	OutputSize    int
-	WeightsIH     [][]float64 // Input to hidden weights
-	WeightsHO     [][]float64 // Hidden to output weights
-	Outputs       []float64   // Add this line to declare the Outputs field
-	HiddenOutputs []float64
-}
-
-func NewSimpleNN(inputSize, hiddenSize, outputSize int) *SimpleNN {
-	nn := &SimpleNN{
-		InputSize:  inputSize,
-		HiddenSize: hiddenSize,
-		OutputSize: outputSize,
-	}
-
-	// Initialize Outputs field as an empty slice with the correct size
-	nn.Outputs = make([]float64, outputSize)
-	nn.HiddenOutputs = make([]float64, hiddenSize)
-	nn.WeightsIH = make([][]float64, hiddenSize)
-	for i := range nn.WeightsIH {
-		nn.WeightsIH[i] = make([]float64, inputSize)
-		for j := range nn.WeightsIH[i] {
-			nn.WeightsIH[i][j] = rand.Float64()*2 - 1 // Initialize with random weights
-		}
-	}
-	nn.WeightsHO = make([][]float64, outputSize)
-	for i := range nn.WeightsHO {
-		nn.WeightsHO[i] = make([]float64, hiddenSize)
-		for j := range nn.WeightsHO[i] {
-			nn.WeightsHO[i][j] = rand.Float64()*2 - 1
-		}
-	}
-	return nn
-}
-func saveModelToGOB(model *SimpleNN, filePath string) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(model)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-func loadModelFromGOB(filePath string) (*SimpleNN, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	decoder := gob.NewDecoder(file)
-	var model SimpleNN
-	err = decoder.Decode(&model)
-	if err != nil {
-		return nil, err
-	}
-
-	return &model, nil
-}
-
-
-
-
-
-
-
-__________________________________
-package simplenn
-
-import (
-	"encoding/gob"
-	"fmt"
-	"math"
-	"math/rand/v2"
-	"os"
-	"strings"
-
-	"github.com/golangast/nlptagger/nn/nnu"
-	"github.com/golangast/nlptagger/tagger/tag"
-)
-
-type SimpleNN struct {
-	InputSize   int
-	HiddenSize  int
-	OutputSize  int
-	WeightsIH   [][]float64
-	WeightsHO   [][]float64
-	TokenVocab  map[string]int
-	PosTagVocab map[string]int
-}
-
-// Activation function (sigmoid)
-func (nn SimpleNN) Sigmoid(x float64) float64 {
-	return 1 / (1 + math.Exp(-x))
-}
-
-// Forward pass
-func (nn *SimpleNN) ForwardPass(inputs []float64) []float64 {
-	// Create a slice to store the activations of the hidden layer.
-	hidden := make([]float64, nn.HiddenSize) 
-	// Iterate over each neuron in the hidden layer.
-	for i := range hidden { 
-		// Initialize the sum of weighted inputs for the current neuron.
-		sum := 0.0 
-		// Iterate over each input neuron.
-		for j := range inputs { 
-			// Calculate the weighted input and add it to the sum.
-			sum += nn.WeightsIH[i][j] * inputs[j] 
-		}
-		// Apply the sigmoid activation function to the sum and store the result in the hidden layer.
-		hidden[i] = nn.Sigmoid(sum) 
-	}
-	// Create a slice to store the activations of the output layer.
-	output := make([]float64, nn.OutputSize) 
-	// Iterate over each neuron in the output layer.
-	for i := range output { 
-		// Initialize the sum of weighted inputs for the current neuron.
-		sum := 0.0 
-		// Iterate over each neuron in the hidden layer.
-		for j := range hidden { 
-			// Calculate the weighted input and add it to the sum.
-			sum += nn.WeightsHO[i][j] * hidden[j] 
-		}
-		// Apply the sigmoid activation function to the sum and store the result in the output layer.
-		output[i] = nn.Sigmoid(sum) 
-	}
-	// Return the activations of the output layer.
-	return output 
-}
-func (nn *SimpleNN) CalculateError(targetTag string, outputs []float64, trainingData []tag.Tag) ([]float64, map[string]int) {
-	// Create a slice to store the target output values.
-	targetOutput := make([]float64, nn.OutputSize)
-	// Create a vocabulary of POS tags from the training data.
-	posTagVocab := CreatePosTagVocab(trainingData)
-	// Get the index of the target POS tag in the vocabulary.
-	targetTagIndex, ok := posTagVocab[targetTag]
-	// If the target POS tag is found in the vocabulary...
-	if ok {
-		// Set the corresponding element in the target output to 1.
-		targetOutput[targetTagIndex] = 1
-	}
-	// Create a slice to store the errors for each output neuron.
-	errors := make([]float64, nn.OutputSize)
-	// Calculate the error for each output neuron.
-	for i := range errors { errors[i] = targetOutput[i] - outputs[i] }
-	return errors, posTagVocab
-}
-
-func (nn *SimpleNN) Backpropagate(errors []float64, outputs []float64, learningRate float64, inputs []float64) {
-	// 1. Output layer weight updates
-	for i := 0; i < nn.OutputSize; i++ {
-		gradient := errors[i] * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-		for j := 0; j < nn.HiddenSize; j++ {
-			nn.WeightsHO[i][j] += learningRate * gradient * outputs[j] //Hidden Layer is input to Output Layer
-		}
-	}
-
-	// 2. Hidden layer weight updates
-	hiddenErrors := make([]float64, nn.HiddenSize)
-	for i := 0; i < nn.HiddenSize; i++ {
-		errorSum := 0.0
-		for j := 0; j < nn.OutputSize; j++ {
-			errorSum += errors[j] * nn.WeightsHO[j][i]
-		}
-		hiddenErrors[i] = errorSum * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-	}
-	for i := 0; i < nn.HiddenSize; i++ {
-		for j := 0; j < nn.InputSize; j++ {
-			nn.WeightsIH[i][j] += learningRate * hiddenErrors[i] * inputs[j] //Input Layer is input to Hidden Layer
-		}
-	}
-}
-
-func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
-	posTagVocab := make(map[string]int)
-	index := 0
-
-	for _, taggedSentence := range trainingData {
-		for _, posTag := range taggedSentence.PosTag {
-			if _, ok := posTagVocab[posTag]; !ok { // Check if POS tag is already in the vocabulary
-				posTagVocab[posTag] = index
-				index++
+			// Average the vectors
+			for j := 0; j < sw2v.VectorSize; j++ {
+				augmentedVector[j] /= float64(len(neighbors) + 1)
 			}
+			copy(context[offset:offset+sw2v.VectorSize], augmentedVector)
+		}
+		offset += sw2v.VectorSize
+
+		// Directly use predicted tags
+		if i < len(predictedPosTags) {
+			context[offset] = float64(createSequentialMap(predictedPosTags)[predictedPosTags[i]])
+			offset++
+		}
+		if i < len(predictedNerTags) {
+			context[offset] = float64(createSequentialMap(predictedNerTags)[predictedNerTags[i]])
+			offset++
+		}
+		if i < len(predictedPhraseTags) {
+			context[offset] = float64(createSequentialMap(predictedPhraseTags)[predictedPhraseTags[i]])
+			offset++
+		}
+		if i < len(predictedDRTags) {
+			context[offset] = float64(createSequentialMap(predictedDRTags)[predictedDRTags[i]])
+			offset++
 		}
 	}
 
-	return posTagVocab
+	return context
 }
 
-func (nn *SimpleNN) NewSimpleNN(inputSize, hiddenSize, outputSize int) *SimpleNN {
-	nnn := &SimpleNN{
-		InputSize:  inputSize,
-		HiddenSize: hiddenSize,
-		OutputSize: outputSize,
+// calculateLoss calculates the Mean Squared Error (MSE) loss.
+func (sw2v *SimpleWord2Vec) calculateLoss(output, context []float64) float64 {
+	loss := 0.0
+	for i := 0; i < sw2v.VectorSize; i++ {
+		diff := output[i] - context[i]
+		loss += diff * diff
 	}
-	nnn.WeightsIH = make([][]float64, hiddenSize)
-	for i := range nnn.WeightsIH {
-		nnn.WeightsIH[i] = make([]float64, inputSize)
-		for j := range nnn.WeightsIH[i] {
-			nnn.WeightsIH[i][j] = rand.Float64()*2 - 1 // Initialize with random weights
-		}
-	}
-	nnn.WeightsHO = make([][]float64, outputSize)
-	for i := range nnn.WeightsHO {
-		nnn.WeightsHO[i] = make([]float64, hiddenSize)
-		for j := range nnn.WeightsHO[i] {
-			nnn.WeightsHO[i][j] = rand.Float64()*2 - 1
-		}
-	}
-	return nnn
-}
-func LoadModelFromGOB(filePath string) (*SimpleNN, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	decoder := gob.NewDecoder(file)
-	var model SimpleNN
-	err = decoder.Decode(&model)
-	if err != nil {
-		return nil, err
-	}
-	file.Close()
-	return &model, nil
+	loss /= float64(sw2v.VectorSize)
+	return loss
 }
 
-func (nn *SimpleNN) LoadModelOrTrainNew(trainingData *nnu.TrainingDataJSON) (*SimpleNN, error) {
-	tokenVocab, posTagVocab, _ := CreateVocab()
-	nn, err := LoadModelFromGOB("trained_model.gob")
+// findNearestWord finds the nearest neighbor to the given vector.
+func (sw2v *SimpleWord2Vec) findNearestWord(vector []float64, words []string) (string, float64) {
+	nearestWord := ""
+	maxSimilarity := 0.0
+
+	// Convert the target vector to []int if necessary
+	// targetVectorInt := make([]int, len(vector))
+	// for i, val := range vector {
+	// 	targetVectorInt[i] = int(val) // Adjust conversion as needed
+	// }
+
+	neighbors, err := sw2v.ann.NearestNeighbors(vector, 10) // Get 10 nearest neighbors using the ANN index
+
 	if err != nil {
-		fmt.Println("Error loading model, creating a new one:", err)
-		inputSize := len(tokenVocab)
-		hiddenSize := 5 // Adjust as needed
-		outputSize := len(posTagVocab)
-		nn = nn.NewSimpleNN(inputSize, hiddenSize, outputSize)
-		// Load training data
-		trainingData, err := nnu.LoadTrainingDataFromJSON("data/training_data.json")
-		if err != nil {
-			fmt.Println("Error loading training data:", err)
-		}
-		// Train the network
-		epochs := 100       // Adjust as needed
-		learningRate := 0.1 // Adjust as needed
-		accuracy := Train(trainingData.Sentences, epochs, learningRate, nn)
-		fmt.Printf("Final Accuracy: %.2f%%\n", accuracy*100)
-		// Save the newly trained model
-		err = SaveModelToGOB(nn, "trained_model.gob")
-		if err != nil {
-			return nil, fmt.Errorf("error saving model: %w", err)
-		}
-		fmt.Println("New model saved to trained_model.gob")
+		fmt.Printf("Error getting nearest neighbors: %v\n", err)
 	} else {
-		fmt.Println("Loaded model from trained_model.gob")
-	}
-	return nn, nil
-}
-
-func (nn *SimpleNN) PredictTags(sentence string) []string {
-	tokenVocab, posTagVocab, _ := CreateVocab()
-	// Tokenize the sentence into individual words.
-	tokens := strings.Fields(sentence)
-	// Create a slice to store the predicted POS tags.
-	var predictedTags []string
-	// Iterate over each token in the sentence.
-	for _, token := range tokens {
-		// Get the index of the token in the vocabulary.
-		tokenIndex, ok := tokenVocab[token]
-		// If the token is not in the vocabulary...
-		if !ok {
-			// Print a message indicating the token was not found.
-			fmt.Printf("Token '%s' not found in vocabulary\n", token)
-			// Assign "UNK" (unknown) as the POS tag for this token.
-			predictedTags = append(predictedTags, "UNK")
-			// Move on to the next token.
-			continue
-		}
-
-		// Create the input vector for the neural network.
-		inputs := make([]float64, nn.InputSize)
-		inputs[tokenIndex] = 1 // Set the element corresponding to the token index to 1.
-
-		// Get the predicted output from the neural network.
-		predictedOutput := nn.ForwardPass(inputs)
-		// Get the index of the predicted POS tag.
-		predictedTagIndex := nnu.MaxIndex(predictedOutput)
-		// Get the actual POS tag string using the predicted index.
-		predictedTag, ok := nnu.IndexToPosTag(posTagVocab, predictedTagIndex)
-		// If the predicted tag index is not found in the vocabulary...
-		if !ok {
-			// Print an error message.
-			fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-			// Append "UNK" to the predicted tags.
-			predictedTags = append(predictedTags, "UNK")
-			// Continue to the next token.
-			continue
-		}
-		// Append the predicted tag to the list of predicted tags.
-		predictedTags = append(predictedTags, predictedTag)
-	}
-	// Return the list of predicted POS tags.
-	return predictedTags
-}
-
-// trainAndSaveModel trains a new neural network model, or loads an existing one if available.
-// It then saves the trained model to a file.
-func (nn *SimpleNN) TrainAndSaveModel(trainingData *nnu.TrainingDataJSON) (*SimpleNN, error) {
-	// Delete existing model file if it exists.
-	if _, err := os.Stat("trained_model.gob"); err == nil {
-		// If the file exists, remove it.
-		if err := os.Remove("trained_model.gob"); err != nil {
-			// If there's an error during removal, return an error.
-			return nil, fmt.Errorf("error deleting model file: %w", err)
-		}
-	}
-
-	// Load or train the neural network model.
-	nn, err := nn.LoadModelOrTrainNew(trainingData)
-	if err != nil {
-		// If there's an error during loading or training, return an error.
-		return nil, fmt.Errorf("error loading or training model: %w", err)
-	}
-
-	// Further training (if needed).
-	epochs := 100       // Adjust the number of epochs as needed.
-	learningRate := 0.1 // Adjust the learning rate as needed.
-	// Train the model using the training data.
-	Train(trainingData.Sentences, epochs, learningRate, nn)
-
-	// Save the trained model to a file.
-	if err := SaveModelToGOB(nn, "trained_model.gob"); err != nil {
-		// If there's an error during saving, return an error.
-		return nil, fmt.Errorf("error saving model: %w", err)
-	}
-	// Print a message indicating that the model has been saved.
-	fmt.Println("Model saved to trained_model.gob")
-	// Return the trained neural network model and nil error.
-	return nn, nil
-}
-
-func CreateVocab() (map[string]int, map[string]int, *nnu.TrainingDataJSON) {
-	trainingData, err := nnu.LoadTrainingDataFromJSON("data/training_data.json")
-	if err != nil {
-		fmt.Println("error loading training data: %w", err)
-	}
-	// Create vocabularies
-	tokenVocab := nnu.CreateTokenVocab(trainingData.Sentences)
-	posTagVocab := CreatePosTagVocab(trainingData.Sentences)
-
-	return tokenVocab, posTagVocab, trainingData
-}
-
-// Training function
-func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *SimpleNN) float64 {
-	var accuracy float64
-	for epoch := 0; epoch < epochs; epoch++ {
-		for _, taggedSentence := range trainingData {
-			for i := range taggedSentence.Tokens {
-				token := taggedSentence.Tokens[i]
-				targetTag := taggedSentence.PosTag[i]
-
-				// Convert token to one-hot encoded input
-				inputs := make([]float64, nn.InputSize)
-				tokenVocab := nnu.CreateTokenVocab(trainingData)
-				tokenIndex, ok := tokenVocab[token]
-				if ok {
-					if _, ok := tokenVocab[token]; !ok {
-						fmt.Printf("Token '%s' not found in vocabulary!\n", token)
-					}
-					inputs[tokenIndex] = 1
-				}
-
-				// Forward pass
-				outputs := nn.ForwardPass(inputs)
-
-				errors, posTagVocab := nn.CalculateError(targetTag, outputs, trainingData)
-
-				nn.Backpropagate(errors, outputs, learningRate, inputs)
-
-				// Calculate accuracy for this epoch
-				accuracy = calculateAccuracy(nn, trainingData, tokenVocab, posTagVocab)
-				//fmt.Printf("Epoch %d: Accuracy = %.2f%%\n", epoch+1, accuracy*100)
+		for _, neighbor := range neighbors {
+			if neighbor.Similarity > maxSimilarity && neighbor.Similarity > sw2v.similarityThreshold && neighbor.Word != sw2v.UNKToken && !contains(words, neighbor.Word) {
+				maxSimilarity = neighbor.Similarity
+				nearestWord = neighbor.Word
 			}
-
 		}
-
 	}
-	return accuracy
+
+	return nearestWord, maxSimilarity
 }
 
-func SaveModelToGOB(model *SimpleNN, filePath string) error {
-	file, err := os.Create(filePath)
-
-	if err != nil {
-		return err
+// backpropagate performs backpropagation and updates weights and biases.
+func (sw2v *SimpleWord2Vec) backpropagate(output, context []float64) {
+	// Calculate gradients for weights and biases (replace with your gradient calculation)
+	weightGradients := make([][]float64, sw2v.HiddenSize)
+	biasGradients := make([][]float64, sw2v.HiddenSize)
+	for i := 0; i < sw2v.HiddenSize; i++ {
+		weightGradients[i] = make([]float64, sw2v.VectorSize)
+		biasGradients[i] = make([]float64, 1)
+		for j := 0; j < sw2v.VectorSize; j++ {
+			weightGradients[i][j] = (output[i] - context[i]) // Example gradient
+		}
+		biasGradients[i][0] = (output[i] - context[i]) // Example gradient
 	}
 
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(model)
-	if err != nil {
-		return err
+	// Clip gradients to prevent exploding gradients
+	maxGrad := 1.0 // Maximum gradient norm
+	for i := 0; i < sw2v.HiddenSize; i++ {
+		weightNorm := math.Sqrt(sumOfSquares(weightGradients[i]))
+		if weightNorm > maxGrad {
+			scale := maxGrad / weightNorm
+			for j := 0; j < sw2v.VectorSize; j++ {
+				weightGradients[i][j] *= scale
+			}
+		}
+		sw2v.Weights[i][0] -= sw2v.LearningRate * weightGradients[i][0]
 	}
-	file.Close()
+	for i := 0; i < sw2v.HiddenSize; i++ {
+		sw2v.Biases[i][0] -= sw2v.LearningRate * biasGradients[i][0]
+	}
+}
+
+// cosineSimilarity calculates the cosine similarity between two vectors.
+func cosineSimilarity(v1, v2 []float64) float64 {
+	dotProduct := 0.0
+	magV1 := 0.0
+	magV2 := 0.0
+
+	for i := 0; i < len(v1); i++ {
+		dotProduct += v1[i] * v2[i]
+		magV1 += v1[i] * v1[i]
+		magV2 += v2[i] * v2[i]
+	}
+
+	magV1 = math.Sqrt(magV1)
+	magV2 = math.Sqrt(magV2)
+
+	if magV1 == 0 || magV2 == 0 {
+		return 0.0
+	}
+	return dotProduct / (magV1 * magV2)
+}
+
+// enhancedSimilarity calculates similarity considering tag information.
+func (sw2v *SimpleWord2Vec) enhancedSimilarity(output, wordVector []float64, predictedTags []string, wordTags []string) float64 {
+	cosineSim := cosineSimilarity(output, wordVector)
+
+	tagWeight := 0.5 // Adjust weight as needed
+	tagSim := 0.0
+
+	// Calculate tag similarity (example for NER tags)
+	for _, predictedTag := range predictedTags {
+		for _, wordTag := range wordTags {
+			if predictedTag == wordTag {
+				tagSim += 1.0
+				break
+			}
+		}
+	}
+
+	// Normalize tag similarity
+	if len(predictedTags) > 0 {
+		tagSim /= float64(len(predictedTags))
+	}
+
+	// Combine cosine similarity and tag similarity
+	similarity := (1-tagWeight)*cosineSim + tagWeight*tagSim
+
+	return similarity
+}
+
+// Train function to train the model using the provided JSON data
+func (sw2v *SimpleWord2Vec) Train(sentences []string) error {
+
+	// Print the context window size
+	fmt.Printf("Context Window Size: %d\n", sw2v.Window)
+
+	// 1. Build Vocabulary
+	for _, sentence := range sentences {
+		words := strings.Fields(sentence)
+		for _, word := range words {
+			if _, ok := sw2v.Vocabulary[word]; !ok {
+				sw2v.Vocabulary[word] = len(sw2v.Vocabulary)
+				sw2v.WordVectors[len(sw2v.Vocabulary)-1] = make([]float64, sw2v.VectorSize)
+				// Initialize the word vector (e.g., with random values)
+				for i := 0; i < sw2v.VectorSize; i++ {
+					sw2v.WordVectors[len(sw2v.Vocabulary)-1][i] = (rand.Float64() - 0.5) / float64(sw2v.VectorSize)
+				}
+			}
+		}
+	}
+
+	// Print the vocabulary and their frequencies
+	// fmt.Println("Vocabulary and Frequencies:")
+	// for word, index := range sw2v.Vocabulary {
+	// 	fmt.Printf("%s: %d\n", word, index)
+	// }
+	fmt.Println("------------------")
+
+	// Add the UNK token to the vocabulary if it doesn't exist
+	if _, ok := sw2v.Vocabulary[sw2v.UNKToken]; !ok {
+		sw2v.Vocabulary[sw2v.UNKToken] = len(sw2v.Vocabulary)
+		sw2v.WordVectors[len(sw2v.Vocabulary)-1] = make([]float64, sw2v.VectorSize)
+		// Initialize the UNK token vector (e.g., with random values)
+		for i := 0; i < sw2v.VectorSize; i++ {
+			sw2v.WordVectors[len(sw2v.Vocabulary)-1][i] = (rand.Float64() - 0.5) / float64(sw2v.VectorSize)
+		}
+	}
+
+	// sw2v.ann, err := g.NewANN(sw2v.VectorSize, "euclidean")
+	// if err != nil {
+	// 	fmt.Println("Error creating ANN:", err)
+	// }
+
+	sw2v.ann.AddWordVectors(convertToMap(sw2v.WordVectors, sw2v.Vocabulary)) // Populate the index
+	fmt.Printf("Index length before AddWordVectors: %d\n", sw2v.ann.Index.Len())
+	sw2v.similarityThreshold = 0.6
+
+	// 3. Train the network
+	iteration := 1000
+	// Initialize weights and biases if not already initialized
+	if sw2v.Weights == nil {
+		sw2v.Weights = make([][]float64, sw2v.HiddenSize)
+		for i := 0; i < sw2v.HiddenSize; i++ {
+			sw2v.Weights[i] = make([]float64, sw2v.VectorSize)
+			for j := 0; j < sw2v.VectorSize; j++ {
+				sw2v.Weights[i][j] = rand.NormFloat64() * math.Sqrt(2.0/float64(sw2v.VectorSize+sw2v.HiddenSize)) // Xavier/Glorot initialization
+			}
+		}
+	}
+	if sw2v.Biases == nil {
+		sw2v.Biases = make([][]float64, sw2v.HiddenSize)
+		for i := 0; i < sw2v.HiddenSize; i++ {
+			sw2v.Biases[i] = make([]float64, 1)
+			sw2v.Biases[i][0] = rand.NormFloat64() * math.Sqrt(2.0/float64(sw2v.HiddenSize)) // Xavier/Glorot initialization
+		}
+	}
+	//make the model
+	md, err := modeldata.ModelData("datas/tagdata/training_data.json")
+	if err != nil {
+		fmt.Println("Error loading or training model:", err)
+	}
+
+	// 3. Train the network
+	sw2v.LearningRate = 0.01 // Initial learning rate
+
+	for _, sentence := range sentences {
+		context := sw2v.getContextVector(sentence, md) // Check usage in updated context
+
+		words := strings.Fields(sentence)
+
+		output := sw2v.forwardPass(words)
+
+		loss := sw2v.calculateLoss(output, context)
+		sw2v.backpropagate(output, context)
+		// sw2v.updateContextEmbeddings(sentence, output) // No need to call this separately
+
+		// Print sentence and its corresponding generated context embedding
+		fmt.Printf("Iteration %d: Sentence: %s\n", iteration, sentence)
+		fmt.Printf("Iteration %d: Loss: %f\n", iteration, loss)
+
+		// Find the nearest context word, excluding words from the input sentence
+		if len(words) > 0 { // Only proceed if the sentence is not empty
+
+			neighbors, err := sw2v.ann.NearestNeighbors(output, 10)
+			if err != nil {
+				fmt.Printf("Error getting nearest neighbors: %v\n", err)
+			} else if len(neighbors) > 0 {
+				nearestWord := neighbors[0].Word
+				maxSimilarity := neighbors[0].Similarity
+				fmt.Printf("Iteration %d: Nearest Context Word: %s (Similarity: %.4f)\n", iteration, nearestWord, maxSimilarity)
+			}
+		} else {
+			fmt.Printf("Iteration %d: Skipping nearest context word calculation for empty sentence.\n", iteration)
+		}
+
+		// Learning rate schedule
+		if iteration%100 == 0 && sw2v.LearningRate > 0.001 {
+			sw2v.LearningRate *= 0.95 // Reduce learning rate gradually
+		}
+		iteration++
+	}
 
 	return nil
 }
 
-// Function to make a prediction
-func predict(nn *SimpleNN, inputs []float64, posTagVocab map[string]int) string {
-	predictedOutput := nn.ForwardPass(inputs)
-	predictedTagIndex := nnu.MaxIndex(predictedOutput)
-	predictedTag, _ := nnu.IndexToPosTag(posTagVocab, predictedTagIndex)
-	return predictedTag
-}
-
-// Function to calculate accuracy
-func calculateAccuracy(nn *SimpleNN, trainingData []tag.Tag, tokenVocab map[string]int, posTagVocab map[string]int) float64 {
-	correctPredictions := 0
-	totalPredictions := 0
-
-	for _, taggedSentence := range trainingData {
-		for i := range taggedSentence.Tokens {
-			inputs := make([]float64, nn.InputSize)
-			tokenIndex, ok := tokenVocab[taggedSentence.Tokens[i]]
-			if ok {
-				inputs[tokenIndex] = 1
-			} else {
-				inputs[tokenVocab["UNK"]] = 1 // Handle unknown tokens
-			}
-
-			predictedTag := predict(nn, inputs, posTagVocab)
-
-			if predictedTag == taggedSentence.PosTag[i] {
-				correctPredictions++
-			}
-			totalPredictions++
+// contains checks if a string slice contains a specific string.
+func contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
 		}
 	}
-	return float64(correctPredictions) / float64(totalPredictions)
+	return false
+}
+
+// Helper function to calculate the sum of squares of a slice
+func sumOfSquares(slice []float64) float64 {
+	sum := 0.0
+	for _, val := range slice {
+		sum += val * val
+	}
+	return sum
+}
+
+// getWordByIndex retrieves the word associated with the given index.
+func (sw2v *SimpleWord2Vec) getWordByIndex(index int) string {
+	for word, i := range sw2v.Vocabulary {
+		if i == index {
+			return word
+		}
+	}
+	return "" // Or return an error if appropriate
+}
+
+// Helper function to flatten a 2D slice into a 1D slice
+func flatten(slice [][]float64) []float64 {
+	var result []float64
+	for _, row := range slice {
+		result = append(result, row...)
+	}
+	return result
+}
+
+// SaveModel saves the trained model to a GOB file.
+func (sw2v *SimpleWord2Vec) SaveModel(filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("error creating model file: %w", err)
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(sw2v)
+	if err != nil {
+		return fmt.Errorf("error encoding model: %w", err)
+	}
+
+	return nil
+}
+
+// LoadModel loads a trained model from a GOB file.
+func LoadModel(filename string) (*SimpleWord2Vec, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("error opening model file: %w", err)
+	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	var sw2v SimpleWord2Vec
+	err = decoder.Decode(&sw2v)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding model: %w", err)
+	}
+
+	return &sw2v, nil
+}
+
+func main() {
+	modelFilename := "trained_model.gob"
+
+	// Try to load the model from file
+	sw2v, err := LoadModel(modelFilename)
+	if err != nil {
+		fmt.Println("Error loading the model in loadmodel:", err)
+	}
+
+	// if err == nil {
+	fmt.Println("Model loaded from", modelFilename)
+	// } else {
+
+	// Read training data from file
+	trainingData, err := ReadTrainingData("./datas/training_data.json")
+	if err != nil {
+		fmt.Println("Error reading training data:", err)
+	}
+
+	// Initialize SimpleWord2Vec
+	sw2v = &SimpleWord2Vec{
+		Vocabulary:        make(map[string]int),
+		WordVectors:       make(WordVectors),
+		VectorSize:        100, // Example vector size
+		contextEmbeddings: make(map[string][]float64),
+		Window:            10, // Example context window size
+		ContextLabels:     make(map[string]string),
+		UNKToken:          "<UNK>",
+		HiddenSize:        100, // Example hidden size
+		LearningRate:      0.01,
+		MaxGrad:           20.0,
+	}
+	sw2v.ann, err = g.NewANN(sw2v.VectorSize, "euclidean")
+	if err != nil {
+		fmt.Println("Error creating ANN:", err) // Handle the error properly
+		return                                  // Exit if ANN creation fails
+	}
+	fmt.Printf("Index length before AddWordVectors: %d\n", sw2v.ann.Index.Len())
+	sw2v.similarityThreshold = 0.6
+
+	// Train the model
+	err = sw2v.Train(trainingData)
+	if err != nil {
+		fmt.Println("Error training the model:", err)
+	}
+	// }
+	// Save the trained model
+	err = sw2v.SaveModel(modelFilename)
+	if err != nil {
+		fmt.Println("Error saving the model:", err)
+	}
+
+	fmt.Println("Model trained and saved to", modelFilename)
 }

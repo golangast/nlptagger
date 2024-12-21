@@ -1,7 +1,9 @@
 package vocab
 
 import (
+	"encoding/gob"
 	"fmt"
+	"os"
 
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
@@ -12,7 +14,7 @@ import (
 )
 
 func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *train.TrainingDataJSON) {
-	trainingData, err := train.LoadTrainingDataFromJSON("data/training_data.json")
+	trainingData, err := train.LoadTrainingDataFromJSON("datas/tagdata/training_data.json")
 	if err != nil {
 		fmt.Println("error loading training data: %w", err)
 	}
@@ -50,4 +52,29 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	}
 
 	return tokenVocab
+}
+
+// CreateAndSaveVocab creates a vocabulary from training data and saves it as a GOB file.
+func CreateAndSaveVocab(trainingData []tag.Tag, filePath string) (map[string]int, error) {
+	vocabulary := make(map[string]int)
+	vocabulary["UNK"] = 0 // Add "UNK" token with index 0
+	index := 1
+
+	for _, sentence := range trainingData {
+		for _, token := range sentence.Tokens {
+			if _, ok := vocabulary[token]; !ok {
+				vocabulary[token] = index
+				index++
+			}
+		}
+	}
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	return vocabulary, encoder.Encode(vocabulary)
 }

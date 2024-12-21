@@ -1,0 +1,13 @@
+[
+    {"words": ["configure", "web", "server"], "context": "Webserver Generation"},
+    {"words": ["deploy", "web", "application"], "context": "Webserver Generation"},
+    {"words": ["set", "up", "server", "environment"], "context": "Webserver Generation"},
+    {"words": ["generate", "HTTP", "request", "server", "resources"], "context": "Webserver Generation"},
+    {"words": ["manage", "server", "resources"], "context": "Webserver Generation"},
+    {"words": ["write", "Python", "function", "Java", "class", "JavaScript", "code"], "context": "Code Generation"},
+    {"words": ["create", "Java", "class", "new", "directory"], "context": "Code Generation"},
+    {"words": ["determine", "sentiment", "user", "sentiment"], "context": "Sentiment Analysis"},
+    {"words": ["extract", "sentiment"], "context": "Sentiment Analysis"},
+    {"words":["named", "entity", "recognition"], "context":"Named Entity Recognition"}
+  ]
+  

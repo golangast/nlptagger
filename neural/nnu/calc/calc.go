@@ -1,6 +1,8 @@
 package calc
 
 import (
+	"fmt"
+
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
 	"github.com/golangast/nlptagger/neural/nn/phrase"
@@ -84,26 +86,45 @@ func CalculateAccuracy(nn *nnu.SimpleNN, trainingData []tag.Tag, tokenVocab map[
 			if predictedPhraseTag == taggedSentence.PhraseTag[i] {
 				phrasecorrectPredictions++
 			}
-			if len(taggedSentence.Dependencies) > i { // Check if Dependency slice has an element at index i
+
+			// Handle dependency relation accuracy
+			if i < len(taggedSentence.Dependencies) {
 				if predictedDRTag == taggedSentence.Dependencies[i].Dep {
 					drcorrectPredictions++
 				}
-			} else {
-				inputs[drTagVocab["UNK"]] = 1 // Handle unknown tokens
-				//fmt.Printf("Warning: Dependency tag missing for token %d in sentence: %v\n", i, taggedSentence.Tokens)
-				// Handle the missing tag appropriately.
-				// Options:
-				// 1. Skip the token for DR accuracy calculation (current behavior).
-				// 2. Count it as an incorrect prediction.
-				// 3. Use a default value for comparison.
-
 			}
+			// If dependency tag is missing, count it as an incorrect prediction
+
 			postotalPredictions++
 			nertotalPredictions++
 			phrasetotalPredictions++
 			drtotalPredictions++
 		}
 	}
+	// Avoid division by zero
+	if postotalPredictions == 0 || nertotalPredictions == 0 || phrasetotalPredictions == 0 || drtotalPredictions == 0 {
+		fmt.Println("they were 0's")
 
-	return float64(poscorrectPredictions) / float64(postotalPredictions), float64(nercorrectPredictions) / float64(nertotalPredictions), float64(phrasecorrectPredictions) / float64(phrasetotalPredictions), float64(drcorrectPredictions) / float64(drtotalPredictions)
+		return 0, 0, 0, 0
+	}
+
+	pacc := float64(poscorrectPredictions) / float64(postotalPredictions)
+	nacc := float64(nercorrectPredictions) / float64(nertotalPredictions)
+	phacc := float64(phrasecorrectPredictions) / float64(phrasetotalPredictions)
+	dracc := float64(drcorrectPredictions) / float64(drtotalPredictions)
+
+	if pacc == 0 {
+		fmt.Println("pacc is 0")
+	}
+	if nacc == 0 {
+		fmt.Println("nacc is 0")
+	}
+	if phacc == 0 {
+		fmt.Println("phacc is 0")
+	}
+	if dracc == 0 {
+		fmt.Println("dracc is 0")
+	}
+
+	return pacc, nacc, phacc, dracc
 }

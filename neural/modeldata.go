@@ -11,7 +11,6 @@ import (
 func ModelData(modeldirectory string) (*nnu.SimpleNN, error) {
 
 	_, _, _, _, _, trainingData := vocab.CreateVocab()
-	// Train and save the model
 
 	return train.TrainAndSaveModel(trainingData, modeldirectory)
 }

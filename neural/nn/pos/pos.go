@@ -1,8 +1,6 @@
 package pos
 
 import (
-	"fmt"
-
 	"github.com/golangast/nlptagger/neural/nnu"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
@@ -41,13 +39,14 @@ func ForwardPassPos(n *nnu.SimpleNN, inputs []float64) []float64 {
 	return output
 }
 
+// CreatePosTagVocab now returns both the original and reverse vocabularies
 func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
 	posTagVocab := make(map[string]int)
 	index := 0
 
 	for _, taggedSentence := range trainingData {
 		for _, posTag := range taggedSentence.PosTag {
-			if _, ok := posTagVocab[posTag]; !ok { // Check if POS tag is already in the vocabulary
+			if _, ok := posTagVocab[posTag]; !ok {
 				posTagVocab[posTag] = index
 				index++
 			}
@@ -56,29 +55,26 @@ func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
 
 	return posTagVocab
 }
-func IndexToPosTag(posTagVocab map[string]int, predictedTagIndex int) (string, bool) {
-	for tag, index := range posTagVocab {
-		if index == predictedTagIndex {
-			return tag, true
-		}
-	}
-	return "", false
-}
 
-func PredictPosTags(nn *nnu.SimpleNN, inputs []float64, posTagVocab map[string]int, predictedPosTags []string, predictedTagIndex int) []string {
+// func IndexToPosTag(reversePosTagVocab map[int]string, predictedTagIndex int) (string, bool) {
+// 	tag, ok := reversePosTagVocab[predictedTagIndex]
+// 	return tag, ok
+// }
 
-	// Get the actual POS tag string using the predicted index.
-	predictedTag, ok := IndexToPosTag(posTagVocab, predictedTagIndex)
-	if !ok {
-		// Print an error message.
-		fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-		// Append "UNK" to the predicted tags.
-		predictedPosTags = append(predictedPosTags, "UNK")
-		// Continue to the next token.
-	}
-	// Append the predicted tag to the list of predicted tags.
-	predictedPosTags = append(predictedPosTags, predictedTag)
+// func PredictPosTags(nn *nnu.SimpleNN, inputs []float64, posTagVocab map[string]int, predictedPosTags []string, predictedTagIndex int) []string {
 
-	return predictedPosTags
+// 	// Get the actual POS tag string using the predicted index.
+// 	predictedTag, ok := IndexToPosTag(posTagVocab, predictedTagIndex)
+// 	if !ok {
+// 		// Print an error message.
+// 		fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
+// 		// Append "UNK" to the predicted tags.
+// 		predictedPosTags = append(predictedPosTags, "UNK")
+// 		// Continue to the next token.
+// 	}
+// 	// Append the predicted tag to the list of predicted tags.
+// 	predictedPosTags = append(predictedPosTags, predictedTag)
 
-}
+// 	return predictedPosTags
+
+// }
