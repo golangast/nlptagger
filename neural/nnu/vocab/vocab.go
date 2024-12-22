@@ -47,8 +47,6 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 		tokenVocab["UNK"] = len(tokenVocab) // Add "UNK" token
 		index = len(tokenVocab)             // Update index to reflect new vocabulary size
 
-		// Optionally, print a warning message
-		//fmt.Println("Warning: Vocabulary size exceeded. Adding 'UNK' token.")
 	}
 
 	return tokenVocab

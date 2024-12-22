@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/exp/rand"
@@ -36,25 +37,36 @@ func Predict(nn *nnu.SimpleNN, inputs []float64, posTagVocab map[string]int, ner
 
 // predictTag predicts a tag based on the provided forward pass function and vocabulary.
 func predictTag(nn *nnu.SimpleNN, inputs []float64, forwardPassFunc func(*nnu.SimpleNN, []float64) []float64, tagVocab map[string]int) string {
-	predictedOutput := forwardPassFunc(nn, inputs)
-
-	// Find tag with highest probability
-	maxProbability := -1.0
-	predictedTag := "UNK"
-
-	for tag, index := range tagVocab {
-		if index >= len(predictedOutput) {
-			continue // Skip if index is out of range
-		}
-
-		probability := predictedOutput[index]
-		if probability > maxProbability {
-			maxProbability = probability
-			predictedTag = tag
-		}
+	if nn == nil {
+		log.Println("Error: Neural network is nil.")
+		return "UNK" // Or return an appropriate error value
 	}
 
-	return predictedTag
+	predictedOutput := forwardPassFunc(nn, inputs)
+
+	// Create a slice of probability-tag pairs for sorting
+	type ProbabilityTagPair struct {
+		Probability float64
+		Tag         string
+	}
+
+	var probabilityTagPairs []ProbabilityTagPair
+	for tag, index := range tagVocab {
+		if index >= 0 && index < len(predictedOutput) {
+			probabilityTagPairs = append(probabilityTagPairs, ProbabilityTagPair{Probability: predictedOutput[index], Tag: tag})
+		}
+	}
+	// Sort the probabilities in descending order
+	sort.Slice(probabilityTagPairs, func(i, j int) bool {
+		return probabilityTagPairs[i].Probability > probabilityTagPairs[j].Probability
+	})
+
+	if len(probabilityTagPairs) > 0 {
+		return probabilityTagPairs[0].Tag
+	} else {
+		log.Println("Error: Empty tag vocabulary.")
+		return "UNK"
+	}
 }
 
 // Backpropagate updates the weights of the neural network using backpropagation.

@@ -55,26 +55,3 @@ func CreatePosTagVocab(trainingData []tag.Tag) map[string]int {
 
 	return posTagVocab
 }
-
-// func IndexToPosTag(reversePosTagVocab map[int]string, predictedTagIndex int) (string, bool) {
-// 	tag, ok := reversePosTagVocab[predictedTagIndex]
-// 	return tag, ok
-// }
-
-// func PredictPosTags(nn *nnu.SimpleNN, inputs []float64, posTagVocab map[string]int, predictedPosTags []string, predictedTagIndex int) []string {
-
-// 	// Get the actual POS tag string using the predicted index.
-// 	predictedTag, ok := IndexToPosTag(posTagVocab, predictedTagIndex)
-// 	if !ok {
-// 		// Print an error message.
-// 		fmt.Printf("Tag index %d not found in vocabulary\n", predictedTagIndex)
-// 		// Append "UNK" to the predicted tags.
-// 		predictedPosTags = append(predictedPosTags, "UNK")
-// 		// Continue to the next token.
-// 	}
-// 	// Append the predicted tag to the list of predicted tags.
-// 	predictedPosTags = append(predictedPosTags, predictedTag)
-
-// 	return predictedPosTags
-
-// }

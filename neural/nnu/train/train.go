@@ -2,8 +2,10 @@ package train
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 
 	"golang.org/x/exp/rand"
@@ -19,44 +21,61 @@ import (
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
+var (
+	epochs       = flag.Int("epochs", 1000, "Number of training epochs")
+	learningRate = flag.Float64("learningRate", 0.01, "Learning rate")
+	logFile      = flag.String("logFile", "train.log", "Path to the log file")
+)
+
+func init() {
+	flag.Parse()
+	// Configure logging
+	f, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 // Structure to represent training data in JSON
 type TrainingDataJSON struct {
 	Sentences []tag.Tag `json:"sentences"`
 }
 
 func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *nnu.SimpleNN) (float64, float64, float64, float64) {
+
+	log.Printf("Starting training with epochs=%d, learningRate=%f", epochs, learningRate) // Log hyperparameters
+
 	var posaccuracy, neraccuracy, phraseaccuracy, draccuracy float64
 
 	for epoch := 0; epoch < epochs; epoch++ {
-		//fmt.Printf("Starting epoch %d\n", epoch+1) // Epoch counter starts at 1 for clarity
 		for _, taggedSentence := range trainingData {
-			//fmt.Printf("Processing sample %d of %d in epoch %d\n", i+1, len(trainingData), epoch+1) // Sample counter
-
 			// Prepare inputs and targets
 			inputs, targets, maskedIndices := prepareMLMInput(nn.InputSize)
-			//fmt.Printf("Sample: %v\n", taggedSentence) // Print the current sample
 
-			// MLM Forward pass and loss calculation
-			predictions := predict.PredictMaskedWords(nn, inputs)
+			// Augment the input data
+			augmentedInputs := predict.AugmentData(inputs)
+
+			// MLM Forward pass and loss calculation using augmented input
+			predictions := predict.PredictMaskedWords(nn, augmentedInputs)
 			mlmLoss := predict.CalculateMLMLoss(nn, predictions, targets, maskedIndices)
 
-			// Original task loss calculation
-			originalOutputs := pos.ForwardPassPos(nn, inputs)
+			// Original task loss calculation using augmented input
+			originalOutputs := pos.ForwardPassPos(nn, augmentedInputs)
 			originalLoss := predict.CalculateOriginalLoss(originalOutputs, targets)
 
 			// Combine losses
 			totalLoss := originalLoss + mlmLoss
-			//fmt.Printf("totalLoss before backprop: %f\n", totalLoss)
 
-			// Backpropagation and weight update (call once per sentence, not per token)
-			predict.Backpropagate(nn, totalLoss, originalOutputs, learningRate, inputs, targets)
-			predict.UpdateWeights(nn, learningRate) // Update weights after backpropagation
+			// Backpropagation and weight update using augmented input
+			predict.Backpropagate(nn, totalLoss, originalOutputs, learningRate, augmentedInputs, targets)
+			predict.UpdateWeights(nn, learningRate)
 
-			// Calculate accuracy (once per sentence)
+			// Calculate accuracy (using original inputs for accuracy evaluation)
 			posaccuracy, neraccuracy, phraseaccuracy, draccuracy = calc.CalculateAccuracy(nn, []tag.Tag{taggedSentence}, CreateTokenVocab([]tag.Tag{taggedSentence}), pos.CreatePosTagVocab([]tag.Tag{taggedSentence}), ner.CreateTagVocabNer([]tag.Tag{taggedSentence}), phrase.CreatePhraseTagVocab([]tag.Tag{taggedSentence}), dr.CreateDRTagVocab([]tag.Tag{taggedSentence}))
 		}
-
-		//fmt.Printf("Finished epoch %d\n", epoch+1)
 	}
 
 	return posaccuracy, neraccuracy, phraseaccuracy, draccuracy
@@ -193,8 +212,6 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 		tokenVocab["UNK"] = len(tokenVocab) // Add "UNK" token
 		index = len(tokenVocab)             // Update index to reflect new vocabulary size
 
-		// Optionally, print a warning message
-		//fmt.Println("Warning: Vocabulary size exceeded. Adding 'UNK' token.")
 	}
 
 	return tokenVocab

@@ -128,12 +128,6 @@ func ForwardPass(nn *SimpleNN, inputs []float64) []float64 {
 }
 
 func ForwardPassMLM(nn *SimpleNN, inputs []float64) []float64 {
-	if len(inputs) != nn.InputSize {
-		fmt.Printf("Input size in prepareMLMInput: %d\n", nn.InputSize)                   // Check the input size
-		fmt.Printf("Length of inputs slice: %d\n", len(inputs))                           // Length of input vector
-		fmt.Printf("Content of inputs slice: %v\n", inputs)                               // Check the input vector values
-		fmt.Printf("Input size mismatch. Expected %d, got %d", nn.InputSize, len(inputs)) // Crucial error check
-	}
 	// Calculate hidden layer activations
 	hiddenOutputs := make([]float64, nn.HiddenSize)
 	for i := 0; i < nn.HiddenSize; i++ {
