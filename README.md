@@ -1,5 +1,7 @@
 # nlptagger
 This project is heavily under construction and will change a lot because I am learning as I am making and accuracy isn't #1 right now.
+
+
 When you need a program to understand context of commands.
 
 
@@ -31,7 +33,7 @@ When you need a program to understand context of commands.
 
 ## General info
 *This project is used for tagging cli commands.  It is not a LLM or trying to be.  I am using it to generate go code but I made this completely separate so others can enjoy it.
-*I will keep working on it and hopefully improving the phrase tagging and hopefully adding neural networks in the future.
+*I will keep working on it and hopefully improving the guessing of intent.
 
 -Background
 1. Tokenization: This is the very first step in most NLP pipelines. It involves breaking down text into individual units called tokens (words, punctuation marks, etc.). Tokenization is fundamental because it creates the building blocks for further analysis.
