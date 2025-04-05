@@ -1,5 +1,5 @@
 # nlptagger
-
+This project is heavily under construction and will change a lot because I am learning as I am making and accuracy isn't #1 right now.
 When you need a program to understand context of commands.
 
 
@@ -43,6 +43,10 @@ When you need a program to understand context of commands.
 4. Dependency Parsing: Dependency parsing analyzes the grammatical relationships between words in a sentence, creating a tree-like structure that shows how words depend on each other. It provides a deeper understanding of sentence structure than phrase tagging, which focuses on contiguous chunks.
 
 5. Lemmatization and Stemming: These techniques reduce words to their base or root forms (e.g., "running" to "run"). They help to normalize text and improve the accuracy of other NLP tasks.
+
+6. Word2Vec is a technique that represents words as numerical vectors capturing semantic relationships: words with similar meanings have closer vectors. This allows algorithms to understand and process text more effectively by leveraging word similarities.
+
+7. Semantic roles describe the roles of words or phrases within a sentence, such as agent, action, or object. Identifying these roles helps to understand the meaning and relationships between different parts of a sentence.
 
 *Phrase tagging often uses the output of these more generic techniques as input. For example:
 
