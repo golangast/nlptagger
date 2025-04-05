@@ -1,6 +1,8 @@
 package pos
 
 import (
+	"fmt"
+
 	"github.com/golangast/nlptagger/neural/nnu"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
@@ -8,6 +10,13 @@ import (
 // Forward pass https://wiki.pathmind.com/neural-network
 func ForwardPassPos(n *nnu.SimpleNN, inputs []float64) []float64 {
 	// Create a slice to store the activations of the hidden layer.
+	if n.WeightsIH == nil || len(n.WeightsIH) == 0 || len(inputs) == 0 {
+		fmt.Printf("n.WeightsIH is nil or empty. len(n.WeightsIH): %d, n.InputSize: %d\n", len(n.WeightsIH), n.InputSize)
+
+		return []float64{}
+
+	}
+
 	hidden := make([]float64, n.HiddenSize)
 	// Iterate over each neuron in the hidden layer.
 	for i := range hidden {

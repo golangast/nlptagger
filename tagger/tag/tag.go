@@ -25,8 +25,10 @@ type Tag struct {
 	Epoch           int
 	IsName          bool
 	Token           string
-	Sentence        string
-	Tags            []Tag
+	Sentence        string `json:"sentence"`
+	Actions         []string
+	SemanticRole
+	Tags []Tag
 }
 type Dependency struct {
 	Dependent int    `json:"dependent"`
@@ -34,4 +36,9 @@ type Dependency struct {
 	Head      int    `json:"head"`
 	Dep       string `json:"dep"` // or Dependent if that's what your JSON has
 
+}
+
+type SemanticRole struct {
+	Token string `json:"token"`
+	Role  string `json:"role"`
 }

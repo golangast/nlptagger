@@ -7,11 +7,9 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand/v2"
 	"os"
 	"sort"
-	"strings"
-
-	"golang.org/x/exp/rand"
 
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
@@ -26,23 +24,9 @@ type TrainingDataJSON struct {
 	Sentences []tag.Tag `json:"sentences"`
 }
 
-func Predict(nn *nnu.SimpleNN, inputs []float64, posTagVocab map[string]int, nerTagVocab map[string]int, phraseTagVocab map[string]int, drTagVocab map[string]int) (string, string, string, string) {
-	predictedPosTag := predictTag(nn, inputs, pos.ForwardPassPos, posTagVocab)
-	predictedNerTag := predictTag(nn, inputs, ner.ForwardPassNer, nerTagVocab)
-	predictedPhraseTag := predictTag(nn, inputs, phrase.ForwardPassPhrase, phraseTagVocab)
-	predictedDRTag := predictTag(nn, inputs, dr.ForwardPassDR, drTagVocab)
-
-	return predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag
-}
-
 // predictTag predicts a tag based on the provided forward pass function and vocabulary.
-func predictTag(nn *nnu.SimpleNN, inputs []float64, forwardPassFunc func(*nnu.SimpleNN, []float64) []float64, tagVocab map[string]int) string {
-	if nn == nil {
-		log.Println("Error: Neural network is nil.")
-		return "UNK" // Or return an appropriate error value
-	}
-
-	predictedOutput := forwardPassFunc(nn, inputs)
+func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab map[string]int) (string, string, string, string) {
+	//fmt.Println("istagged: ", posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
 
 	// Create a slice of probability-tag pairs for sorting
 	type ProbabilityTagPair struct {
@@ -50,77 +34,58 @@ func predictTag(nn *nnu.SimpleNN, inputs []float64, forwardPassFunc func(*nnu.Si
 		Tag         string
 	}
 
-	var probabilityTagPairs []ProbabilityTagPair
-	for tag, index := range tagVocab {
-		if index >= 0 && index < len(predictedOutput) {
-			probabilityTagPairs = append(probabilityTagPairs, ProbabilityTagPair{Probability: predictedOutput[index], Tag: tag})
+	// Function to predict and select tag
+	predictAndSelectTag := func(vocab map[string]int, predictedOutput []float64, tagType string) string {
+		if vocab == nil {
+			log.Printf("Error: Nil tag vocabulary for %s.", tagType)
+			return ""
+		}
+
+		var probabilityTagPairs []ProbabilityTagPair
+		for tag, index := range vocab {
+			if index >= 0 && index < len(predictedOutput) {
+				probabilityTagPairs = append(probabilityTagPairs, ProbabilityTagPair{Probability: predictedOutput[index], Tag: tag})
+			}
+		}
+		sort.Slice(probabilityTagPairs, func(i, j int) bool {
+			return probabilityTagPairs[i].Probability > probabilityTagPairs[j].Probability
+		})
+		if len(probabilityTagPairs) > 0 {
+			return probabilityTagPairs[0].Tag
+		} else {
+			log.Printf("Error: Empty tag vocabulary for %s.", tagType)
+			return ""
 		}
 	}
-	// Sort the probabilities in descending order
-	sort.Slice(probabilityTagPairs, func(i, j int) bool {
-		return probabilityTagPairs[i].Probability > probabilityTagPairs[j].Probability
-	})
+	// Make predictions
 
-	if len(probabilityTagPairs) > 0 {
-		return probabilityTagPairs[0].Tag
-	} else {
-		log.Println("Error: Empty tag vocabulary.")
-		return "UNK"
-	}
+	nnOutput := nn.ForwardPass(inputs)
+
+	// Predict each tag
+	predictedPos := predictAndSelectTag(posTagVocab, nnOutput, "POS")
+
+	predictedNer := predictAndSelectTag(nerTagVocab, nnOutput, "NER")
+
+	predictedPhrase := predictAndSelectTag(phraseTagVocab, nnOutput, "Phrase")
+
+	predictedDR := predictAndSelectTag(drTagVocab, nnOutput, "DR")
+
+	return predictedPos, predictedNer, predictedPhrase, predictedDR
 }
 
-// Backpropagate updates the weights of the neural network using backpropagation.
-func Backpropagate(nn *nnu.SimpleNN, totalLoss float64, outputs []float64, learningRate float64, inputs, targets []float64) {
+func ForwardPassPos(nn *nnu.SimpleNN, inputs []float64) []float64 {
+	// Check if the inputs are nil or empty
+	if inputs == nil || len(inputs) == 0 {
+		log.Println("Warning: Empty or nil inputs provided to ForwardPassPos")
+		return []float64{} // Return an empty slice or handle this case as needed
+	}
+	outputs := nn.ForwardPass(inputs) // Changed nn.ForwardPass
+	if len(outputs) == 0 {
+		log.Println("Warning: Empty outputs returned from ForwardPass")
+		return []float64{} // Return an empty slice if outputs are empty
 
-	// 1. Output layer errors.  Calculate the error for each output neuron.
-	outputErrors := make([]float64, nn.OutputSize)
-	for i := 0; i < nn.OutputSize; i++ {
-		// Example: Assuming Mean Squared Error (MSE)
-		outputErrors[i] = (outputs[i] - targets[i]) * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
 	}
-
-	// 2. Output layer weight update
-	for i := 0; i < nn.HiddenSize; i++ { //Hidden layer is the input to Output layer
-		for j := 0; j < nn.OutputSize; j++ {
-			nn.OutputWeights[i][j] += learningRate * outputErrors[j] * outputs[i]
-		}
-	}
-
-	// 3. Hidden layer errors. Calculate the error signal for each hidden neuron.
-	hiddenErrors := make([]float64, nn.HiddenSize)
-	for i := 0; i < nn.HiddenSize; i++ {
-		errorSum := 0.0
-		for j := 0; j < nn.OutputSize; j++ {
-			errorSum += outputErrors[j] * nn.OutputWeights[i][j]
-		}
-		hiddenErrors[i] = errorSum * outputs[i] * (1 - outputs[i]) // Sigmoid derivative
-	}
-
-	// 4. Hidden layer weight updates
-	for i := 0; i < nn.HiddenSize; i++ {
-		for j := 0; j < nn.InputSize; j++ { // Input layer is the input to Hidden layer
-			nn.HiddenWeights[i][j] += learningRate * hiddenErrors[i] * inputs[j]
-		}
-	}
-}
-func UpdateWeights(nn *nnu.SimpleNN, gradients float64) {
-	index := 0
-	for i := 0; i < nn.HiddenSize; i++ { // nn.HiddenSize rows
-		for j := 0; j < nn.OutputSize; j++ { // nn.OutputSize columns
-			if i < len(nn.HiddenWeights) && j < len(nn.HiddenWeights[i]) {
-				nn.HiddenWeights[i][j] += gradients
-			}
-			index++
-		}
-	}
-	for i := 0; i < nn.HiddenSize; i++ { // nn.HiddenSize rows
-		for j := 0; j < nn.OutputSize; j++ { // nn.OutputSize columns
-			if i < len(nn.OutputWeights) && j < len(nn.OutputWeights[i]) {
-				nn.OutputWeights[i][j] += gradients
-			}
-			index++
-		}
-	}
+	return outputs
 }
 func AugmentData(inputs []float64) []float64 {
 	maskedInputs := make([]float64, len(inputs))
@@ -135,7 +100,7 @@ func AugmentData(inputs []float64) []float64 {
 
 	for i := 0; i < numWordsToMask; i++ {
 		// Generate a random index
-		randomIndex := rand.Intn(len(inputs))
+		randomIndex := rand.IntN(len(inputs))
 
 		//check if index has already been masked
 		if _, exists := maskedIndices[randomIndex]; exists {
@@ -151,34 +116,87 @@ func AugmentData(inputs []float64) []float64 {
 		maskedInputs[randomIndex] = 0
 
 	}
+
 	return maskedInputs
 }
-func PredictMaskedWords(nn *nnu.SimpleNN, maskedInputs []float64) []float64 {
 
-	outputs := nnu.ForwardPass(nn, maskedInputs)
-	// If outputs is the wrong size, pad it with zeros.
-	paddedOutputs := make([]float64, 103)
-	copy(paddedOutputs, outputs)
-	outputs = paddedOutputs
+func prepareMLMInput(nn *nnu.SimpleNN) error {
+	// 4. Masking Logic (Example - 15% masking):
+	numTokensToMask := int(0.15 * float64(len(nn.MaskedInputs)))
+	maskedIndices := make(map[int]bool)
 
-	return outputs
+	for i := 0; i < numTokensToMask; i++ {
+		randomIndex := rand.IntN(len(nn.MaskedInputs))
+		if !maskedIndices[randomIndex] {
+			maskedIndices[randomIndex] = true
+			nn.MaskedInputs[randomIndex] = 0 // Replace with mask token ID
+		} else {
+			i-- // Retry if the index was already masked
+		}
+	}
+	nn.MaskedIndices = make([]int, 0, len(maskedIndices))
+	for index := range maskedIndices {
+		nn.MaskedIndices = append(nn.MaskedIndices, index)
+	}
+
+	// 5. Set Targets (assuming you have a target vocabulary):
+	nn.Targets = make([]float64, len(nn.MaskedInputs))
+	for i := range nn.Targets {
+		if maskedIndices[i] {
+			nn.Targets[i] = nn.Inputs[i] // Store the original value for masked tokens
+		} else {
+			nn.Targets[i] = -1 // Set target to -1 for unmasked tokens
+		}
+	}
+
+	return nil
+}
+func PredictMaskedWords(nn *nnu.SimpleNN) ([]float64, error) {
+	// Add debugging output before any access to nn.MaskedInputs
+	err := prepareMLMInput(nn)
+	if err != nil {
+		log.Printf("Error in prepareMLMInput: %v\n", err)
+		return nil, err
+	}
+	if nn.Targets == nil {
+		log.Println("Error: nn.Targets is nil.")
+		return []float64{}, nil
+	}
+	outputs := nnu.ForwardPassMasked(nn)
+	if len(nn.MaskedInputs) == 0 {
+		log.Println("Error: nn.MaskedInputs is empty.")
+		return []float64{}, nil // Returning empty slice on error
+	}
+
+	return outputs, nil
 }
 
 // CalculateOriginalLoss calculates the original loss for your primary task.
 // In this example, it calculates the mean squared error loss for a regression task.
-func CalculateOriginalLoss(predictedOutput []float64, targetOutput []float64) float64 {
+func CalculateOriginalLoss(nn *nnu.SimpleNN, predictedOutput []float64, targetOutput []float64) float64 {
+	// Check lengths
+	if len(predictedOutput) != len(nn.Targets) {
+		fmt.Printf("Lengths do not match: predictedOutput = %v nn.Targets= %v", len(predictedOutput), len(nn.Targets))
+	}
 	loss := 0.0
 	for i := 0; i < len(predictedOutput); i++ {
-		diff := predictedOutput[i] - targetOutput[i]
+		diff := predictedOutput[i] - nn.Targets[i]
 		loss += diff * diff
 	}
 
-	// Return average loss
-	return loss / float64(len(predictedOutput))
+	totalLoss := loss / float64(len(predictedOutput))
+	log.Println("CalculateOriginalLoss: totalLoss", totalLoss)
+
+	return totalLoss
 }
 
 func CalculateMLMLoss(nn *nnu.SimpleNN, maskedInputs []float64, originalInputs []float64, maskedIndices map[int]bool) float64 {
-	predictedOutputs := nnu.ForwardPassMLM(nn, maskedInputs)
+
+	predictedOutputs := nn.ForwardPass(maskedInputs)
+
+	if nn.InputSize != len(maskedInputs) || nn.OutputSize != len(predictedOutputs) {
+		log.Printf("nn.InputSize (%d) != len(maskedInputs) (%d) || nn.OutputSize (%d) != len(predictedOutputs) (%d)\n", nn.InputSize, len(maskedInputs), nn.OutputSize, len(predictedOutputs))
+	}
 
 	totalLoss := 0.0
 	numMaskedWords := 0
@@ -186,60 +204,69 @@ func CalculateMLMLoss(nn *nnu.SimpleNN, maskedInputs []float64, originalInputs [
 	for index, isMasked := range maskedIndices {
 		if isMasked {
 			targetWordIndex := int(originalInputs[index])
-
-			// Clamp targetWordIndex to valid range
-			if targetWordIndex < 0 {
-				targetWordIndex = 0
-			} else if targetWordIndex >= len(predictedOutputs) {
-				targetWordIndex = len(predictedOutputs) - 1
+			if targetWordIndex < 0 || targetWordIndex >= len(nn.Targets) {
+				log.Printf("invalid targetWordIndex: %d, index: %d, length of Targets %d, length outputs: %d", targetWordIndex, index, len(nn.Targets), len(predictedOutputs))
+				continue
 			}
-
-			// Safe check to ensure targetWordIndex is within bounds
-			if targetWordIndex >= 0 && targetWordIndex < len(predictedOutputs) {
-				// Calculate cross-entropy loss
-				loss := -math.Log(predictedOutputs[targetWordIndex])
-				totalLoss += loss
-				numMaskedWords++
-			} else {
-				log.Printf("Target word index out of range: %d (predictedOutputs length: %d)\n", targetWordIndex, len(predictedOutputs))
+			if targetWordIndex >= len(predictedOutputs) || targetWordIndex < 0 {
+				log.Printf("targetWordIndex (%d) is out of bounds for predictedOutputs (len = %d)\n", targetWordIndex, len(predictedOutputs))
+				continue
 			}
+			// Calculate cross-entropy loss
+
+			loss := -math.Log(predictedOutputs[targetWordIndex])
+			if math.IsNaN(loss) {
+				log.Printf("loss is not a number %f", loss)
+			}
+			totalLoss += loss
+			numMaskedWords++
+
 		}
 	}
 
 	// Average loss over masked words
 	if numMaskedWords > 0 {
-		return totalLoss / float64(numMaskedWords)
+		totalLoss := totalLoss / float64(numMaskedWords)
+		log.Println("CalculateMLMLoss: totalLoss", totalLoss, "numMaskedWords", numMaskedWords)
+		return totalLoss
 	} else {
 		return 0.0 // Handle case where no words were masked
 	}
 }
 
-func PredictTags(nn *nnu.SimpleNN, sentence string) ([]string, []string, []string, []string) {
+func PredictTags(nn *nnu.SimpleNN, sentence []string) ([]string, []string, []string, []string) {
 	tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab, _ := CreateVocab()
-	// Tokenize the sentence into individual words.
-	tokens := strings.Fields(sentence)
 	// Create a slice to store the predicted POS tags.
 	var predictedPosTags, predictedNerTags, predictedPhraseTags, predictedDRTags []string
 	// Iterate over each token in the sentence.
-	for _, token := range tokens {
+	for _, token := range sentence {
 		// Get the index of the token in the vocabulary.
 		tokenIndex, ok := tokenVocab[token]
 		inputs := make([]float64, nn.InputSize)
+		//Set all values to zero
+		for i := range inputs {
+			inputs[i] = 0
+		}
 
 		if !ok {
 			// Add new token to vocabulary and update the model.gob file
 			tokenVocab = AddNewTokenToVocab(token, tokenVocab)
-			tokenIndex = tokenVocab[token] // Get the newly assigned index
-			saveTokenVocabToGob("model.gob", tokenVocab)
+			tokenIndex = tokenVocab[token] // Use the newly assigned index
+			if err := saveTokenVocabToGob("model.gob", tokenVocab); err != nil {
+				log.Printf("Error saving vocabulary to GOB: %v", err)
+				// Handle error appropriately, e.g., return an error or a default value
+			}
+
+			if tokenIndex >= 0 && tokenIndex < nn.InputSize {
+				inputs[tokenIndex] = 1 // Set the corresponding input to 1
+			} else {
+				inputs[tokenVocab["UNK"]] = 1
+				// No need for inputs[0] = 1 here
+			}
 		}
 
-		if tokenIndex >= 0 && tokenIndex < nn.InputSize {
-			inputs[tokenIndex] = 1
-		} else {
-			inputs[0] = 1 // Use index 0 for out-of-range tokenIndex
-		}
 		// Predict tags using the neural network
-		predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := Predict(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
+		predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
 
 		predictedPosTags = append(predictedPosTags, predictedPosTag)
 		predictedNerTags = append(predictedNerTags, predictedNerTag)
@@ -253,7 +280,7 @@ func PredictTags(nn *nnu.SimpleNN, sentence string) ([]string, []string, []strin
 func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
 	trainingData, err := LoadTrainingDataFromJSON("data/training_data.json")
 	if err != nil {
-		fmt.Println("error loading training data: %w", err)
+		fmt.Printf("error loading training data: %w", err)
 	}
 	// Create vocabularies
 	tokenVocab := CreateTokenVocab(trainingData.Sentences)
@@ -272,7 +299,7 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 		// Load vocabulary from GOB file
 		tokenVocab, err := loadTokenVocabFromGob("model.gob")
 		if err != nil {
-			fmt.Println("Error loading vocabulary from GOB:", err)
+			log.Println("Error loading vocabulary from GOB:", err)
 			return make(map[string]int) // Return empty map on error
 		}
 		return tokenVocab
@@ -310,7 +337,7 @@ func createAndSaveTokenVocab(trainingData []tag.Tag) map[string]int {
 
 	// Save the vocabulary to GOB file
 	if err := saveTokenVocabToGob("model.gob", tokenVocab); err != nil {
-		fmt.Println("Error saving vocabulary to GOB:", err)
+		log.Println("Error saving vocabulary to GOB:", err)
 		return make(map[string]int) // Return empty map on error
 	}
 

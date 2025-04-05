@@ -2,13 +2,14 @@ package train
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
+	"math/rand/v2"
 	"os"
-
-	"golang.org/x/exp/rand"
+	"sort"
+	"strings"
 
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
@@ -16,142 +17,411 @@ import (
 	"github.com/golangast/nlptagger/neural/nn/pos"
 	"github.com/golangast/nlptagger/neural/nnu"
 	"github.com/golangast/nlptagger/neural/nnu/calc"
+	"github.com/golangast/nlptagger/neural/nnu/contextvector"
 	"github.com/golangast/nlptagger/neural/nnu/gobs"
 	"github.com/golangast/nlptagger/neural/nnu/predict"
+	"github.com/golangast/nlptagger/neural/nnu/vocab"
+	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
-var (
-	epochs       = flag.Int("epochs", 1000, "Number of training epochs")
-	learningRate = flag.Float64("learningRate", 0.01, "Learning rate")
-	logFile      = flag.String("logFile", "train.log", "Path to the log file")
-)
-
-func init() {
-	flag.Parse()
-	// Configure logging
-	f, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-	defer f.Close()
-	log.SetOutput(f)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-}
-
-// Structure to represent training data in JSON
 type TrainingDataJSON struct {
 	Sentences []tag.Tag `json:"sentences"`
 }
 
-func Train(trainingData []tag.Tag, epochs int, learningRate float64, nn *nnu.SimpleNN) (float64, float64, float64, float64) {
+type ContextRelevance struct {
+	Iteration           string
+	NearestContextWord  string
+	Similarity          float64
+	ContextualRelevance float64
+}
 
-	log.Printf("Starting training with epochs=%d, learningRate=%f", epochs, learningRate) // Log hyperparameters
+func prepareInputData(tagData tag.Tag, nn *nnu.SimpleNN) []float64 {
+	tokenVocab, _, _, _, _, _ := CreateVocab()
+	log.Printf("prepareInputData - Size of tokenVocab: %d", len(tokenVocab))
+	nn.TokenVocab = tokenVocab
+	tokens := tagData.Tokens
+	tokenVocabSize := len(nn.TokenVocab)
+	maxSentenceSize := nn.InputSize / tokenVocabSize
+	nn.Inputs = make([]float64, nn.InputSize)
 
-	var posaccuracy, neraccuracy, phraseaccuracy, draccuracy float64
+	// Set the input with the sentence tokens
+	for i, token := range tokens {
+		// Check if we've exceeded the maximum sentence size
+		if i >= maxSentenceSize {
+			break
+		}
 
-	for epoch := 0; epoch < epochs; epoch++ {
+		tokenIndex, ok := nn.TokenVocab[token]
+		if !ok {
+			tokenIndex = nn.TokenVocab["UNK"]
+		}
+
+		for j := 0; j < tokenVocabSize; j++ {
+			if tokenIndex == j {
+				nn.Inputs[(i)*tokenVocabSize+j] = 1
+			}
+		}
+
+	}
+
+	return nn.Inputs
+}
+func TrainAccuracy(trainingData []tag.Tag, nn *nnu.SimpleNN, sw2v *word2vec.SimpleWord2Vec) (float64, float64, float64, float64) {
+
+	posAccuracy, nerAccuracy, phraseAccuracy, drAccuracy := 0.0, 0.0, 0.0, 0.0
+	posTotal, nerTotal, phraseTotal, drTotal := 0.0, 0.0, 0.0, 0.0
+	posCorrect, nerCorrect, phraseCorrect, drCorrect := 0.0, 0.0, 0.0, 0.0
+
+	// if nn.WeightsIH == nil || len(nn.WeightsIH) == 0 {
+	// 	defer func() {
+	// 		if r := recover(); r != nil {
+	// 			log.Println("TrainAccuracy - Recovered from panic:", r)
+	// 			// You might want to log more details about the panic here
+	// 		}
+	// 	}()
+
+	// 	fmt.Println("TrainAccuracy - WeightsIH is nil or empty")
+	// }
+
+	// Initialize weights and biases if not already initialized
+	if nn.HiddenWeights == nil {
+		nn.HiddenWeights = make([][]float64, nn.HiddenSize)
+		for i := 0; i < nn.HiddenSize; i++ {
+			nn.HiddenWeights[i] = make([]float64, nn.InputSize)
+			for j := 0; j < nn.InputSize; j++ {
+				nn.HiddenWeights[i][j] = rand.NormFloat64() * math.Sqrt(2.0/float64(nn.InputSize+nn.HiddenSize))
+			}
+		}
+	}
+
+	if nn.InputSize == 0 || nn.OutputSize == 0 {
+		nn.InputSize = len(nn.TokenVocab) * 3
+		nn.OutputSize = len(nn.TokenVocab) * 3
+		nn.HiddenSize = len(nn.TokenVocab) * 3
+		nn.Targets = make([]float64, nn.OutputSize)
+		nn.Inputs = make([]float64, nn.InputSize)
+		nn.Outputs = make([]float64, nn.OutputSize)
+
+		nn.HiddenBiases = make([]float64, nn.HiddenSize) // Initialize HiddenBiases
+		nn.OutputBiases = make([]float64, nn.OutputSize) // Initialize OutputBiases
+		for i := range nn.HiddenBiases {
+			nn.HiddenBiases[i] = rand.Float64()*0.02 - 0.01 // Initialize with random values
+		}
+	}
+
+	for epoch := 0; epoch < sw2v.Epochs; epoch++ {
+		fmt.Println(epoch)
 		for _, taggedSentence := range trainingData {
-			// Prepare inputs and targets
-			inputs, targets, maskedIndices := prepareMLMInput(nn.InputSize)
+			nn.Inputs = prepareInputData(taggedSentence, nn)
+			maskedIndices, err := prepareMLMInput(nn, taggedSentence.Tokens, nn.TokenVocab)
+			if err != nil {
+				fmt.Printf("TrainAccuracy - Error: prepareMLMInput failed: %v", err)
+				continue
+			}
 
-			// Augment the input data
-			augmentedInputs := predict.AugmentData(inputs)
+			predictions, err := predict.PredictMaskedWords(nn)
+			if err != nil {
+				fmt.Printf("TrainAccuracy - Error: PredictMaskedWords failed: %v", err)
+				continue
+			}
+			mlmLoss := predict.CalculateMLMLoss(nn, predictions, nn.Targets, maskedIndices)
+			originalOutputs := pos.ForwardPassPos(nn, nn.Inputs)
+			originalLoss := predict.CalculateOriginalLoss(nn, originalOutputs, nn.Targets)
+			totalLoss := originalLoss + mlmLoss
 
-			// MLM Forward pass and loss calculation using augmented input
-			predictions := predict.PredictMaskedWords(nn, augmentedInputs)
-			mlmLoss := predict.CalculateMLMLoss(nn, predictions, targets, maskedIndices)
+			nn.Backpropagate(totalLoss, sw2v.LearningRate)
+			// Calculate accuracy for the current sentence
+			posAcc, nerAcc, phraseAcc, drAcc := calc.CalculateAccuracy(nn, trainingData, nn.TokenVocab, pos.CreatePosTagVocab(trainingData), ner.CreateTagVocabNer(trainingData), phrase.CreatePhraseTagVocab(trainingData), dr.CreateDRTagVocab(trainingData))
+			posAccuracy += posAcc
+			nerAccuracy += nerAcc
+			phraseAccuracy += phraseAcc
+			drAccuracy += drAcc
+
+			posTotal++
+			nerTotal++
+			phraseTotal++
+			drTotal++
+			if posAcc > 0 {
+				posCorrect++
+			}
+			if nerAcc > 0 {
+				nerCorrect++
+			}
+			if phraseAcc > 0 {
+				phraseCorrect++
+			}
+			if drAcc > 0 {
+				drCorrect++
+			}
+		}
+	}
+
+	if posTotal > 0 {
+		posAccuracy = posCorrect / posTotal
+	} else {
+		posAccuracy = 0.0
+	}
+	if nerTotal > 0 {
+		nerAccuracy = nerCorrect / nerTotal
+	} else {
+		nerAccuracy = 0.0
+	}
+	if phraseTotal > 0 {
+		phraseAccuracy = phraseCorrect / phraseTotal
+	} else {
+		phraseAccuracy = 0.0
+	}
+	if drTotal > 0 {
+		drAccuracy = drCorrect / drTotal
+	} else {
+		drAccuracy = 0.0
+	}
+
+	fmt.Printf("TrainAccuracy - Final POS Accuracy: %.2f%%", posAccuracy*100)
+	fmt.Printf("TrainAccuracy - Final NER Accuracy: %.2f%%\n", nerAccuracy*100)
+	fmt.Printf("TrainAccuracy - Final Phrase Accuracy: %.2f%%", phraseAccuracy*100)
+	fmt.Printf("TrainAccuracy - Final DR Accuracy: %.2f%%", drAccuracy*100)
+
+	return posAccuracy, nerAccuracy, phraseAccuracy, drAccuracy
+}
+
+func TrainModel(trainingData []tag.Tag, nn *nnu.SimpleNN, sw2v *word2vec.SimpleWord2Vec) (*nnu.SimpleNN, error) {
+
+	if nn.WeightsIH == nil || len(nn.WeightsIH) == 0 {
+		log.Println("TrainModel - WeightsIH is nil or empty")
+	}
+	//Ensure vocabulary is created
+	tokenVocab, _, _, _, _, _ := CreateVocab()
+	nn.TokenVocab = tokenVocab
+
+	nn.MaskedInputs = []float64{}
+	nn.Inputs = []float64{}
+	nn.Targets = []float64{}
+
+	if nn.WeightsIH == nil || len(nn.WeightsIH) == 0 {
+		nn.HiddenBiases = make([]float64, nn.HiddenSize)
+		nn.OutputBiases = make([]float64, nn.OutputSize)
+	}
+
+	for epoch := 0; epoch < sw2v.Epochs; epoch++ {
+		log.Printf("TrainModel - Epoch: %d", epoch)
+
+		for _, taggedSentence := range trainingData {
+
+			// Prepare inputs, targets and maskedindices
+			maskedIndices, err := prepareMLMInput(nn, taggedSentence.Tokens, nn.TokenVocab)
+			if err != nil {
+				fmt.Printf("TrainModel - len(nn.Inputs): %d, len(nn.Targets): %d, len(nn.MaskedIndices): %v", len(nn.Inputs), len(nn.Targets), len(nn.MaskedIndices))
+				fmt.Printf("TrainModel - nn.Inputs: %v", nn.Inputs)
+				fmt.Printf("TrainModel - nn.Targets: %v", nn.Targets)
+				fmt.Printf("TrainModel - nn.MaskedIndices: %v", nn.MaskedIndices)
+				fmt.Printf("TrainModel - Error in prepareMLMInput: %v", err)
+				fmt.Printf("TrainModel - Error in prepareMLMInput: %v", err)
+				continue
+			}
+
+			if len(nn.Inputs) == 0 {
+				prepareInputData(taggedSentence, nn)
+			}
+
+			nn.MaskedInputs = make([]float64, len(nn.Inputs)) // Allocate based on nn.Inputs length
+			copy(nn.MaskedInputs, nn.Inputs)
+			augmentedInputs := predict.AugmentData(nn.MaskedInputs)
 
 			// Original task loss calculation using augmented input
+			if len(nn.Inputs) != nn.InputSize {
+				log.Println("TrainModel - Error: len(nn.Inputs) != nn.InputSize")
+			}
 			originalOutputs := pos.ForwardPassPos(nn, augmentedInputs)
-			originalLoss := predict.CalculateOriginalLoss(originalOutputs, targets)
+			originalLoss := predict.CalculateOriginalLoss(nn, originalOutputs, nn.Targets) //Use augmentedInputs instead of nn.Inputs
+
+			// MLM Forward pass and loss calculation using augmented input
+			predictions, err := predict.PredictMaskedWords(nn)
+			if err != nil {
+				log.Printf("TrainModel - Error in PredictMaskedWords: %v", err)
+				continue
+			}
+			mlmLoss := predict.CalculateMLMLoss(nn, predictions, nn.Targets, maskedIndices)
 
 			// Combine losses
 			totalLoss := originalLoss + mlmLoss
 
-			// Backpropagation and weight update using augmented input
-			predict.Backpropagate(nn, totalLoss, originalOutputs, learningRate, augmentedInputs, targets)
-			predict.UpdateWeights(nn, learningRate)
-
-			// Calculate accuracy (using original inputs for accuracy evaluation)
-			posaccuracy, neraccuracy, phraseaccuracy, draccuracy = calc.CalculateAccuracy(nn, []tag.Tag{taggedSentence}, CreateTokenVocab([]tag.Tag{taggedSentence}), pos.CreatePosTagVocab([]tag.Tag{taggedSentence}), ner.CreateTagVocabNer([]tag.Tag{taggedSentence}), phrase.CreatePhraseTagVocab([]tag.Tag{taggedSentence}), dr.CreateDRTagVocab([]tag.Tag{taggedSentence}))
+			nn.Backpropagate(totalLoss, sw2v.LearningRate)
 		}
 	}
 
-	return posaccuracy, neraccuracy, phraseaccuracy, draccuracy
+	if nn.WeightsHO == nil || len(nn.WeightsHO) == 0 {
+		fmt.Println("TrainModel - WeightsHO is nil or empty")
+	}
+
+	return nn, nil
 }
 
-// trainAndSaveModel trains a new neural network model, or loads an existing one if available.
-// It then saves the trained model to a file.
-func TrainAndSaveModel(trainingData *TrainingDataJSON, modeldirectory string) (*nnu.SimpleNN, error) {
-	// Delete existing model file if it exists.
-	if _, err := os.Stat("trained_model.gob"); err == nil {
-		// If the file exists, remove it.
-		if err := os.Remove("trained_model.gob"); err != nil {
-			// If there's an error during removal, return an error.
-			return nil, fmt.Errorf("error deleting model file: %w", err)
+// Train function to train the model using the provided JSON data
+func JsonModelTrain(sw2v *word2vec.SimpleWord2Vec, md *nnu.SimpleNN) (ContextRelevance, error) {
+	// make the model
+	var c ContextRelevance
+	sw2v.Ann.AddWordVectors(word2vec.ConvertToMap(sw2v.WordVectors, md.TokenVocab)) // Populate the index BEFORE the loop
+	// 1. Build Vocabulary
+	for _, sentence := range md.PSentences {
+		for _, word := range strings.Fields(sentence) {
+			if _, ok := sw2v.Vocabulary[word]; !ok {
+				sw2v.Vocabulary[word] = len(sw2v.Vocabulary)
+				sw2v.WordVectors[len(sw2v.Vocabulary)-1] = make([]float64, sw2v.VectorSize)
+				// Initialize the word vector (e.g., with random values)
+				for i := 0; i < sw2v.VectorSize; i++ {
+					sw2v.WordVectors[len(sw2v.Vocabulary)-1][i] = (rand.Float64() - 0.5) / float64(sw2v.VectorSize)
+				}
+
+			}
+		}
+		initialConvertedMap := word2vec.ConvertToMap(sw2v.WordVectors, sw2v.Vocabulary)
+		sw2v.Ann.AddWordVectors(initialConvertedMap)
+
+		context := contextvector.GetContextVector(sentence, md, sw2v) // Check usage in updated context
+		md.Outputs = sw2v.ForwardPass(strings.Fields(sentence))
+		loss := sw2v.CalculateLoss(md.Outputs, context)
+		sw2v.Backpropagate(md.Outputs, context)
+		// Print sentence and its corresponding generated context embedding
+		fmt.Printf("Iteration %d: Sentence: %s: Loss: %f\n", sw2v.Epochs, sentence, loss)
+
+		// Find the nearest context word, excluding words from the input sentence
+
+		neighbors, err := sw2v.Ann.NearestNeighbors(sentence, md.Outputs, 10)
+		if err != nil {
+			fmt.Printf("Error getting nearest neighbors: %v\n", err)
+		} else if len(neighbors) > 0 {
+			nearestWord := neighbors[0].Word
+			maxSimilarity := neighbors[0].Similarity
+			ContextualRelevance := neighbors[0].ContextualRelevance
+			fmt.Printf("Iteration %d: Nearest Context Word: %s (Similarity: %.4f ContextualRelevance: %.4f)\n", sw2v.Epochs, nearestWord, maxSimilarity, ContextualRelevance)
+
+			c = ContextRelevance{
+				Iteration:           fmt.Sprintf("Iteration %d", sw2v.Epochs),
+				NearestContextWord:  nearestWord,
+				Similarity:          maxSimilarity,
+				ContextualRelevance: ContextualRelevance,
+			}
+
+		}
+
+		// Learning rate schedule
+		if sw2v.Epochs%100 == 0 && sw2v.LearningRate > 0.001 {
+			sw2v.LearningRate *= 0.95 // Reduce learning rate gradually
+		}
+		sw2v.Epochs++
+	}
+
+	// Add the UNK token to the vocabulary if it doesn't exist
+	if _, ok := sw2v.Vocabulary[sw2v.UNKToken]; !ok {
+		sw2v.Vocabulary[sw2v.UNKToken] = len(sw2v.Vocabulary)
+		sw2v.WordVectors[len(sw2v.Vocabulary)-1] = make([]float64, sw2v.VectorSize)
+		// Initialize the UNK token vector (e.g., with random values)
+		for i := 0; i < sw2v.VectorSize; i++ {
+			sw2v.WordVectors[len(sw2v.Vocabulary)-1][i] = (rand.Float64() - 0.5) / float64(sw2v.VectorSize)
 		}
 	}
 
+	sw2v.Ann.AddWordVectors(word2vec.ConvertToMap(sw2v.WordVectors, sw2v.Vocabulary)) // Populate the index
+	sw2v.SimilarityThreshold = 0.6
+
+	// Initialize weights and biases if not already initialized
+	if sw2v.Weights == nil {
+		sw2v.Weights = make([][]float64, sw2v.HiddenSize)
+		for i := 0; i < sw2v.HiddenSize; i++ {
+			sw2v.Weights[i] = make([]float64, sw2v.VectorSize)
+			for j := 0; j < sw2v.VectorSize; j++ {
+				sw2v.Weights[i][j] = rand.NormFloat64() * math.Sqrt(2.0/float64(sw2v.VectorSize+sw2v.HiddenSize)) // Xavier/Glorot initialization
+			}
+		}
+	}
+	if sw2v.Biases == nil {
+		sw2v.Biases = make([][]float64, sw2v.HiddenSize)
+		for i := 0; i < sw2v.HiddenSize; i++ {
+			sw2v.Biases[i] = make([]float64, 1)
+			sw2v.Biases[i][0] = rand.NormFloat64() * math.Sqrt(2.0/float64(sw2v.HiddenSize)) // Xavier/Glorot initialization
+		}
+	}
+
+	return c, nil
+}
+
+// TrainAndSaveModel trains a new neural network model, or loads an existing one if available.
+// It then saves the trained model to a file.
+func TrainAndSaveModel(modeldirectory string, sw2v *word2vec.SimpleWord2Vec) (*nnu.SimpleNN, error) {
+	_, _, _, _, _, trainingData := vocab.CreateVocab(modeldirectory)
+
+	// Delete existing model file if it exists.
+	// if _, err := os.Stat("trained_model.gob"); err == nil {
+	// 	// If the file exists, remove it.
+	// 	if err := os.Remove("trained_model.gob"); err != nil {
+	// 		// If there's an error during removal, return an error.
+	// 		return nil, fmt.Errorf("error deleting model file: %w", err)
+	// 	}
+	// }
+
 	// Load or train the neural network model.
-	nn, err := LoadModelOrTrainNew(trainingData, modeldirectory)
+	nn, err := LoadModelOrTrainNew(trainingData, modeldirectory, sw2v)
 	if err != nil {
-		// If there's an error during loading or training, return an error.
 		return nil, fmt.Errorf("error loading or training model: %w", err)
 	}
 
-	// Further training (if needed).
-	epochs := 1000       // Adjust the number of epochs as needed.
-	learningRate := 0.01 // Adjust the learning rate as needed.
-	// Train the model using the training data.
-	Train(trainingData.Sentences, epochs, learningRate, nn)
-
+	nnn, err := TrainModel(trainingData.Sentences, nn, sw2v)
 	// Save the trained model to a file.
-	if err := gobs.SaveModelToGOB(nn, "trained_model.gob"); err != nil {
-		// If there's an error during saving, return an error.
+	if err := gobs.SaveModelToGOB(nnn, "trained_model.gob"); err != nil {
 		return nil, fmt.Errorf("error saving model: %w", err)
 	}
-	// Print a message indicating that the model has been saved.
-	fmt.Println("Model saved to trained_model.gob")
+
 	// Return the trained neural network model and nil error.
 	return nn, nil
 }
 
-func LoadModelOrTrainNew(trainingData *TrainingDataJSON, modeldirectory string) (*nnu.SimpleNN, error) {
+func LoadModelOrTrainNew(trainingData *vocab.TrainingDataJSON, modeldirectory string, sw2v *word2vec.SimpleWord2Vec) (*nnu.SimpleNN, error) {
 	tokenVocab, _, _, _, _, _ := CreateVocab()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("LoadModelOrTrainNew - Recovered from panic:", r)
+			// You might want to log more details about the panic here
+		}
+	}()
+
 	nn, err := gobs.LoadModelFromGOB("trained_model.gob")
 	if err != nil {
-		fmt.Println("Error loading model, creating a new one:", err)
-		inputSize := len(tokenVocab)
-		hiddenSize := 5 // Adjust as needed
-		outputSize := len(tokenVocab)
-		outputWeights := make([][]float64, outputSize)
-		for i := range outputWeights {
-			outputWeights[i] = make([]float64, hiddenSize)
+		return nn, err
+	}
+
+	nn.TokenVocab = tokenVocab
+	nn.InputSize = len(tokenVocab) * 3
+	nn.OutputSize = len(tokenVocab) * 3
+	nn.HiddenSize = len(tokenVocab) * 3
+	nn.HiddenWeights = make([][]float64, nn.HiddenSize)
+	for i := range nn.HiddenWeights {
+		nn.HiddenWeights[i] = make([]float64, nn.InputSize)
+		for j := range nn.HiddenWeights[i] {
+			nn.HiddenWeights[i][j] = rand.NormFloat64() * math.Sqrt(2.0/float64(nn.InputSize+nn.HiddenSize))
 		}
-		// Create a new neural network model
-		nn = nn.NewSimpleNN(inputSize, hiddenSize, outputSize, outputWeights)
-		// Load training data
-		trainingData, err := LoadTrainingDataFromJSON(modeldirectory)
-		if err != nil {
-			fmt.Println("Error loading training data:", err)
+	}
+	nn.WeightsHO = make([][]float64, nn.OutputSize)
+	for i := range nn.WeightsHO {
+		nn.WeightsHO[i] = make([]float64, nn.HiddenSize)
+		for j := range nn.WeightsHO[i] {
+			nn.WeightsHO[i][j] = rand.NormFloat64() * math.Sqrt(2.0/float64(nn.HiddenSize+nn.OutputSize))
 		}
-		// Train the network
-		epochs := 1000       // Adjust as needed
-		learningRate := 0.01 // Adjust as needed
-		posaccuracy, neraccuracy, phraseaccuracy, draccuracy := Train(trainingData.Sentences, epochs, learningRate, nn)
-		fmt.Printf("Final POS Accuracy: %.2f%%\n", posaccuracy*100)
-		fmt.Printf("Final NER Accuracy: %.2f%%\n", neraccuracy*100)
-		fmt.Printf("Final Phrase Accuracy: %.2f%%\n", phraseaccuracy*100)
-		fmt.Printf("Final Dependency relation Accuracy: %.2f%%\n", draccuracy*100)
-		// Save the newly trained model
-		err = gobs.SaveModelToGOB(nn, "trained_model.gob")
-		if err != nil {
-			return nil, fmt.Errorf("error saving model: %w", err)
-		}
-		fmt.Println("New model saved to trained_model.gob")
-	} else {
-		fmt.Println("Loaded model from trained_model.gob")
+		nn.HiddenBiases = make([]float64, nn.HiddenSize)
+		nn.OutputBiases = make([]float64, nn.OutputSize)
+	}
+
+	// Load training data
+	posaccuracy, neraccuracy, phraseaccuracy, draccuracy := TrainAccuracy(trainingData.Sentences, nn, sw2v)
+	fmt.Printf("Final POS Accuracy: %.2f%%\n", posaccuracy*100)
+	fmt.Printf("Final NER Accuracy: %.2f%%\n", neraccuracy*100)
+	fmt.Printf("Final Phrase Accuracy: %.2f%%\n", phraseaccuracy*100)
+	fmt.Printf("Final Dependency relation Accuracy: %.2f%%\n", draccuracy*100)
+	// Save the newly trained model
+	err = gobs.SaveModelToGOB(nn, "trained_model.gob")
+	if err != nil {
+		return nil, fmt.Errorf("error saving model: %w", err)
 	}
 	return nn, nil
 }
@@ -195,8 +465,32 @@ func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]i
 
 func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	tokenVocab := make(map[string]int)
-	tokenVocab["UNK"] = 0 // Add "UNK" token initially
+	wordFrequencies := make(map[string]int)
+	for _, sentence := range trainingData {
+		for _, token := range sentence.Tokens {
+			wordFrequencies[token]++ // Increment the frequency count for each token
+		}
+	}
+	minFreq := 5       // Example: Exclude words occurring fewer than 5 times
+	vocabSize := 50000 // Example: Limit vocab to 50,000 words
+	// Sort words by frequency
+	sortedWords := make([]string, 0, len(wordFrequencies))
+	for word := range wordFrequencies {
+		sortedWords = append(sortedWords, word)
+	}
+	sort.Slice(sortedWords, func(i, j int) bool {
+		return wordFrequencies[sortedWords[i]] > wordFrequencies[sortedWords[j]]
+	})
+
+	// Add words to vocabulary up to vocabSize limit
+	tokenVocab["UNK"] = 0
 	index := 1
+	for _, word := range sortedWords {
+		if wordFrequencies[word] >= minFreq && index <= vocabSize {
+			tokenVocab[word] = index
+			index++
+		}
+	}
 	for _, sentence := range trainingData { // Iterate through tag.Tag slice
 		for _, token := range sentence.Tokens {
 			if _, ok := tokenVocab[token]; !ok {
@@ -217,26 +511,54 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	return tokenVocab
 }
 
-// prepareMLMInput prepares the input for Masked Language Modeling.
-// It masks a percentage of the input tokens and creates the corresponding targets.
-func prepareMLMInput(inputSize int) ([]float64, []float64, map[int]bool) {
-	inputs := make([]float64, inputSize)
-	targets := make([]float64, inputSize)
+func prepareMLMInput(nn *nnu.SimpleNN, sentence []string, tokenVocab map[string]int) (map[int]bool, error) {
+
+	nn.Inputs = make([]float64, nn.OutputSize)
+	nn.Targets = make([]float64, nn.OutputSize)
+	nn.MaskedInputs = make([]float64, nn.OutputSize)
+	sentenceIndices := make([]float64, nn.OutputSize)
+	// Pre-calculate the number of tokens to mask once.
+	numTokensToMask := int(0.15 * float64(len(sentence)))
+
+	// fmt.Printf("prepareMLMInput - Size of sentence: %d", len(sentence))
+	// fmt.Printf("prepareMLMInput - nn.OutputSize: %d", nn.OutputSize)
+	// fmt.Printf("prepareMLMInput - len(nn.Targets): %d", len(nn.Targets))
+
 	maskedIndices := make(map[int]bool)
+	maskedIndicesSentence := make(map[int]bool)
 
-	// Initialize inputs with some sample values (replace with your actual data)
-	for i := 0; i < inputSize; i++ {
-		inputs[i] = float64(i + 1)
+	// Populate sentenceIndices
+	for i := 0; i < len(sentence); i++ {
+		word := sentence[i]
+		if index, ok := tokenVocab[word]; ok && index != 0 {
+			sentenceIndices[i] = float64(index)
+		} else {
+			sentenceIndices[i] = float64(tokenVocab["UNK"])
+		}
+		//fmt.Printf("prepareMLMInput - sentenceIndices[%d]: %f", i, sentenceIndices[i])
 	}
 
-	numTokensToMask := int(0.15 * float64(inputSize)) // Mask 15% of the tokens
-
-	// Generate random indices to mask and store them in maskedIndices map
-	for i := 0; i < numTokensToMask; i++ {
-		randomIndex := rand.Intn(inputSize)
-		maskedIndices[randomIndex] = true
-		targets[randomIndex] = inputs[randomIndex] // Target is the original value
-		inputs[randomIndex] = 0                    // Mask the input with 0
+	for i := 0; i < nn.OutputSize; i++ {
+		if i < len(sentence) {
+			nn.MaskedInputs[i] = sentenceIndices[i] // Copy to MaskedInputs
+		} else {
+			nn.MaskedInputs[i] = 0 // Fill with 0s beyond sentence length
+		}
 	}
-	return inputs, targets, maskedIndices
+	// More efficient masking using a loop outside the word loop
+	for j := 0; j < numTokensToMask; j++ {
+		randomIndex := rand.IntN(len(sentence)) //Use rand.Intn()
+		if !maskedIndicesSentence[randomIndex] {
+			maskedIndicesSentence[randomIndex] = true
+			maskedIndices[randomIndex] = true
+			nn.Inputs[randomIndex] = 0                             // Mask input
+			nn.Targets[randomIndex] = sentenceIndices[randomIndex] // Set target
+			// fmt.Printf("prepareMLMInput - nn.Inputs[%d]: %f", randomIndex, nn.Inputs[randomIndex])
+			// fmt.Printf("prepareMLMInput - nn.Targets[%d]: %f", randomIndex, nn.Targets[randomIndex])
+		} else {
+			j-- // retry
+		}
+	}
+
+	return maskedIndices, nil
 }

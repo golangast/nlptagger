@@ -9,7 +9,8 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}"
+            "program": "${workspaceFolder}",
+             "console": "integratedTerminal",
         },
         {
             "name": "Attach to Process",
@@ -27,7 +28,7 @@
             "program": "${workspaceFolder}/tester",
             "env": {},
              "args": [
-                 "go run main.go"
+                 "go run main.go -epochs 100 -learningrate 0.1 -hiddensize 100 -vectorsize 100 -window 10 -maxgrad 20 -similaritythreshold .6"
              ],
             //"console": "integratedTerminal",
             "dlvLoadConfig": {

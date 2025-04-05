@@ -2,19 +2,24 @@ package vocab
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
 	"github.com/golangast/nlptagger/neural/nn/phrase"
 	"github.com/golangast/nlptagger/neural/nn/pos"
-	"github.com/golangast/nlptagger/neural/nnu/train"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
-func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *train.TrainingDataJSON) {
-	trainingData, err := train.LoadTrainingDataFromJSON("datas/tagdata/training_data.json")
+type TrainingDataJSON struct {
+	Sentences []tag.Tag `json:"sentences"`
+}
+
+func CreateVocab(modeldirectory string) (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
+	trainingData, err := LoadTrainingDataJSON(modeldirectory)
 	if err != nil {
 		fmt.Println("error loading training data: %w", err)
 	}
@@ -75,4 +80,26 @@ func CreateAndSaveVocab(trainingData []tag.Tag, filePath string) (map[string]int
 
 	encoder := gob.NewEncoder(file)
 	return vocabulary, encoder.Encode(vocabulary)
+}
+
+// Function to load training data from a JSON file
+func LoadTrainingDataJSON(filePath string) (*TrainingDataJSON, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var trainingData TrainingDataJSON
+	err = json.Unmarshal(data, &trainingData)
+	if err != nil {
+		return nil, err
+	}
+	file.Close()
+
+	return &trainingData, nil
 }

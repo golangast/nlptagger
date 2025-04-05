@@ -2,6 +2,7 @@ package tagger
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/golangast/nlptagger/tagger/dependencyrelation"
 	"github.com/golangast/nlptagger/tagger/nertagger"
@@ -33,4 +34,34 @@ func Tagging(text string) tag.Tag {
 	}
 
 	return tag // Return the slice of Tag structs
+}
+
+func Filtertags(text string) string {
+	tag := postagger.Postagger(text)
+	filtertags := []string{"DT", "PRP", "IN", "CC", "RP", "ADP", "WDT", "DET", "WP"}
+	newsentence := filterString(tag, filtertags)
+	//fmt.Println(newsentence)
+	return newsentence
+}
+func filterString(tag tag.Tag, filters []string) string {
+	//	fmt.Println("begin with ", tag.Sentence)
+	if len(tag.Tokens) == 0 {
+		return ""
+	}
+	str := ""
+	for i, token := range tag.Tokens {
+		filtered := false
+		for _, filter := range filters {
+			if tag.PosTag[i] == filter {
+				//fmt.Println("words that filtered", token, "tag: ", tag.PosTag[i])
+				filtered = true
+			}
+		}
+		if !filtered {
+			str += token + " "
+		}
+	}
+	//fmt.Println("end sentence ", str)
+	return strings.TrimSpace(str)
+
 }

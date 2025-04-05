@@ -31,11 +31,12 @@ func LoadModelFromGOB(filePath string) (*nnu.SimpleNN, error) {
 	}
 
 	decoder := gob.NewDecoder(file)
-	var model nnu.SimpleNN
-	err = decoder.Decode(&model)
+	nn := new(nnu.SimpleNN)
+
+	err = decoder.Decode(&nn)
 	if err != nil {
 		return nil, err
 	}
 	file.Close()
-	return &model, nil
+	return nn, nil
 }

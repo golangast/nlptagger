@@ -9,6 +9,9 @@
     pkgs.nodejs_20
     pkgs.nodePackages.nodemon
     pkgs.delve
+    pkgs.zsh
+    pkgs.nano
+    pkgs.sudo
     
   ];
   # Sets environment variables in the workspace
@@ -21,7 +24,7 @@
     workspace = {
       onCreate = {
         # Open editors for the following files by default, if they exist:
-        default.openFiles = ["server.go"];
+        default.openFiles = ["main.go"];
       };
     };
     # Enable previews and customize configuration
@@ -34,7 +37,7 @@
             "--signal" "SIGHUP"
             "-w" "."
             "-e" "go,html"
-            "-x" "go run server.go -addr localhost:$PORT"
+            "-x" "go run main.go -addr localhost:$PORT"
           ];
           manager = "web";
         };

@@ -1,6 +1,8 @@
 package calc
 
 import (
+	"log"
+
 	"github.com/golangast/nlptagger/neural/nn/dr"
 	"github.com/golangast/nlptagger/neural/nn/ner"
 	"github.com/golangast/nlptagger/neural/nn/phrase"
@@ -51,14 +53,24 @@ func CalculateAccuracy(nn *nnu.SimpleNN, trainingData []tag.Tag, tokenVocab map[
 	for _, taggedSentence := range trainingData {
 		for i := range taggedSentence.Tokens {
 			inputs := make([]float64, nn.InputSize)
+			// Initialize all inputs to 0
+			for j := 0; j < nn.InputSize; j++ {
+				inputs[j] = 0
+			}
 			tokenIndex, ok := tokenVocab[taggedSentence.Tokens[i]]
 			if ok {
 				inputs[tokenIndex] = 1
 			} else {
-				inputs[tokenVocab["UNK"]] = 1
+				if _, ok := tokenVocab["UNK"]; ok {
+					inputs[tokenVocab["UNK"]] = 1
+				} else {
+					// Handle case where UNK token is not in the vocab
+					log.Printf("CalculateAccuracy: Error: UNK token is not in the vocabulary: %s", taggedSentence.Tokens[i])
+					continue
+				}
 			}
 
-			predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := predict.Predict(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
+			predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := predict.PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
 
 			if predictedPosTag == taggedSentence.PosTag[i] {
 				poscorrectPredictions++
@@ -70,12 +82,15 @@ func CalculateAccuracy(nn *nnu.SimpleNN, trainingData []tag.Tag, tokenVocab map[
 				phrasecorrectPredictions++
 			}
 			if i < len(taggedSentence.Dependencies) {
-				if predictedDRTag == taggedSentence.Dependencies[i].Dep {
-					drcorrectPredictions++
-				} else {
-					// Explicitly handle the case where dependency tag is missing
+				if len(taggedSentence.Dependencies) >= len(taggedSentence.Tokens) {
+					if predictedDRTag == taggedSentence.Dependencies[i].Dep {
+						drcorrectPredictions++
+					} else {
+						// Explicitly handle the case where dependency tag is missing
+					}
 				}
 			}
+
 			postotalPredictions++
 			nertotalPredictions++
 			phrasetotalPredictions++

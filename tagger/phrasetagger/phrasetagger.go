@@ -79,6 +79,11 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 				t.NerTag[i+2] == "ACTION" && t.PosTag[i+2] == "NN" {
 				t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
 			}
+		case t.Tokens[i] == "generate" && t.Tokens[i+1] == "a" && t.Tokens[i+2] == "handler" && t.Tokens[i+3] == "named" && t.NerTag[i+4] == "OBJECT_NAME":
+			// Check for "generate a handler named <object_name>"
+			t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
+		case t.PosTag[i] == "COMMAND_VERB" && i < len(tokens)-5 && t.PosTag[i+1] == "DET" && t.PosTag[i+2] == "NN" && tokens[i+3] == "named" && t.PosTag[i+4] == "NN":
+			t.PhraseTag[i] = "command:" + tokens[i] + "_" + tokens[i+1] + "_" + tokens[i+2] + "_named_" + tokens[i+4]
 
 		case token == "named" && i > 0 && t.NerTag[i] == "ACTION":
 			t = handleNamedAction(tokens, i, t)
@@ -116,8 +121,10 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 			t.PhraseTag[i] = "fieldType:" + token
 		case token == "fields" && i > 0 && t.NerTag[i] == "NNS":
 			t = handleFields(tokens, i, t)
+		case t.Tokens[i] == "generate" && i < len(tokens)-2 && t.Tokens[i+1] == "a" && t.Tokens[i+2] == "webserver":
+			// Check for "generate a webserver"
+			t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
 		}
-		// }
 
 	}
 	return t
