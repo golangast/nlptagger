@@ -63,8 +63,8 @@ NER can be used to identify specific types of phrases (e.g., a phrase tagged as 
 
 ## What does it do?
 * It tags words for commands.
-*I made an overview video on this project.
-[video](https://www.youtube.com/watch?v=QuY5tZj0CXI)
+*I made an overview video on this project but there have been a lot of changes.
+[video](https://www.youtube.com/watch?v=KkcOn2rpD-c)
 
 
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"time"
 )
 
 type LSTMWeights struct {
@@ -317,7 +318,11 @@ func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, hi
 		backwardHiddenError := combinedHiddenStateError[m.HiddenSize:]
 
 		m.backpropagateBackwardLSTM(t, tokenIds, backwardHiddenError)
+		start := time.Now()
+
 		m.backpropagateForwardLSTM(t, tokenIds, forwardHiddenError)
+		duration := time.Since(start)
+		fmt.Printf("myFunc took %v to complete\n", duration)
 	}
 }
 
@@ -414,7 +419,7 @@ func (m *BiLSTMModel) backpropagateBackwardLSTM(t int, tokenIds []int, backwardH
 }
 
 func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHiddenError []float64) {
-	sequenceLength := len(tokenIds)
+	sequenceLength := len(tokenIds)	
 	forwardCellError := make([]float64, m.HiddenSize)
 	for i := range forwardHiddenError {
 		if t < sequenceLength-1 {
@@ -431,9 +436,12 @@ func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHid
 		forwardGateCandidateError := forwardCellError[i] * m.ForwardLSTMState.InputGates[t][i] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i], 2))
 		m.Gradients.ForwardBiasGradients[i] += forwardGateForget + forwardGateOutputError + forwardGateCandidateError
 	}
-	for i := range m.ForwardLSTMWeights.InputWeights {
-		for j := range m.ForwardLSTMWeights.InputWeights[i] {
-			inputEmbedding := embed(tokenIds[t], m.VocabSize)
+	// Precompute inputEmbedding
+	inputEmbedding := embed(tokenIds[t], m.VocabSize)
+
+	// Optimized update for ForwardInputWeightGradients
+	for j := range m.ForwardLSTMWeights.InputWeights[0] { // Assuming all rows have the same length
+		for i := range m.ForwardLSTMWeights.InputWeights {
 			var inputError float64
 			switch {
 			case i < m.HiddenSize:
@@ -442,7 +450,7 @@ func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHid
 				inputError = forwardCellError[i-m.HiddenSize] * m.ForwardLSTMState.CellStates[t-1][i-m.HiddenSize] * m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize] * (1 - m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize])
 			case i < 3*m.HiddenSize:
 				if i-2*m.HiddenSize >= 0 {
-					inputError = forwardCellError[i-2*m.HiddenSize] * m.ForwardLSTMState.InputGates[t][i-2*m.HiddenSize] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i-2*m.HiddenSize], 2)) // Corrected index here
+					inputError = forwardCellError[i-2*m.HiddenSize] * m.ForwardLSTMState.InputGates[t][i-2*m.HiddenSize] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i-2*m.HiddenSize], 2))
 				}
 			default:
 				inputError = forwardHiddenError[i-3*m.HiddenSize] * math.Tanh(m.ForwardLSTMState.CellStates[t][i-3*m.HiddenSize]) * m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize] * (1 - m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize])
@@ -450,8 +458,10 @@ func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHid
 			m.Gradients.ForwardInputWeightGradients[i][j] += inputError * inputEmbedding[j]
 		}
 	}
-	for i := range m.ForwardLSTMWeights.HiddenWeights {
-		for j := range m.ForwardLSTMWeights.HiddenWeights[i] {
+
+	// Optimized update for ForwardHiddenWeightGradients
+	for j := range m.ForwardLSTMWeights.HiddenWeights[0] { // Assuming all rows have the same length
+		for i := range m.ForwardLSTMWeights.HiddenWeights {
 			hiddenError := 0.0
 			if t > 0 {
 				switch {
@@ -471,41 +481,49 @@ func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHid
 		}
 	}
 }
-
 func (m *BiLSTMModel) UpdateWeights(learningRate float64) {
+
 	// Update output layer weights and biases
-	for i := range m.OutputWeights {
-		for j := range m.OutputWeights[i] {
+	for j := range m.OutputWeights[0] { // Assuming all rows have the same length
+		for i := range m.OutputWeights {
 			m.OutputWeights[i][j] -= learningRate * m.Gradients.OutputWeightGradients[i][j]
 		}
+	}
+	for i := range m.OutputBias {
 		m.OutputBias[i] -= learningRate * m.Gradients.OutputBiasGradients[i]
-
 	}
 
 	// Update forward LSTM weights and biases
-	for i := range m.ForwardLSTMWeights.InputWeights {
-		for j := range m.ForwardLSTMWeights.InputWeights[i] {
+	for j := range m.ForwardLSTMWeights.InputWeights[0] { // Assuming all rows have the same length
+		for i := range m.ForwardLSTMWeights.InputWeights {
 			m.ForwardLSTMWeights.InputWeights[i][j] -= learningRate * m.Gradients.ForwardInputWeightGradients[i][j]
 		}
+	}
+	for i := range m.ForwardLSTMWeights.Bias {
 		m.ForwardLSTMWeights.Bias[i] -= learningRate * m.Gradients.ForwardBiasGradients[i]
+	}
 
-		for j := range m.ForwardLSTMWeights.HiddenWeights[i] {
+	for j := range m.ForwardLSTMWeights.HiddenWeights[0] { // Assuming all rows have the same length
+		for i := range m.ForwardLSTMWeights.HiddenWeights {
 			m.ForwardLSTMWeights.HiddenWeights[i][j] -= learningRate * m.Gradients.ForwardHiddenWeightGradients[i][j]
 		}
 	}
 
-	for i := range m.BackwardLSTMWeights.InputWeights {
-		for j := range m.BackwardLSTMWeights.InputWeights[i] {
+	// Update backward LSTM weights and biases
+	for j := range m.BackwardLSTMWeights.InputWeights[0] { // Assuming all rows have the same length
+		for i := range m.BackwardLSTMWeights.InputWeights {
 			m.BackwardLSTMWeights.InputWeights[i][j] -= learningRate * m.Gradients.BackwardInputWeightGradients[i][j]
 		}
+	}
+	for i := range m.BackwardLSTMWeights.Bias {
 		m.BackwardLSTMWeights.Bias[i] -= learningRate * m.Gradients.BackwardBiasGradients[i]
 	}
-	for i := range m.BackwardLSTMWeights.HiddenWeights {
-		for j := range m.BackwardLSTMWeights.HiddenWeights[i] {
+
+	for j := range m.BackwardLSTMWeights.HiddenWeights[0] { // Assuming all rows have the same length
+		for i := range m.BackwardLSTMWeights.HiddenWeights {
 			m.BackwardLSTMWeights.HiddenWeights[i][j] -= learningRate * m.Gradients.BackwardHiddenWeightGradients[i][j]
 		}
 	}
-
 }
 
 func (m *BiLSTMModel) ClipGradients(maxGrad float64) {

@@ -116,7 +116,7 @@ func Train_bilstm() {
 			// Calculate gradients and update weights (placeholder)
 			if len(roleIDs) > 0 {
 				bilstm.Backpropagate(probabilities, roleIDs, hiddenStates, wordIDs)
-				bilstm.UpdateWeights(learningRate)
+				go bilstm.UpdateWeights(learningRate)
 			} else {
 				fmt.Println("Skipping backpropagation for sentence with no roles.")
 			}
