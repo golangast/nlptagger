@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -305,25 +306,44 @@ func argmax(x []float64) int {
 }
 
 func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, hiddenStates [][]float64, tokenIds []int) {
+
 	sequenceLength := len(probabilities)
+
 	m.resetGradients()
+
 	outputWeightsT := transpose(m.OutputWeights)
 
 	for t := sequenceLength - 1; t >= 0; t-- {
-		outputErrors := m.calculateOutputErrors(probabilities[t], roleIDs, t)
-		m.updateOutputLayerGradients(outputErrors, hiddenStates[t])
+		scalculateOutputErrors := time.Now()
 
+		outputErrors := m.calculateOutputErrors(probabilities[t], roleIDs, t)
+		dcalculateOutputErrors := time.Since(scalculateOutputErrors)
+		fmt.Printf("calculateOutputErrors took %v to complete\n", dcalculateOutputErrors)
+		supdateOutputLayerGradients := time.Now()
+		m.updateOutputLayerGradients(outputErrors, hiddenStates[t])
+		dupdateOutputLayerGradients := time.Since(supdateOutputLayerGradients)
+		fmt.Printf("updateOutputLayerGradients took %v to complete\n", dupdateOutputLayerGradients)
+		smatVecMul := time.Now()
 		combinedHiddenStateError := matVecMul(outputWeightsT, outputErrors)
+
 		forwardHiddenError := combinedHiddenStateError[:m.HiddenSize]
 		backwardHiddenError := combinedHiddenStateError[m.HiddenSize:]
+		dmatVecMul := time.Since(smatVecMul)
+		fmt.Printf("matVecMul took %v to complete\n", dmatVecMul)
+
+		startbackpropagateBackwardLSTM := time.Now()
 
 		m.backpropagateBackwardLSTM(t, tokenIds, backwardHiddenError)
-		start := time.Now()
+		durationbackpropagateBackwardLSTM := time.Since(startbackpropagateBackwardLSTM)
+		fmt.Printf("backpropagateBackwardLSTM took %v to complete\n", durationbackpropagateBackwardLSTM)
+		backpropagateForwardLSTMs := time.Now()
 
 		m.backpropagateForwardLSTM(t, tokenIds, forwardHiddenError)
-		duration := time.Since(start)
-		fmt.Printf("myFunc took %v to complete\n", duration)
+		dbackpropagateForwardLSTMs := time.Since(backpropagateForwardLSTMs)
+		fmt.Printf("backpropagateForwardLSTM took %v to complete\n", dbackpropagateForwardLSTMs)
+
 	}
+
 }
 
 func (m *BiLSTMModel) resetGradients() {
@@ -387,20 +407,58 @@ func (m *BiLSTMModel) backpropagateBackwardLSTM(t int, tokenIds []int, backwardH
 	sequenceLength := len(tokenIds)
 	backwardCellError := make([]float64, m.HiddenSize)
 
+	var nextCellState float64
+	var wg sync.WaitGroup
+	wg.Add(m.HiddenSize)
 	for i := range backwardHiddenError {
-		var nextCellState float64
-		if t < sequenceLength-1 {
-			nextCellState = m.BackwardLSTMState.CellStates[t+1][i]
-		}
-		backwardCellError[i] = backwardHiddenError[i] * m.BackwardLSTMState.OutputGates[t][i] * (1 - math.Pow(math.Tanh(nextCellState), 2))
+		go func(i int) {
+			defer wg.Done()
+			if t < sequenceLength-1 {
+				nextCellState = m.BackwardLSTMState.CellStates[t+1][i]
+			} else {
+				nextCellState = 0
+			}
+
+			backwardCellError[i] = backwardHiddenError[i] * m.BackwardLSTMState.OutputGates[t][i] * (1 - math.Pow(math.Tanh(nextCellState), 2))
+		}(i)
 	}
-	inputError, forgetError, outputError, candidateError := m.calculateGateErrors(t, backwardHiddenError, backwardCellError)
+	wg.Wait()
+
+	inputError := make([]float64, m.HiddenSize)
+	forgetError := make([]float64, m.HiddenSize)
+	outputError := make([]float64, m.HiddenSize)
+	candidateError := make([]float64, m.HiddenSize)
+
+	wg.Add(m.HiddenSize)
+	for i := range backwardHiddenError {
+		go func(i int) {
+			defer wg.Done()
+			inputError[i], forgetError[i], outputError[i], candidateError[i] = m.calculateBackwardGateErrors(t, backwardHiddenError[i], backwardCellError[i], i)
+		}(i)
+	}
+	wg.Wait()
+
+	wg.Add(m.HiddenSize)
+
+	for i := range backwardHiddenError {
+		go func(i int) {
+			defer wg.Done()
+			m.Gradients.BackwardBiasGradients[i] += inputError[i] + forgetError[i] + outputError[i] + candidateError[i]
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Precompute gate errors
+	weightErrors := []([]float64){inputError, forgetError, outputError, candidateError}
+
+	// Precompute inputEmbedding
 	inputEmbedding := embed(tokenIds[t], m.VocabSize)
+	// Precompute previous hidden state (if t > 0)
 	var prevHiddenState []float64
 	if t > 0 {
 		prevHiddenState = m.BackwardLSTMState.HiddenStates[t-1]
 	}
-	weightErrors := [][]float64{inputError, forgetError, outputError, candidateError}
 
 	for i := range m.BackwardLSTMWeights.InputWeights {
 		for j := range m.BackwardLSTMWeights.InputWeights[i] {
@@ -418,73 +476,87 @@ func (m *BiLSTMModel) backpropagateBackwardLSTM(t int, tokenIds []int, backwardH
 
 }
 
+func (m *BiLSTMModel) calculateBackwardGateErrors(t int, hiddenError, cellError float64, i int) (inputError, forgetError, outputError, candidateError float64) {
+	var prevCellState float64
+	if t > 0 {
+		prevCellState = m.BackwardLSTMState.CellStates[t-1][i]
+	}
+
+	outputError = hiddenError * math.Tanh(m.BackwardLSTMState.CellStates[t][i]) * m.BackwardLSTMState.OutputGates[t][i] * (1 - m.BackwardLSTMState.OutputGates[t][i])
+	candidateError = cellError * m.BackwardLSTMState.InputGates[t][i] * (1 - math.Pow(m.BackwardLSTMState.CandidateCells[t][i], 2))
+	if t > 0 {
+
+		forgetError = cellError * prevCellState * m.BackwardLSTMState.ForgetGates[t][i] * (1 - m.BackwardLSTMState.ForgetGates[t][i])
+	}
+	inputError = cellError * m.BackwardLSTMState.CandidateCells[t][i] * m.BackwardLSTMState.InputGates[t][i] * (1 - m.BackwardLSTMState.InputGates[t][i])
+	return
+}
+
 func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHiddenError []float64) {
-	sequenceLength := len(tokenIds)	
+	sequenceLength := len(tokenIds)
 	forwardCellError := make([]float64, m.HiddenSize)
+
+	// Calculate forwardCellError for each element
 	for i := range forwardHiddenError {
-		if t < sequenceLength-1 {
-			forwardCellError[i] = forwardHiddenError[i] * m.ForwardLSTMState.OutputGates[t+1][i] * (1 - math.Pow(math.Tanh(m.ForwardLSTMState.CellStates[t+1][i]), 2))
-		} else {
-			forwardCellError[i] = 0
-		}
-
-		var forwardGateForget float64 = 0.0
-		if t > 0 {
-			forwardGateForget = forwardCellError[i] * m.ForwardLSTMState.CellStates[t-1][i] * m.ForwardLSTMState.ForgetGates[t][i] * (1 - m.ForwardLSTMState.ForgetGates[t][i])
-		}
-		forwardGateOutputError := forwardHiddenError[i] * math.Tanh(m.ForwardLSTMState.CellStates[t][i]) * m.ForwardLSTMState.OutputGates[t][i] * (1 - m.ForwardLSTMState.OutputGates[t][i])
-		forwardGateCandidateError := forwardCellError[i] * m.ForwardLSTMState.InputGates[t][i] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i], 2))
-		m.Gradients.ForwardBiasGradients[i] += forwardGateForget + forwardGateOutputError + forwardGateCandidateError
+		forwardCellError[i] = m.calculateForwardCellError(t, forwardHiddenError[i], sequenceLength)
 	}
-	// Precompute inputEmbedding
+
+	// Calculate forwardGateForget, forwardGateOutputError, and forwardGateCandidateError for each element
+	forwardGateErrors := make([]float64, 4*m.HiddenSize)
+	for i := 0; i < m.HiddenSize; i++ {
+		forwardGateErrors[i] = m.calculateForwardGateInputError(t, forwardCellError[i], i)
+		forwardGateErrors[m.HiddenSize+i] = m.calculateForwardGateForgetError(t, forwardCellError[i], i)
+		forwardGateErrors[2*m.HiddenSize+i] = m.calculateForwardGateCandidateError(t, forwardCellError[i], i)
+		forwardGateErrors[3*m.HiddenSize+i] = m.calculateForwardGateOutputError(t, forwardHiddenError[i], i)
+		m.Gradients.ForwardBiasGradients[i] += forwardGateErrors[i] + forwardGateErrors[m.HiddenSize+i] + forwardGateErrors[2*m.HiddenSize+i] + forwardGateErrors[3*m.HiddenSize+i]
+	}
+
+	// Precompute inputEmbedding and prevHiddenState
 	inputEmbedding := embed(tokenIds[t], m.VocabSize)
-
-	// Optimized update for ForwardInputWeightGradients
-	for j := range m.ForwardLSTMWeights.InputWeights[0] { // Assuming all rows have the same length
-		for i := range m.ForwardLSTMWeights.InputWeights {
-			var inputError float64
-			switch {
-			case i < m.HiddenSize:
-				inputError = forwardCellError[i] * m.ForwardLSTMState.CandidateCells[t][i] * m.ForwardLSTMState.InputGates[t][i] * (1 - m.ForwardLSTMState.InputGates[t][i])
-			case i < 2*m.HiddenSize && t > 0:
-				inputError = forwardCellError[i-m.HiddenSize] * m.ForwardLSTMState.CellStates[t-1][i-m.HiddenSize] * m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize] * (1 - m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize])
-			case i < 3*m.HiddenSize:
-				if i-2*m.HiddenSize >= 0 {
-					inputError = forwardCellError[i-2*m.HiddenSize] * m.ForwardLSTMState.InputGates[t][i-2*m.HiddenSize] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i-2*m.HiddenSize], 2))
-				}
-			default:
-				inputError = forwardHiddenError[i-3*m.HiddenSize] * math.Tanh(m.ForwardLSTMState.CellStates[t][i-3*m.HiddenSize]) * m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize] * (1 - m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize])
-			}
-			m.Gradients.ForwardInputWeightGradients[i][j] += inputError * inputEmbedding[j]
-		}
+	var prevHiddenState []float64
+	if t > 0 {
+		prevHiddenState = m.ForwardLSTMState.HiddenStates[t-1]
 	}
 
-	// Optimized update for ForwardHiddenWeightGradients
-	for j := range m.ForwardLSTMWeights.HiddenWeights[0] { // Assuming all rows have the same length
+	// Update ForwardInputWeightGradients and ForwardHiddenWeightGradients
+	for j := range m.ForwardLSTMWeights.InputWeights[0] {
+		for i := range m.ForwardLSTMWeights.InputWeights {
+			m.Gradients.ForwardInputWeightGradients[i][j] += forwardGateErrors[i] * inputEmbedding[j]
+		}
+	}
+	for j := range m.ForwardLSTMWeights.HiddenWeights[0] {
 		for i := range m.ForwardLSTMWeights.HiddenWeights {
-			hiddenError := 0.0
 			if t > 0 {
-				switch {
-				case i < m.HiddenSize:
-					hiddenError = forwardCellError[i] * m.ForwardLSTMState.CandidateCells[t][i] * m.ForwardLSTMState.InputGates[t][i] * (1 - m.ForwardLSTMState.InputGates[t][i])
-				case i < 2*m.HiddenSize:
-					hiddenError = forwardCellError[i-m.HiddenSize] * m.ForwardLSTMState.CellStates[t-1][i-m.HiddenSize] * m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize] * (1 - m.ForwardLSTMState.ForgetGates[t][i-m.HiddenSize])
-				case i < 3*m.HiddenSize:
-					if i-2*m.HiddenSize >= 0 {
-						hiddenError = forwardCellError[i-2*m.HiddenSize] * m.ForwardLSTMState.InputGates[t][i-2*m.HiddenSize] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i-2*m.HiddenSize], 2))
-					}
-				default:
-					hiddenError = forwardHiddenError[i-3*m.HiddenSize] * math.Tanh(m.ForwardLSTMState.CellStates[t][i-3*m.HiddenSize]) * m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize] * (1 - m.ForwardLSTMState.OutputGates[t][i-3*m.HiddenSize])
-				}
-				m.Gradients.ForwardHiddenWeightGradients[i][j] += hiddenError * m.ForwardLSTMState.HiddenStates[t-1][j]
+				m.Gradients.ForwardHiddenWeightGradients[i][j] += forwardGateErrors[i] * prevHiddenState[j]
 			}
 		}
 	}
 }
+func (m *BiLSTMModel) calculateForwardCellError(t int, forwardHiddenError float64, sequenceLength int) float64 {
+	if t < sequenceLength-1 {
+		return forwardHiddenError * m.ForwardLSTMState.OutputGates[t+1][0] * (1 - math.Pow(math.Tanh(m.ForwardLSTMState.CellStates[t+1][0]), 2))
+	}
+	return 0
+}
+func (m *BiLSTMModel) calculateForwardGateInputError(t int, forwardCellError float64, i int) float64 {
+	return forwardCellError * m.ForwardLSTMState.CandidateCells[t][i] * m.ForwardLSTMState.InputGates[t][i] * (1 - m.ForwardLSTMState.InputGates[t][i])
+}
+func (m *BiLSTMModel) calculateForwardGateForgetError(t int, forwardCellError float64, i int) float64 {
+	if t > 0 {
+		return forwardCellError * m.ForwardLSTMState.CellStates[t-1][i] * m.ForwardLSTMState.ForgetGates[t][i] * (1 - m.ForwardLSTMState.ForgetGates[t][i])
+	}
+	return 0
+}
+func (m *BiLSTMModel) calculateForwardGateCandidateError(t int, forwardCellError float64, i int) float64 {
+	return forwardCellError * m.ForwardLSTMState.InputGates[t][i] * (1 - math.Pow(m.ForwardLSTMState.CandidateCells[t][i], 2))
+}
+func (m *BiLSTMModel) calculateForwardGateOutputError(t int, forwardHiddenError float64, i int) float64 {
+	return forwardHiddenError * math.Tanh(m.ForwardLSTMState.CellStates[t][i]) * m.ForwardLSTMState.OutputGates[t][i] * (1 - m.ForwardLSTMState.OutputGates[t][i])
+}
 func (m *BiLSTMModel) UpdateWeights(learningRate float64) {
 
 	// Update output layer weights and biases
-	for j := range m.OutputWeights[0] { // Assuming all rows have the same length
+	for j := range m.OutputWeights[0] {
 		for i := range m.OutputWeights {
 			m.OutputWeights[i][j] -= learningRate * m.Gradients.OutputWeightGradients[i][j]
 		}
