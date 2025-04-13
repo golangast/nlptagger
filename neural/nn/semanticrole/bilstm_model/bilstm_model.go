@@ -189,7 +189,7 @@ func vecMul(a, b []float64) []float64 {
 	return result
 }
 
-func (m *BiLSTMModel) lstmStep(t int, tokenIds []int, weights LSTMWeights, state *LSTMState, hidden, cell []float64, isForward bool) ([]float64, []float64) {
+func (m *BiLSTMModel) lstmStep(t int, tokenIds []int, weights LSTMWeights, state *LSTMState, hidden, cell []float64) ([]float64, []float64) {
 	inputEmbedding := embed(tokenIds[t], m.VocabSize)
 	lstmInput := matVecMul(weights.InputWeights, inputEmbedding)
 	lstmHidden := matVecMul(weights.HiddenWeights, hidden)
@@ -227,11 +227,11 @@ func (m *BiLSTMModel) Forward(tokenIds []int) [][]float64 {
 	backwardCell := make([]float64, m.HiddenSize)
 
 	for t := 0; t < sequenceLength; t++ {
-		forwardHidden, forwardCell = m.lstmStep(t, tokenIds, m.ForwardLSTMWeights, &m.ForwardLSTMState, forwardHidden, forwardCell, true)
+		forwardHidden, forwardCell = m.lstmStep(t, tokenIds, m.ForwardLSTMWeights, &m.ForwardLSTMState, forwardHidden, forwardCell)
 	}
 
 	for t := sequenceLength - 1; t >= 0; t-- {
-		backwardHidden, backwardCell = m.lstmStep(t, tokenIds, m.BackwardLSTMWeights, &m.BackwardLSTMState, backwardHidden, backwardCell, false)
+		backwardHidden, backwardCell = m.lstmStep(t, tokenIds, m.BackwardLSTMWeights, &m.BackwardLSTMState, backwardHidden, backwardCell)
 	}
 
 	for t := 0; t < sequenceLength; t++ {
