@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"sync"
-	"time"
 )
 
 type LSTMWeights struct {
@@ -314,33 +313,20 @@ func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, hi
 	outputWeightsT := transpose(m.OutputWeights)
 
 	for t := sequenceLength - 1; t >= 0; t-- {
-		scalculateOutputErrors := time.Now()
+		// scalculateOutputErrors := time.Now()
 
 		outputErrors := m.calculateOutputErrors(probabilities[t], roleIDs, t)
-		dcalculateOutputErrors := time.Since(scalculateOutputErrors)
-		fmt.Printf("calculateOutputErrors took %v to complete\n", dcalculateOutputErrors)
-		supdateOutputLayerGradients := time.Now()
+		// dcalculateOutputErrors := time.Since(scalculateOutputErrors)
+		// fmt.Printf("calculateOutputErrors took %v to complete\n", dcalculateOutputErrors)
 		m.updateOutputLayerGradients(outputErrors, hiddenStates[t])
-		dupdateOutputLayerGradients := time.Since(supdateOutputLayerGradients)
-		fmt.Printf("updateOutputLayerGradients took %v to complete\n", dupdateOutputLayerGradients)
-		smatVecMul := time.Now()
 		combinedHiddenStateError := matVecMul(outputWeightsT, outputErrors)
 
 		forwardHiddenError := combinedHiddenStateError[:m.HiddenSize]
 		backwardHiddenError := combinedHiddenStateError[m.HiddenSize:]
-		dmatVecMul := time.Since(smatVecMul)
-		fmt.Printf("matVecMul took %v to complete\n", dmatVecMul)
-
-		startbackpropagateBackwardLSTM := time.Now()
 
 		m.backpropagateBackwardLSTM(t, tokenIds, backwardHiddenError)
-		durationbackpropagateBackwardLSTM := time.Since(startbackpropagateBackwardLSTM)
-		fmt.Printf("backpropagateBackwardLSTM took %v to complete\n", durationbackpropagateBackwardLSTM)
-		backpropagateForwardLSTMs := time.Now()
 
 		m.backpropagateForwardLSTM(t, tokenIds, forwardHiddenError)
-		dbackpropagateForwardLSTMs := time.Since(backpropagateForwardLSTMs)
-		fmt.Printf("backpropagateForwardLSTM took %v to complete\n", dbackpropagateForwardLSTMs)
 
 	}
 
