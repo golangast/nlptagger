@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"os"
 
 	"github.com/golangast/nlptagger/neural/nn/semanticrole/bilstm_model"
@@ -44,6 +45,12 @@ type SemanticRoleModel struct {
 	RoleMap        map[int]string
 }
 
+type RoleExample struct {
+	Tokens []string
+	Roles  []string
+}
+
+
 func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 	tokenIDs := make([]int, len(tokens))
 	for i, token := range tokens {
@@ -61,13 +68,50 @@ func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 		return []string{}, nil // Return empty slice if no tokens
 
 	}
-
+	
+	trainingData, err := LoadRoleData("datas/roledata/training_data.json")
+	if err != nil {
+		fmt.Println("Error loading training data: ", err)
+		// Depending on your needs, you might want to return an error here
+		// instead of continuing without the training data.  For this example,
+		// we'll assume we can proceed and just log the error.
+	}
+	// Find a matching example in the training data (optional, for comparison)
+	var matchingExample *RoleExample
+	if err == nil { // Only try to find a match if training data loaded successfully
+		for _, sentenceData := range trainingData {
+			var exampleTokens []string
+			var exampleRoles []string
+		for _, roleData := range sentenceData.Tokens {
+			exampleTokens = append(exampleTokens, roleData.Token)
+			exampleRoles = append(exampleRoles, roleData.Role)
+		}
+			if strings.Join(exampleTokens, " ") == strings.Join(tokens, " ") {
+				matchingExample = &RoleExample{
+					Tokens: exampleTokens,
+					Roles: exampleRoles,
+				}
+				break
+			}
+		}
+	}
 	hiddenStates := m.BiLSTMModel.Forward(tokenIDs)
 	predictedIndices := m.BiLSTMModel.Predict(hiddenStates)
 
 	roleNames := make([]string, len(predictedIndices))
 	for i, index := range predictedIndices {
 		roleNames[i] = m.RoleMap[index]
+	}
+	// Comparison (if we found a matching training example)
+	if matchingExample != nil {
+		fmt.Printf("Input Tokens: %v\n", tokens)
+		fmt.Printf("Predicted Roles: %v\n", roleNames)
+		fmt.Printf("Expected Roles: %v\n", matchingExample.Roles)
+		// You could add more detailed comparison logic here, e.g.,
+		// - Calculate accuracy on this specific example.
+		// - Print differences if the prediction is incorrect.
+	} else if err == nil {
+		fmt.Printf("No matching training example found for tokens: %v\n", tokens)
 	}
 	return roleNames, nil
 }

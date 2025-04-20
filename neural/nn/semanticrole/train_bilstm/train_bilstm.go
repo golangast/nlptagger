@@ -33,7 +33,7 @@ func crossEntropyLoss(predictedProbabilities []float64, trueRoleID int) float64 
 // Hyperparameters
 const (
 	hiddenSize   = 128
-	learningRate = 0.001
+	learningRate = 0.1
 	epochs       = 10
 	maxGrad      = 5.0
 )
@@ -63,14 +63,13 @@ func Train_bilstm() {
 
 	// 4. Create role map
 	roleMap := createRoleMap(trainingData)
-	fmt.Printf("Role Map: %v\n", roleMap)
-	// 5. Initialize BiLSTMModel
-	bilstm := bilstm_model.NewBiLSTMModel(vocabularySize, hiddenSize, len(roleMap))
+	// fmt.Printf("Role Map: %v\n", roleMap)
+	model := bilstm_model.NewBiLSTMModel(vocabularySize, hiddenSize, len(roleMap))
 	// Initialize output layer
-	bilstm.InitializeOutputLayer(hiddenSize)
+	model.InitializeOutputLayer(hiddenSize)
 
-	// 7. Training loop with SentenceRoleData
-	for epoch := 0; epoch < epochs; epoch++ {
+	// Training loop with SentenceRoleData
+	for epoch := 0; epoch < epochs; epoch++ { // start of epoch
 		fmt.Printf("Epoch %d\n", epoch+1)
 
 		// Shuffle training data
@@ -87,26 +86,38 @@ func Train_bilstm() {
 			}
 
 			// Convert sentence to input features
-			wordIDs := make([]int, len(taggedSentence.Tokens))
+			embeddings := make([][]float64, len(taggedSentence.Tokens))
 			roleIDs := make([]int, len(taggedSentence.Tokens))
 			for i := range taggedSentence.Tokens {
-				// Robust check to ensure i is a valid index
 				if i >= len(taggedSentence.Tokens) {
-					fmt.Printf("Invalid index i=%d for taggedSentence.Tokens of length %d. Skipping.\n", i, len(taggedSentence.Tokens))
+					fmt.Printf("Invalid index i=%d for taggedSentence.Tokens of length %d. Skipping.\n", i, len(taggedSentence.Tokens)) // Robust check to ensure i is a valid index
 					continue
 				}
 				token := taggedSentence.Tokens[i] // Access token only after checking index
-				wordID, ok := word2vecModel.Vocabulary[token.Token]
-				if !ok { // UNK token
-					wordID = 0
+				embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
+				if !ok {
+					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
+					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
 				}
-				wordIDs[i] = wordID
-				roleIDs[i] = roleMap[token.Role]
+
+				embeddings[i] = embedding
+
+				roleID, ok := roleMap[token.Role]
+				if !ok {
+					roleID = 0 // Assign role ID 0 for unknown roles
+				}
+				roleIDs[i] = roleID
+				// if i < 5 {
+				// 	fmt.Printf("  Token: %s, Role: %s, Role ID: %d\n", taggedSentence.Tokens[i].Token, taggedSentence.Tokens[i].Role, roleID)
+				// }
 			}
 
+			tokenIDs := make([]int, len(taggedSentence.Tokens))
+			for i, token := range taggedSentence.Tokens {
+				tokenIDs[i] = word2vecModel.Vocabulary[token.Token]
+			}
 			// Forward pass
-			hiddenStates := bilstm.Forward(wordIDs)
-			probabilities := bilstm.CalculateProbabilities(hiddenStates)
+			probabilities := model.ForwardAndCalculateProbabilities(tokenIDs)
 
 			// Calculate loss
 			var loss float64 = 0.0
@@ -115,22 +126,23 @@ func Train_bilstm() {
 			}
 			// Calculate gradients and update weights (placeholder)
 			if len(roleIDs) > 0 {
-				bilstm.Backpropagate(probabilities, roleIDs, hiddenStates, wordIDs)
-				go bilstm.UpdateWeights(learningRate)
+				model.Backpropagate(probabilities, roleIDs, tokenIDs)
+				model.UpdateWeights(learningRate)
 			} else {
 				fmt.Println("Skipping backpropagation for sentence with no roles.")
 			}
-			bilstm.ClipGradients(maxGrad)
+			model.ClipGradients(maxGrad)
 
 			// Print loss for this batch (for debugging)
-			if loss > 0 {
-				fmt.Printf("Loss: %f\n", loss)
-			}
+			// if loss > 0 {
+			// 	fmt.Printf("Loss: %f\n", loss)
+			// }
 		}
 	}
 
 	// 8. Save trained BiLSTMModel and role map
-	saveModel(bilstm, bilstmModelPath)
+
+	saveModel(model, bilstmModelPath)
 	saveRoleMap(roleMap, roleMapPath)
 
 	fmt.Println("Training complete. Model and role map saved.")
@@ -182,9 +194,9 @@ func TrainWithActiveLearning(iterations, batchSize int, samplingMethod string) {
 
 		// a. Train model on labeled data
 		fmt.Println("Training model on labeled data...")
-		bilstm := bilstm_model.NewBiLSTMModel(vocabularySize, hiddenSize, len(roleMap))
-		bilstm.InitializeOutputLayer(hiddenSize)
-		trainModel(bilstm, labeledData, word2vecModel, roleMap) // Train on labeled data
+		model := bilstm_model.NewBiLSTMModel(vocabularySize, hiddenSize, len(roleMap))
+		model.InitializeOutputLayer(hiddenSize)
+		trainModel(model, labeledData, word2vecModel, roleMap) // Train on labeled data
 
 		if len(unlabeledData) == 0 {
 			fmt.Println("No more unlabeled data. Active learning complete.")
@@ -193,7 +205,7 @@ func TrainWithActiveLearning(iterations, batchSize int, samplingMethod string) {
 
 		// b. Predict on unlabeled data and select uncertain examples
 		fmt.Println("Predicting on unlabeled data...")
-		predictions := predictRoles(bilstm, unlabeledData, word2vecModel, roleMap)
+		predictions := predictRoles(model, unlabeledData, word2vecModel, roleMap)
 		var selectedIndices []int
 		switch samplingMethod {
 		case "least_confidence":
@@ -240,28 +252,39 @@ func trainModel(model *bilstm_model.BiLSTMModel, trainingData []semanticrole.Sen
 				fmt.Println("Skipping sentence with no tokens.")
 				continue
 			}
-			wordIDs := make([]int, len(taggedSentence.Tokens))
+
+			embeddings := make([][]float64, len(taggedSentence.Tokens))
+
 			roleIDs := make([]int, len(taggedSentence.Tokens))
 			for i, token := range taggedSentence.Tokens {
 				if i >= len(taggedSentence.Tokens) {
-					fmt.Printf("Invalid index i=%d for taggedSentence.Tokens of length %d. Skipping.\n", i, len(taggedSentence.Tokens))
+					fmt.Printf("Invalid index i=%d for taggedSentence.Tokens of length %d. Skipping.\n", i, len(taggedSentence.Tokens)) // Robust check to ensure i is a valid index
 					continue
 				}
-				wordID, ok := word2vecModel.Vocabulary[token.Token]
-				if !ok {
-					wordID = 0
+				embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
+				if !ok { // UNK token
+					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
+					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
 				}
-				wordIDs[i] = wordID
-				roleIDs[i] = roleMap[token.Role]
+				embeddings[i] = embedding
+
+				roleID, ok := roleMap[token.Role]
+				if !ok {
+					roleID = 0 // Assign role ID 0 for unknown roles
+				}
+				roleIDs[i] = roleID
 			}
-			hiddenStates := model.Forward(wordIDs)
-			probabilities := model.CalculateProbabilities(hiddenStates)
+			tokenIDs := make([]int, len(taggedSentence.Tokens))
+			for i, token := range taggedSentence.Tokens {
+				tokenIDs[i] = word2vecModel.Vocabulary[token.Token]
+			}
+			probabilities := model.ForwardAndCalculateProbabilities(tokenIDs)
 			var loss float64 = 0.0
 			for tokenIndex, prob := range probabilities {
 				loss += crossEntropyLoss(prob, roleIDs[tokenIndex])
 			}
 			if len(roleIDs) > 0 {
-				model.Backpropagate(probabilities, roleIDs, hiddenStates, wordIDs)
+				model.Backpropagate(probabilities, roleIDs, tokenIDs) // Pass tokenIDs instead of embeddings
 				model.UpdateWeights(learningRate)
 			} else {
 				fmt.Println("Skipping backpropagation for sentence with no roles.")
@@ -288,16 +311,20 @@ func predictRoles(model *bilstm_model.BiLSTMModel, data []semanticrole.SentenceR
 		for k := range tokenProbabilities {
 			tokenProbabilities[k] = make([]float64, len(roleMap))
 		}
-		wordIDs := make([]int, len(taggedSentence.Tokens))
+		embeddings := make([][]float64, len(taggedSentence.Tokens))
 		for j, token := range taggedSentence.Tokens {
-			wordID, ok := word2vecModel.Vocabulary[token.Token]
+			embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
 			if !ok {
-				wordID = 0
+				embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
+				copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
 			}
-			wordIDs[j] = wordID
+			embeddings[j] = embedding
 		}
-		hiddenStates := model.Forward(wordIDs)
-		probabilities := model.CalculateProbabilities(hiddenStates)
+		tokenIDs := make([]int, len(taggedSentence.Tokens))
+		for i, token := range taggedSentence.Tokens {
+			tokenIDs[i] = word2vecModel.Vocabulary[token.Token]
+		}
+		probabilities := model.ForwardAndCalculateProbabilities(tokenIDs)
 
 		for j, probs := range probabilities {
 			for k, prob := range probs {

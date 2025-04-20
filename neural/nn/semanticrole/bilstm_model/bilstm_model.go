@@ -71,6 +71,7 @@ func NewBiLSTMModel(vocabSize, hiddenSize, outputSize int) *BiLSTMModel {
 			BackwardBiasGradients:         make([]float64, 4*hiddenSize),
 		},
 	}
+	model.InitializeOutputLayer(hiddenSize)
 	initializeWeights(model)
 	return model
 }
@@ -82,6 +83,12 @@ func (m *BiLSTMModel) InitializeOutputLayer(hiddenSize int) {
 		m.OutputWeights[i] = make([]float64, 2*hiddenSize)
 	}
 	m.OutputBias = make([]float64, m.OutputSize)
+	for i := range m.OutputWeights {
+		for j := range m.OutputWeights[i] {
+			m.OutputWeights[i][j] = rand.NormFloat64() * 0.01
+		}
+	}
+
 }
 
 func newLSTMWeights(vocabSize, hiddenSize int) LSTMWeights {
@@ -121,14 +128,18 @@ func initializeWeights(model *BiLSTMModel) {
 	// Initialize output weights
 	for i := range model.OutputWeights {
 		for j := range model.OutputWeights[i] {
-			model.OutputWeights[i][j] = rand.NormFloat64() * 0.01
+			model.OutputWeights[i][j] = rand.NormFloat64() * 0.1
 		}
 	}
 }
 
 func embed(tokenId int, vocabSize int) []float64 {
 	// Placeholder for embedding function. Replace this with a real implementation.
+
 	embedding := make([]float64, vocabSize)
+	for i := range embedding {
+		embedding[i] = 0.01
+	}
 	embedding[tokenId%vocabSize] = 1.0
 	return embedding
 }
@@ -240,6 +251,54 @@ func (m *BiLSTMModel) Forward(tokenIds []int) [][]float64 {
 	return hiddenStates
 }
 
+func (m *BiLSTMModel) computeHiddenStates(tokenIds []int) (forwardHiddenStates, backwardHiddenStates [][]float64) {
+	sequenceLength := len(tokenIds)
+	forwardHiddenStates = make([][]float64, sequenceLength)
+	backwardHiddenStates = make([][]float64, sequenceLength)
+
+	m.ForwardLSTMState = newLSTMState(sequenceLength)
+	m.BackwardLSTMState = newLSTMState(sequenceLength)
+
+	for t := 0; t < sequenceLength; t++ {
+		forwardHidden := make([]float64, m.HiddenSize)
+		forwardCell := make([]float64, m.HiddenSize)
+		forwardHidden, forwardCell = m.lstmStep(t, tokenIds, m.ForwardLSTMWeights, &m.ForwardLSTMState, forwardHidden, forwardCell)
+		forwardHiddenStates[t] = make([]float64, m.HiddenSize)
+		copy(forwardHiddenStates[t], forwardHidden)
+	}
+
+	for t := sequenceLength - 1; t >= 0; t-- {
+		backwardHidden := make([]float64, m.HiddenSize)
+		backwardCell := make([]float64, m.HiddenSize)
+		backwardHidden, backwardCell = m.lstmStep(t, tokenIds, m.BackwardLSTMWeights, &m.BackwardLSTMState, backwardHidden, backwardCell)
+		backwardHiddenStates[t] = make([]float64, m.HiddenSize)
+		copy(backwardHiddenStates[t], backwardHidden)
+	}
+
+	return forwardHiddenStates, backwardHiddenStates
+}
+func combineHiddenStates(forwardHiddenStates, backwardHiddenStates [][]float64) [][]float64 {
+	sequenceLength := len(forwardHiddenStates)
+	combinedHiddenStates := make([][]float64, sequenceLength)
+	for t := 0; t < sequenceLength; t++ {
+		combinedHiddenStates[t] = combineSingleTimeStepHiddenStates(forwardHiddenStates[t], backwardHiddenStates[t])
+	}
+	return combinedHiddenStates
+}
+
+func combineSingleTimeStepHiddenStates(forwardHiddenState, backwardHiddenState []float64) []float64 {
+	combined := make([]float64, len(forwardHiddenState)+len(backwardHiddenState))
+	copy(combined[:len(forwardHiddenState)], forwardHiddenState)
+	copy(combined[len(forwardHiddenState):], backwardHiddenState)
+	return combined
+
+}
+
+func (m *BiLSTMModel) ForwardAndCalculateProbabilities(wordIDs []int) [][]float64 {
+	hiddenStates := m.Forward(wordIDs)
+	return m.CalculateProbabilities(hiddenStates)
+}
+
 func (m *BiLSTMModel) CalculateProbabilities(hiddenStates [][]float64) [][]float64 {
 	probabilities := make([][]float64, len(hiddenStates))
 	for i, hiddenState := range hiddenStates {
@@ -253,7 +312,6 @@ func (m *BiLSTMModel) CalculateProbabilities(hiddenStates [][]float64) [][]float
 	}
 	return probabilities
 }
-
 func (m *BiLSTMModel) Predict(hiddenStates [][]float64) []int {
 	predictions := make([]int, len(hiddenStates))
 	for i, hiddenState := range hiddenStates {
@@ -261,12 +319,12 @@ func (m *BiLSTMModel) Predict(hiddenStates [][]float64) []int {
 		if len(hiddenState) != 2*m.HiddenSize {
 			panic(fmt.Sprintf("Dimension mismatch: len(hiddenState) = %d, expected %d", len(hiddenState), 2*m.HiddenSize))
 		}
-
 		output := matVecMul(m.OutputWeights, hiddenState)
 		output = add(output, m.OutputBias)
 		probabilities := softmax(output)
 		predictions[i] = argmax(probabilities)
 	}
+
 	return predictions
 }
 
@@ -281,41 +339,63 @@ func newLSTMState(sequenceLength int) LSTMState {
 	}
 }
 
-func softmax(x []float64) []float64 {
+// softmax calculates the softmax of the input vector x with temperature scaling.
+func softmax(x []float64, T ...float64) []float64 {
+	temperature := 0.5 // Default temperature value
+	if len(T) > 0 {
+		temperature = T[0]
+	}
 	exps := make([]float64, len(x))
 	sum := 0.0
 	for i, val := range x {
-		exps[i] = math.Exp(val)
+		exps[i] = math.Exp(val / temperature)
 		sum += exps[i]
 	}
-	result := make([]float64, len(x))
-	for i, exp := range exps {
-		result[i] = exp / sum
+	for i := range exps {
+		exps[i] /= sum
 	}
-	return result
+	return exps
 }
 func argmax(x []float64) int {
+	if len(x) == 0 {
+		return -1 // Handle empty slice case
+	}
 	maxIdx := 0
-	for i, val := range x {
-		if val > x[maxIdx] {
-			maxIdx = i
+	maxVal := x[0]
+	if len(x) > 1 {
+		for _, val := range x {
+			if val > maxVal {
+				if len(x) == 0 {
+					return -1 // Handle empty slice case
+				}
+				maxIdx = 0
+				maxVal := x[0]
+				for i, val := range x {
+					if val > maxVal {
+						maxVal = val
+						maxIdx = i
+					}
+				}
+			}
 		}
 	}
 	return maxIdx
 }
 
-func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, hiddenStates [][]float64, tokenIds []int) {
+func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, tokenIds []int) {
 
 	sequenceLength := len(probabilities)
 
 	m.resetGradients()
 
 	outputWeightsT := transpose(m.OutputWeights)
-
+	forwardHiddenStates, backwardHiddenStates := m.computeHiddenStates(tokenIds) // [][]float64
+	hiddenStates := combineHiddenStates(forwardHiddenStates, backwardHiddenStates)
 	for t := sequenceLength - 1; t >= 0; t-- {
 		// scalculateOutputErrors := time.Now()
 
 		outputErrors := m.calculateOutputErrors(probabilities[t], roleIDs, t)
+
 		// dcalculateOutputErrors := time.Since(scalculateOutputErrors)
 		// fmt.Printf("calculateOutputErrors took %v to complete\n", dcalculateOutputErrors)
 		m.updateOutputLayerGradients(outputErrors, hiddenStates[t])
@@ -346,11 +426,14 @@ func (m *BiLSTMModel) resetGradients() {
 func (m *BiLSTMModel) calculateOutputErrors(probabilities []float64, roleIDs []int, t int) []float64 {
 	outputErrors := make([]float64, len(probabilities))
 	for i := range probabilities {
+		outputErrors[i] = probabilities[i]
+		// Treat as "no role" (ID 0) if roleIDs is shorter than t
+		var targetRoleID int
 		if t < len(roleIDs) {
-			outputErrors[i] = probabilities[i]
-			if i == roleIDs[t] {
-				outputErrors[i] -= 1
-			}
+			targetRoleID = roleIDs[t]
+		}
+		if i == targetRoleID {
+			outputErrors[i] -= 1
 		}
 	}
 	return outputErrors
@@ -363,30 +446,6 @@ func (m *BiLSTMModel) updateOutputLayerGradients(outputErrors []float64, hiddenS
 		}
 		m.Gradients.OutputBiasGradients[i] += outputErrors[i]
 	}
-}
-
-func (m *BiLSTMModel) calculateGateErrors(t int, hiddenError, cellError []float64) (inputError, forgetError, outputError, candidateError []float64) {
-	inputError = make([]float64, m.HiddenSize)
-	forgetError = make([]float64, m.HiddenSize)
-	outputError = make([]float64, m.HiddenSize)
-	candidateError = make([]float64, m.HiddenSize)
-	for i := range hiddenError {
-		var prevCellState float64
-		if t > 0 {
-			prevCellState = m.BackwardLSTMState.CellStates[t-1][i]
-		}
-
-		outputError[i] = hiddenError[i] * math.Tanh(m.BackwardLSTMState.CellStates[t][i]) * m.BackwardLSTMState.OutputGates[t][i] * (1 - m.BackwardLSTMState.OutputGates[t][i])
-		candidateError[i] = cellError[i] * m.BackwardLSTMState.InputGates[t][i] * (1 - math.Pow(m.BackwardLSTMState.CandidateCells[t][i], 2))
-		if t > 0 {
-
-			forgetError[i] = cellError[i] * prevCellState * m.BackwardLSTMState.ForgetGates[t][i] * (1 - m.BackwardLSTMState.ForgetGates[t][i])
-		}
-		inputError[i] = cellError[i] * m.BackwardLSTMState.CandidateCells[t][i] * m.BackwardLSTMState.InputGates[t][i] * (1 - m.BackwardLSTMState.InputGates[t][i])
-
-		m.Gradients.BackwardBiasGradients[i] += inputError[i] + forgetError[i] + outputError[i] + candidateError[i]
-	}
-	return
 }
 
 func (m *BiLSTMModel) backpropagateBackwardLSTM(t int, tokenIds []int, backwardHiddenError []float64) {
@@ -544,7 +603,13 @@ func (m *BiLSTMModel) UpdateWeights(learningRate float64) {
 	// Update output layer weights and biases
 	for j := range m.OutputWeights[0] {
 		for i := range m.OutputWeights {
+			// if i == 0 && j == 0 {
+			// 	fmt.Printf("Before update: learningRate=%.6f, gradient=%.6f, weight=%.6f\n", learningRate, m.Gradients.OutputWeightGradients[i][j], m.OutputWeights[i][j])
+			// }
 			m.OutputWeights[i][j] -= learningRate * m.Gradients.OutputWeightGradients[i][j]
+			// if i == 0 && j == 0 {
+			// 	fmt.Printf("After update: learningRate=%.6f, gradient=%.6f, weight=%.6f\n", learningRate, m.Gradients.OutputWeightGradients[i][j], m.OutputWeights[i][j])
+			// }
 		}
 	}
 	for i := range m.OutputBias {

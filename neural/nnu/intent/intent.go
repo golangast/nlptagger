@@ -102,6 +102,10 @@ var phraseTagMap = map[string]string{
 	`command:connect_(.*)_network`:           "connect to a network",      // connect to a network
 }
 
+func LoadRoleData(filePath string) ([]semanticrole.SentenceRoleData, error) {
+	return semanticrole.LoadRoleData(filePath)
+}
+
 // ProcessCommand: The entry point for processing a command.
 // This function takes a raw command string, a word-to-vector index, and context relevance
 // information, then performs dependency analysis, intent interpretation, and returns the detected intent.
@@ -125,7 +129,6 @@ func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]fl
 	tokens := strings.Split(command, " ")
 	// 2. Train or load the Word2Vec embedding model
 	if ic.SemanticRoleModel == nil {
-		var err error
 		ic.SemanticRoleModel, err = semanticrole.NewSemanticRoleModel(
 			"word2vec_model.gob",
 			"bilstm_model.gob",
@@ -135,7 +138,6 @@ func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]fl
 			fmt.Println("failed to load semantic role model: %w", err)
 		}
 	}
-
 	// 3. Predict roles
 	roles, err := ic.SemanticRoleModel.PredictRoles(tokens)
 	if err != nil {
@@ -148,95 +150,10 @@ func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]fl
 		return "", err
 	}
 
-	// 4. Use the predicted roles to understand the command and take action
-	//    (replace with your command processing logic)
-	for i, token := range tokens {
-		fmt.Println("Token: , Role: \n", token, roles[i])
-	}
+	fmt.Println("Tokens:", tokens)
+	fmt.Println("Roles:", roles)
+
 	return intent, nil
-}
-
-func extractIntentFromPhraseTag(phraseTag string) (string, bool) {
-	if intent, ok := phraseTagMap[phraseTag]; ok {
-		return intent, true
-	}
-	// Check for regular expression matches if needed
-	for pattern, intentFromPattern := range phraseTagMap {
-		matched, _ := regexp.MatchString(pattern, phraseTag)
-		if matched {
-			return intentFromPattern, true
-		}
-	}
-	return "", false
-}
-
-func extractActionAndObjectFromNER(nerTags []string, tokens []string) (string, string) {
-	var action, object string
-	for i, tag := range nerTags {
-		if tag == "ACTION" {
-			action = tokens[i]
-		} else if tag == "OBJECT_TYPE" || tag == "OBJECT_NAME" {
-			object = tokens[i]
-		}
-	}
-	return action, object
-}
-
-func extractActionAndObjectFromDependencies(dependencyAnalysis tag.Tag) (string, string) {
-	var action, object string
-	var verbIndex int = -1
-
-	// Find the main verb (ROOT)
-	for i, _ := range dependencyAnalysis.Dependencies {
-		if dependencyAnalysis.DepRelationsTag[i] == "ROOT" && dependencyAnalysis.PosTag[i] == "VERB" {
-			action = dependencyAnalysis.Tokens[i]
-			verbIndex = i
-			break
-		}
-	}
-
-	// Find the direct object (dobj) of the main verb
-	if verbIndex != -1 {
-		for i, dep := range dependencyAnalysis.Dependencies {
-			if dep.Head == verbIndex && dep.Dep == "dobj" {
-				object = dependencyAnalysis.Tokens[i]
-				break
-			}
-		}
-	}
-
-	return action, object
-}
-
-func combineActionAndObject(action, object string) string {
-	if action != "" && object != "" {
-		return fmt.Sprintf("%s the %s", action, object)
-	} else if action != "" {
-		return action
-	} else if object != "" {
-		return fmt.Sprintf("about the %s", object)
-	}
-	return ""
-}
-
-func getIntentFromSimilarSentences(command string, similarSentences []g.TrainingData, currentIntent string) string {
-	if len(similarSentences) == 0 {
-		return currentIntent
-	}
-
-	if currentIntent == "" {
-		return similarSentences[0].Context
-	}
-	return "The command is similar to " + similarSentences[0].Context + ". " + currentIntent
-}
-
-func applyContextualRelevance(intent string, c train.ContextRelevance) string {
-	if c.ContextualRelevance > 0.8 {
-		return "Considering the context: " + intent
-	} else if c.ContextualRelevance > 0.5 && c.ContextualRelevance <= 0.8 {
-		return "It is possible that: " + intent
-	}
-	return intent // Return the original intent if contextual relevance is low
 }
 
 // InterpretIntent: Interprets the intent behind a given command by analyzing its
@@ -291,7 +208,6 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 	}
 	train_bilstm.Train_bilstm()
 	// Assuming you have functions to load the model and role map
-	// roleMap := LoadRoleMapFromGOB("role_map.gob") // Replace with actual path and loading function
 
 	fmt.Println("Most similar training data vector:", trainingData[mostSimilarIndex].Sentence) // Outputting the sentence that is most similar.
 
@@ -321,8 +237,8 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 			depTag = dependencyAnalysis.Dependencies[0]
 		}
 
-		fmt.Println("Word:", token, "Ner:", nerTag, "Pos:", posTag, "Phrase:", phraseTag, "Dep:", depTag)
-		// Prioritize phrase tags, these are more specific
+		fmt.Printf("Word: %-15s Ner: %-15s Pos: %-15s Phrase: %-15s Dep: %-15v\n",
+			token, nerTag, posTag, phraseTag, depTag)
 		// Prioritize phrase tags - these are more specific
 		if phraseTag != "" {
 			if intentFromPhrase, ok := phraseTagMap[phraseTag]; ok {
@@ -497,6 +413,7 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 		}
 
 	}
+	fmt.Printf("Roles: %-15v\n", roles)
 
 	//Unclear intent
 	if !actionDetected && !objectDetected && intent == "" { // If no action or object detected, suggest using them
@@ -515,20 +432,6 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 
 	// Context awareness
 	return "The intent is to " + intent + ".", nil // Add final format
-}
-
-func calculateRoleSimilarity(predictedRoles, trainingRoles []string) float64 {
-	// Implement a function to compare roles, e.g., using a simple match count
-	// or a more sophisticated metric like cosine similarity on role embeddings.
-	// This is a placeholder and needs to be implemented based on your specific
-	// requirements and how you want to weigh role similarity.
-	similarity := 0.0
-	for i := 0; i < len(predictedRoles) && i < len(trainingRoles); i++ {
-		if predictedRoles[i] == trainingRoles[i] {
-			similarity += 1.0
-		}
-	}
-	return similarity / math.Max(float64(len(predictedRoles)), float64(len(trainingRoles)))
 }
 
 // VecDense represents a dense vector.
@@ -653,17 +556,4 @@ func getSuggestedActions(object string) []string {
 	default:
 		return []string{"add", "generate", "create", "delete", "remove", "convert", "read", "write", "modify", "update", "analyze", "start", "stop", "restart", "deploy", "configure", "backup", "restore", "search", "list", "move", "copy"}
 	}
-}
-
-func handleUnclearIntent(actionDetected, objectDetected bool, extractedAction, extractedObject string) string {
-	if !actionDetected && !objectDetected {
-		return fmt.Sprintf("Unclear Intent: Could not determine action or object. Try using verbs like: %s and nouns like: %s", strings.Join(mapsKeys(actionMap), ", "), strings.Join(mapsKeys(objectMap), ", "))
-	} else if actionDetected && !objectDetected {
-		suggestedObjects := getSuggestedObjects(extractedAction)
-		return fmt.Sprintf("Unclear Intent: Action Detected but no Object. Try using objects like: %s", strings.Join(suggestedObjects, ", "))
-	} else if !actionDetected && objectDetected {
-		suggestedActions := getSuggestedActions(extractedObject)
-		return fmt.Sprintf("Unclear Intent: Object Detected but no Action. Try using verbs like: %s", strings.Join(suggestedActions, ", "))
-	}
-	return "Unclear Intent: Could not determine a clear intent." // Default message if none of the above conditions are met.  This should ideally be unreachable.
 }

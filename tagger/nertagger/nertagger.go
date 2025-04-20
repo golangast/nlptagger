@@ -39,7 +39,6 @@ var nerTags = map[string]string{
 	`\bwith\s+(\d+)\s+fields\b`:                                                                  "FIELDS",
 	`\b(?:[Tt]he\s+)?[A-Z][a-z]+(?:[\s-][A-Z][a-z]+)*\s+(?:[Ii]nc\.|[Ll]td\.|[Cc]orp\.)\b`:       "ORG",
 	`(the\s+)?[A-Z][a-zA-Z]+([\s-][A-Za-z0-9]+)*`:                                                "OBJECT_NAME",
-	`\bgenerate\s+a\s+(webserver|database|handler)\b`:                                            "ACTION", // For "generate a webserver"
 	`\bcreate\s+(?:a\s+)?(webserver|database|handler)\s+named\s+([a-zA-Z]+)\b`:                   "COMMAND",
 	// First and Last Names (with optional middle names/initials)
 	`[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}`: "PERSON",
