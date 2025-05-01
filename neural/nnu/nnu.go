@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"time"
 )
 
 type Sentence struct {
@@ -219,7 +220,30 @@ func NewSimpleNN(filePath string) *SimpleNN {
 
 	nnn.WeightsIH = NewMatrix(nnn.HiddenSize, nnn.InputSize)
 
+	nnn.WeightsHO = make([][]float64, nnn.OutputSize)
+	for i := range nnn.WeightsHO {
+		nnn.WeightsHO[i] = make([]float64, nnn.HiddenSize)
+	}
+	nnn.initWeights()
+	nnn.OutputBiases = make([]float64, nnn.OutputSize)
+	rand.Seed(time.Now().UnixNano())
+	for i := range nnn.OutputBiases {
+		nnn.OutputBiases[i] = (rand.Float64() * 2) - 1
+	}
+
 	return &nnn
+}
+
+func (nn *SimpleNN) initWeights() {
+	rand.Seed(time.Now().UnixNano())
+	nn.WeightsHO = make([][]float64, nn.OutputSize)
+	for i := range nn.WeightsHO {
+		nn.WeightsHO[i] = make([]float64, nn.HiddenSize)
+		for j := range nn.WeightsHO[i] {
+			nn.WeightsHO[i][j] = (rand.Float64() * 2) - 1 // Assign random values between -1 and 1
+		}
+	}
+
 }
 
 func (nn *SimpleNN) Randomize() *SimpleNN {

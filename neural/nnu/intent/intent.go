@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/golangast/nlptagger/commands"
 	"github.com/golangast/nlptagger/neural/nn/g"
 	"github.com/golangast/nlptagger/neural/nn/semanticrole"
 	"github.com/golangast/nlptagger/neural/nn/semanticrole/train_bilstm"
@@ -249,6 +250,9 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 					extractedAction = "generate"
 					extractedObject = "webserver"
 				}
+				if intent == "create a file" {
+					commands.Createfile()
+				}
 				continue // Skip other checks if a phrase is matched
 			} else {
 				// Check for regular expression matches
@@ -274,6 +278,15 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 				extractedAction = "unknown"
 
 			}
+			intent = fmt.Sprintf("%s the %s", actionMap[extractedAction], extractedObject) // Example: create the file
+			if intent == "create the file" {
+				commands.Createfile()
+			}
+		} else if extractedAction != "" {
+			intent = fmt.Sprintf("%s", actionMap[extractedAction]) // Example: create
+			if intent == "create" {
+				commands.Createfile()
+			}
 
 			verbToken = token
 			actionDetected = true
@@ -292,15 +305,6 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 			extractedObject = token // Store the object token
 			objectDetected = true
 			intent = "About " + token
-		}
-
-		// Prioritize NAME as an object if detected
-		if nerTag == "NAME" {
-			// Consider "NAME" as a potential object
-			extractedObject = token // Store the object token
-			objectDetected = true
-			intent = "About " + token
-			continue // Skip to the next token after handling the "NAME" role
 		}
 
 		// Check for specific object names, object names are always objects

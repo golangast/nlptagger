@@ -1006,3 +1006,13 @@
 2025/04/20 13:47:47 main.go:40: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
 2025/04/20 13:49:45 main.go:40: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
 2025/04/20 13:56:12 main.go:40: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/20 14:02:39 main.go:40: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/22 12:09:05 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/24 00:19:58 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/24 00:33:11 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/24 00:41:41 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/24 00:43:09 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/26 03:57:08 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/27 10:29:54 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/27 11:00:23 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/04/27 15:46:15 main.go:41: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10, save=%!d(string=true)

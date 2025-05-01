@@ -47,6 +47,28 @@ type Gradients struct {
 	BackwardBiasGradients         []float64
 }
 
+// BackwardWeightIterator is used to iterate over the weights.
+type BackwardWeightIterator struct {
+	i       int
+	j       int
+	maxI    int
+	maxJ    int
+	current *BiLSTMModel
+}
+
+func NewBackwardWeightIterator(m *BiLSTMModel) *BackwardWeightIterator {
+	if m == nil || m.BackwardLSTMWeights.InputWeights == nil {
+		return &BackwardWeightIterator{maxI: 0, maxJ: 0, current: m}
+	}
+	return &BackwardWeightIterator{
+		i:       0,
+		j:       0,
+		maxI:    len(m.BackwardLSTMWeights.InputWeights),
+		maxJ:    len(m.BackwardLSTMWeights.InputWeights[0]),
+		current: m,
+	}
+}
+
 func NewBiLSTMModel(vocabSize, hiddenSize, outputSize int) *BiLSTMModel {
 	if outputSize <= 0 {
 		panic(fmt.Sprintf("invalid outputSize: must be greater than 0"))
@@ -74,6 +96,25 @@ func NewBiLSTMModel(vocabSize, hiddenSize, outputSize int) *BiLSTMModel {
 	model.InitializeOutputLayer(hiddenSize)
 	initializeWeights(model)
 	return model
+}
+
+func (iter *BackwardWeightIterator) Next() bool {
+	if iter.current == nil || iter.current.BackwardLSTMWeights.InputWeights == nil {
+		return false
+	}
+	if iter.i >= iter.maxI {
+		return false
+	}
+	if iter.j < iter.maxJ-1 {
+		iter.j++
+	} else {
+		iter.j = 0
+		iter.i++
+	}
+	if iter.i >= iter.maxI {
+		return false
+	}
+	return true
 }
 func init() {
 	rand.Seed(42)
@@ -259,21 +300,29 @@ func (m *BiLSTMModel) computeHiddenStates(tokenIds []int) (forwardHiddenStates, 
 	m.ForwardLSTMState = newLSTMState(sequenceLength)
 	m.BackwardLSTMState = newLSTMState(sequenceLength)
 
-	for t := 0; t < sequenceLength; t++ {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
 		forwardHidden := make([]float64, m.HiddenSize)
 		forwardCell := make([]float64, m.HiddenSize)
-		forwardHidden, forwardCell = m.lstmStep(t, tokenIds, m.ForwardLSTMWeights, &m.ForwardLSTMState, forwardHidden, forwardCell)
-		forwardHiddenStates[t] = make([]float64, m.HiddenSize)
-		copy(forwardHiddenStates[t], forwardHidden)
-	}
-
-	for t := sequenceLength - 1; t >= 0; t-- {
+		for t := 0; t < sequenceLength; t++ {
+			forwardHidden, forwardCell = m.lstmStep(t, tokenIds, m.ForwardLSTMWeights, &m.ForwardLSTMState, forwardHidden, forwardCell)
+			forwardHiddenStates[t] = make([]float64, m.HiddenSize)
+			copy(forwardHiddenStates[t], forwardHidden)
+		}
+	}()
+	go func() {
+		defer wg.Done()
 		backwardHidden := make([]float64, m.HiddenSize)
 		backwardCell := make([]float64, m.HiddenSize)
-		backwardHidden, backwardCell = m.lstmStep(t, tokenIds, m.BackwardLSTMWeights, &m.BackwardLSTMState, backwardHidden, backwardCell)
-		backwardHiddenStates[t] = make([]float64, m.HiddenSize)
-		copy(backwardHiddenStates[t], backwardHidden)
-	}
+		for t := sequenceLength - 1; t >= 0; t-- {
+			backwardHidden, backwardCell = m.lstmStep(t, tokenIds, m.BackwardLSTMWeights, &m.BackwardLSTMState, backwardHidden, backwardCell)
+			backwardHiddenStates[t] = make([]float64, m.HiddenSize)
+			copy(backwardHiddenStates[t], backwardHidden)
+		}
+	}()
+	wg.Wait()
 
 	return forwardHiddenStates, backwardHiddenStates
 }
@@ -404,12 +453,18 @@ func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, to
 		forwardHiddenError := combinedHiddenStateError[:m.HiddenSize]
 		backwardHiddenError := combinedHiddenStateError[m.HiddenSize:]
 
-		m.backpropagateBackwardLSTM(t, tokenIds, backwardHiddenError)
-
-		m.backpropagateForwardLSTM(t, tokenIds, forwardHiddenError)
-
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			m.backpropagateBackwardLSTM(t, tokenIds, backwardHiddenError)
+		}()
+		go func() {
+			defer wg.Done()
+			m.backpropagateForwardLSTM(t, tokenIds, forwardHiddenError)
+		}()
+		wg.Wait()
 	}
-
 }
 
 func (m *BiLSTMModel) resetGradients() {
@@ -497,24 +552,26 @@ func (m *BiLSTMModel) backpropagateBackwardLSTM(t int, tokenIds []int, backwardH
 	// Precompute gate errors
 	weightErrors := []([]float64){inputError, forgetError, outputError, candidateError}
 
-	// Precompute inputEmbedding
+	// Precompute often used data
 	inputEmbedding := embed(tokenIds[t], m.VocabSize)
-	// Precompute previous hidden state (if t > 0)
-	var prevHiddenState []float64
+	var previousHiddenState []float64
 	if t > 0 {
-		prevHiddenState = m.BackwardLSTMState.HiddenStates[t-1]
+		previousHiddenState = m.BackwardLSTMState.HiddenStates[t-1]
 	}
 
-	for i := range m.BackwardLSTMWeights.InputWeights {
-		for j := range m.BackwardLSTMWeights.InputWeights[i] {
-			m.Gradients.BackwardInputWeightGradients[i][j] += weightErrors[i/m.HiddenSize][i%m.HiddenSize] * inputEmbedding[j]
-		}
-	}
+	// Iterate over each set of weights (input, forget, output, candidate)
+	for weightSetIndex, gateErrorSet := range weightErrors {
+		// Iterate over each hidden unit's weights in the current set
+		for hiddenUnitIndex, weightError := range gateErrorSet {
 
-	for i := range m.BackwardLSTMWeights.HiddenWeights {
-		for j := range m.BackwardLSTMWeights.HiddenWeights[i] {
-			if t > 0 {
-				m.Gradients.BackwardHiddenWeightGradients[i][j] += weightErrors[i/m.HiddenSize][i%m.HiddenSize] * prevHiddenState[j]
+			if weightSetIndex < len(m.BackwardLSTMWeights.InputWeights)/m.HiddenSize {
+				for inputIndex, inputValue := range inputEmbedding {
+					m.Gradients.BackwardInputWeightGradients[hiddenUnitIndex+weightSetIndex*m.HiddenSize][inputIndex] += weightError * inputValue
+				}
+			} else if t > 0 {
+				for previousHiddenUnitIndex, previousHiddenValue := range previousHiddenState {
+					m.Gradients.BackwardHiddenWeightGradients[hiddenUnitIndex+weightSetIndex*m.HiddenSize][previousHiddenUnitIndex] += weightError * previousHiddenValue
+				}
 			}
 		}
 	}

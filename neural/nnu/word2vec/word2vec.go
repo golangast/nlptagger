@@ -37,7 +37,7 @@ type SimpleWord2Vec struct {
 	// Hyperparameters and network configuration
 	LearningRate        float64
 	MaxGrad             float64
-	HiddenSize int
+	HiddenSize          int
 	SimilarityThreshold float64
 	Window              int
 	Epochs              int
