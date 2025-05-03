@@ -1,3 +1,8 @@
+/*
+Package bilstm_model implements a Bidirectional LSTM (BiLSTM) model for semantic role labeling (SRL).
+
+The BiLSTM model learns to understand the role of each word in a sentence by analyzing it in both forward and backward directions.
+*/
 package bilstm_model
 
 import (
@@ -45,6 +50,28 @@ type Gradients struct {
 	BackwardInputWeightGradients  [][]float64
 	BackwardHiddenWeightGradients [][]float64
 	BackwardBiasGradients         []float64
+}
+
+// WeightIterator is used to iterate over the weights.
+type WeightIterator struct {
+	i       int
+	j       int
+	maxI    int
+	maxJ    int
+	current *BiLSTMModel
+}
+
+func NewWeightIterator(m *BiLSTMModel) *WeightIterator {
+	if m == nil || m.ForwardLSTMWeights.InputWeights == nil {
+		return &WeightIterator{maxI: 0, maxJ: 0, current: m}
+	}
+	return &WeightIterator{
+		i:       0,
+		j:       0,
+		maxI:    len(m.ForwardLSTMWeights.InputWeights),
+		maxJ:    len(m.ForwardLSTMWeights.InputWeights[0]),
+		current: m,
+	}
 }
 
 // BackwardWeightIterator is used to iterate over the weights.
@@ -96,6 +123,28 @@ func NewBiLSTMModel(vocabSize, hiddenSize, outputSize int) *BiLSTMModel {
 	model.InitializeOutputLayer(hiddenSize)
 	initializeWeights(model)
 	return model
+}
+
+func (iter *WeightIterator) Next() bool {
+	if iter.current == nil || iter.current.ForwardLSTMWeights.InputWeights == nil {
+		return false
+	}
+	if iter.i >= iter.maxI {
+		return false
+	}
+	if iter.j < iter.maxJ-1 {
+		iter.j++
+	} else {
+		iter.j = 0
+		iter.i++
+	}
+	if iter.i >= iter.maxI {
+		return false
+	}
+	return true
+}
+func (iter *WeightIterator) Value() (int, int) {
+	return iter.i, iter.j
 }
 
 func (iter *BackwardWeightIterator) Next() bool {
@@ -441,12 +490,7 @@ func (m *BiLSTMModel) Backpropagate(probabilities [][]float64, roleIDs []int, to
 	forwardHiddenStates, backwardHiddenStates := m.computeHiddenStates(tokenIds) // [][]float64
 	hiddenStates := combineHiddenStates(forwardHiddenStates, backwardHiddenStates)
 	for t := sequenceLength - 1; t >= 0; t-- {
-		// scalculateOutputErrors := time.Now()
-
 		outputErrors := m.calculateOutputErrors(probabilities[t], roleIDs, t)
-
-		// dcalculateOutputErrors := time.Since(scalculateOutputErrors)
-		// fmt.Printf("calculateOutputErrors took %v to complete\n", dcalculateOutputErrors)
 		m.updateOutputLayerGradients(outputErrors, hiddenStates[t])
 		combinedHiddenStateError := matVecMul(outputWeightsT, outputErrors)
 
@@ -613,19 +657,34 @@ func (m *BiLSTMModel) backpropagateForwardLSTM(t int, tokenIds []int, forwardHid
 		m.Gradients.ForwardBiasGradients[i] += forwardGateErrors[i] + forwardGateErrors[m.HiddenSize+i] + forwardGateErrors[2*m.HiddenSize+i] + forwardGateErrors[3*m.HiddenSize+i]
 	}
 
-	// Precompute inputEmbedding and prevHiddenState
+	// Okay, so first, we're getting a special number called inputEmbedding!
+	// It's like a secret code for each word. We get it by using the word's ID (tokenId) and a big list of words (VocabSize)!
 	inputEmbedding := embed(tokenIds[t], m.VocabSize)
+	// Now, we need to see what happened in the last step (if there was one)!
+	// That's where the prevHiddenState comes in.
 	var prevHiddenState []float64
+	// If this is NOT the first step (t > 0), then we grab the prevHiddenState from a list of states!
 	if t > 0 {
 		prevHiddenState = m.ForwardLSTMState.HiddenStates[t-1]
 	}
 
-	// Update ForwardInputWeightGradients and ForwardHiddenWeightGradients
-	for j := range m.ForwardLSTMWeights.InputWeights[0] {
-		for i := range m.ForwardLSTMWeights.InputWeights {
-			m.Gradients.ForwardInputWeightGradients[i][j] += forwardGateErrors[i] * inputEmbedding[j]
-		}
+	// Next up is a weightIterator, it's like a magical helper that helps us go through all the weights!
+	weightIterator := NewWeightIterator(m)
+	// Now, we loop through each weight, getting two numbers, i and j!
+	for weightIterator.Next() {
+		i, j := weightIterator.Value()
+
+		// We figure out a special number called linearIndex using i.
+		linearIndex := i
+		// Here's the cool part! We're updating something called
+		// ForwardInputWeightGradients with some calculations. It's like
+		// teaching the computer to understand words better!
+		// forwardGateErrors are like errors or things that went wrong in our understanding.
+		// inputEmbedding is like our special code for the current word.
+		// We are telling the computer to understand the word better by looking at the forward gate error!
+		m.Gradients.ForwardInputWeightGradients[linearIndex][j] += forwardGateErrors[linearIndex] * inputEmbedding[j]
 	}
+
 	for j := range m.ForwardLSTMWeights.HiddenWeights[0] {
 		for i := range m.ForwardLSTMWeights.HiddenWeights {
 			if t > 0 {

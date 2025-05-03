@@ -12,6 +12,8 @@
     pkgs.zsh
     pkgs.nano
     pkgs.sudo
+    pkgs.graphviz
+
     
   ];
   # Sets environment variables in the workspace
