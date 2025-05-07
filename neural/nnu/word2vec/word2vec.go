@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/golangast/nlptagger/neural/nn/g"
@@ -24,9 +25,11 @@ type Vector []float64
 
 type SimpleWord2Vec struct {
 	// Core word representation
-	Vocabulary  map[string]int
-	WordVectors map[int][]float64
-	VectorSize  int
+	Vocabulary   map[string]int
+	WordVectors  map[int][]float64
+	VectorSize   int
+	NgramVectors map[string][]float64
+	VocabSize    int
 
 	// Context and semantic information
 	ContextEmbeddings map[string][]float64
@@ -41,13 +44,32 @@ type SimpleWord2Vec struct {
 	SimilarityThreshold float64
 	Window              int
 	Epochs              int
+	NegativeSamples     int
+	UseCBOW             bool
+	NgramSize           int
 
 	// Weights and biases (neural network parameters)
 	Weights [][]float64
 	Biases  [][]float64
 	Ann     *g.ANN
+	
+	//MinWordFrequency
+	MinWordFrequency    int
 
 	// Consider if any new fields should be grouped here based on how they are used
+}
+
+// generateNgrams generates character n-grams for a word.
+func generateNgrams(word string, n int) []string {
+	var ngrams []string
+	word = "#" + word + "#" // Pad with special characters
+	for i := 0; i <= len(word)-n; i++ {
+		ngrams = append(ngrams, word[i:i+n])
+	}
+	if len(ngrams) == 0 {
+		ngrams = append(ngrams, word)
+	}
+	return ngrams
 }
 
 // convertToMap converts WordVectors to a map[string][]float64.
@@ -338,11 +360,169 @@ func LoadModel(filename string) (*SimpleWord2Vec, error) {
 	return &sw2v, nil
 }
 
+// Train implements a simplified Skip-gram model for training word embeddings.
 func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
-	sw2v.Epochs = 2000
-	sw2v.LearningRate = 0.01
-	for i := 0; i < sw2v.Epochs; i++ {
-		//Here you need to add the Train method
+	// Initialize default hyperparameters if not set
+	if sw2v.Epochs == 0 {
+		sw2v.Epochs = 100 // Reduced for demonstration
+	}
+	if sw2v.LearningRate == 0.0 {
+		sw2v.LearningRate = 0.01
+	}
+	if sw2v.Window == 0 {
+		sw2v.Window = 2
+	}
+	if sw2v.NegativeSamples == 0 {
+		sw2v.NegativeSamples = 5
+	}
+	if sw2v.MinWordFrequency == 0 {
 	}
 
+	// Build vocabulary and initialize word vectors if they are nil
+	if sw2v.Vocabulary == nil {
+		sw2v.Vocabulary = make(map[string]int)
+		wordCounts := make(map[string]int)
+		for _, sentence := range trainingData {
+			words := strings.Fields(sentence)
+			for _, word := range words {
+				wordCounts[word]++
+			}
+		}
+		
+		// Filter out words below the minimum frequency threshold
+		filteredWords := make([]string, 0)
+		for word, count := range wordCounts {
+			if count >= sw2v.MinWordFrequency {
+				filteredWords = append(filteredWords, word)
+			}
+		}
+
+		// Sort the words for deterministic vocabulary assignment
+		sort.Strings(filteredWords)
+
+		// Add the filtered words to the vocabulary
+		sw2v.Vocabulary[sw2v.UNKToken] = 0 // Reserve index 0 for UNK token
+		wordCount := 1
+		for _, word := range filteredWords {
+			sw2v.Vocabulary[word] = wordCount
+			wordCount++
+		}
+		sw2v.VocabSize = wordCount
+	}
+
+	if sw2v.WordVectors == nil {
+		sw2v.WordVectors = make(WordVectors)
+		for _, index := range sw2v.Vocabulary {
+			sw2v.WordVectors[index] = make([]float64, sw2v.VectorSize)
+			for i := 0; i < sw2v.VectorSize; i++ {
+				sw2v.WordVectors[index][i] = rand.Float64()
+			}
+			// Update the vocabulary size after initialization
+			if index >= sw2v.VocabSize {
+				sw2v.VocabSize = index + 1
+			}
+		}
+	}
+
+	if sw2v.NgramVectors == nil {
+		sw2v.NgramVectors = make(map[string][]float64)
+	}
+	if sw2v.NgramSize == 0 {
+		sw2v.NgramSize = 3
+	}
+	// Create a list of word indices for negative sampling
+	wordIndices := make([]int, sw2v.VocabSize)
+	for i := range wordIndices {
+		wordIndices[i] = i
+	}
+
+	var totalLoss float64
+	var iterationCount int
+
+	// Main training loop
+	for i := 0; i < sw2v.Epochs; i++ {
+		totalLoss = 0
+		var learningRate = sw2v.LearningRate - sw2v.LearningRate*0.99*float64(i)/float64(sw2v.Epochs)
+
+		for _, sentence := range trainingData {
+			words := strings.Fields(sentence)
+			if sw2v.UseCBOW {
+				for j, targetWord := range words {
+					_, ok := sw2v.Vocabulary[targetWord]
+					if !ok {
+						_ = sw2v.Vocabulary[sw2v.UNKToken]
+					}
+					contextWords := make([]string, 0)
+					for k := -sw2v.Window; k <= sw2v.Window; k++ {
+						if k == 0 || j+k < 0 || j+k >= len(words) {
+							continue
+						}
+						contextWords = append(contextWords, words[j+k])
+					}
+					if len(contextWords) == 0 {
+						continue
+					}
+					var contextVector []float64
+					for _, contextWord := range contextWords {
+						contextIndex, ok := sw2v.Vocabulary[contextWord]
+						if !ok {
+							contextIndex = sw2v.Vocabulary[sw2v.UNKToken]
+						}
+						if contextVector == nil {
+							contextVector = make([]float64, sw2v.VectorSize)
+						}
+						for index, value := range sw2v.WordVectors[contextIndex] {
+							contextVector[index] += value
+						}
+					}
+
+					output := sw2v.ForwardPass([]string{targetWord})
+					sw2v.LearningRate = learningRate
+					sw2v.Backpropagate(output, contextVector)
+
+					for n := 0; n < sw2v.NegativeSamples; n++ {
+						negIndex := wordIndices[rand.IntN(len(wordIndices))]
+						if contains(contextWords, sw2v.getWordByIndex(negIndex)) {
+							continue
+						}
+						sw2v.Backpropagate(output, sw2v.WordVectors[negIndex])
+					}
+				}
+			} else {
+				for j, targetWord := range words {
+					_, ok := sw2v.Vocabulary[targetWord]
+					if !ok {
+						_ = sw2v.Vocabulary[sw2v.UNKToken]
+					}
+					for k := -sw2v.Window; k <= sw2v.Window; k++ {
+						if k == 0 || j+k < 0 || j+k >= len(words) {
+							continue
+						}
+						contextWord := words[j+k]
+						contextIndex, ok := sw2v.Vocabulary[contextWord]
+						if !ok {
+							contextIndex = sw2v.Vocabulary[sw2v.UNKToken]
+						}
+						output := sw2v.ForwardPass([]string{targetWord})
+						sw2v.LearningRate = learningRate
+						sw2v.Backpropagate(output, sw2v.WordVectors[contextIndex])
+
+						// Negative samples
+						for n := 0; n < sw2v.NegativeSamples; n++ {
+							negIndex := wordIndices[rand.IntN(len(wordIndices))]
+							if negIndex == contextIndex {
+                continue
+							}
+							if sw2v.WordVectors[negIndex] == nil{
+								sw2v.WordVectors[negIndex] = make([]float64, sw2v.VectorSize)
+							}
+							sw2v.Backpropagate(output, sw2v.WordVectors[negIndex])
+						}
+					}
+				}
+			}
+		}
+
+		fmt.Printf("Epoch %d, Loss: %f\n", i, totalLoss/float64(iterationCount+1))
+	}
 }

@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/golangast/nlptagger/neural/nn/semanticrole"
 	"github.com/golangast/nlptagger/neural/nnu"
 	"github.com/golangast/nlptagger/neural/nnu/intent"
+	"github.com/golangast/nlptagger/neural/nnu/rag"
 	"github.com/golangast/nlptagger/neural/nnu/train"
 	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 )
@@ -35,26 +38,26 @@ type WordExample crf_model.WordExample
 type TrainingExample crf_model.TrainingExample
 type ViterbiOutput crf_model.ViterbiOutput
 
-// func init() {
-// 	flag.StringVar(&model, "model", "true", "whether or not to use model or manual")
-// 	flag.IntVar(&hiddensize, "hiddensize", 100, "hiddensize determines the number of neurons in the hidden layer")
-// 	flag.IntVar(&vectorsize, "vectorsize", 100, "VectorSize can allow for a more nuanced representation of words")
-// 	flag.IntVar(&window, "window", 10, "Context window size")
-// 	flag.IntVar(&epochs, "epochs", 1, "Number of training epochs")
-// 	flag.Float64Var(&learningrate, "learningrate", 0.01, "Learning rate")
-// 	flag.Float64Var(&maxgrad, "maxgrad", 20, "updates to the model's weights are kept within a reasonable range")
-// 	flag.Float64Var(&similaritythreshold, "similaritythreshold", .6, "Its purpose is to refine the similarity calculations, ensuring a tighter definition of similarity and controlling the results")
-// 	flag.StringVar(&logfile, "logFile", "train.log", "Path to the log file")
-// 	flag.Parse()
-// 	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-// 	if err != nil {
-// 		log.Fatalf("error opening file: %v", err)
-// 	}
-// 	defer f.Close()
-// 	log.SetOutput(f)
-// 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-// 	log.Printf("Starting training with model=%s, epochs=%d, learningRate=%f, vectorSize=%d, hiddenSize=%d, maxGrad=%f, window=%d", model, epochs, learningrate, vectorsize, hiddensize, maxgrad, window) // Log hyperparameters
-// }
+func init() {
+	flag.StringVar(&model, "model", "true", "whether or not to use model or manual")
+	flag.IntVar(&hiddensize, "hiddensize", 100, "hiddensize determines the number of neurons in the hidden layer")
+	flag.IntVar(&vectorsize, "vectorsize", 100, "VectorSize can allow for a more nuanced representation of words")
+	flag.IntVar(&window, "window", 10, "Context window size")
+	flag.IntVar(&epochs, "epochs", 1, "Number of training epochs")
+	flag.Float64Var(&learningrate, "learningrate", 0.01, "Learning rate")
+	flag.Float64Var(&maxgrad, "maxgrad", 20, "updates to the model's weights are kept within a reasonable range")
+	flag.Float64Var(&similaritythreshold, "similaritythreshold", .6, "Its purpose is to refine the similarity calculations, ensuring a tighter definition of similarity and controlling the results")
+	flag.StringVar(&logfile, "logFile", "train.log", "Path to the log file")
+	flag.Parse()
+	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Printf("Starting training with model=%s, epochs=%d, learningRate=%f, vectorSize=%d, hiddenSize=%d, maxGrad=%f, window=%d", model, epochs, learningrate, vectorsize, hiddensize, maxgrad, window) // Log hyperparameters
+}
 
 /*
 check if you are running it manually or not.
@@ -68,6 +71,7 @@ func main() {
 	trainWord2VecModel()
 }
 
+// ... (rest of your existing code, variable declarations, etc.)
 func trainWord2VecModel() {
 
 	var sw2v *word2vec.SimpleWord2Vec
@@ -114,19 +118,72 @@ func trainWord2VecModel() {
 		fmt.Println("Error saving the model:", err)
 	}
 
-	i := intent.IntentClassifier{}
-	com := InputScanDirections("what would you like to do?")
-	intents, err := i.ProcessCommand(com, sw2v.Ann.Index, c)
-	if err != nil {
-		fmt.Println("Error in ProcessCommand:", err)
+	// Print the contents of the vocabulary and word vectors
+	fmt.Println("Vocabulary Contents:")
+	for word, index := range sw2v.Vocabulary {
+		fmt.Printf("  %s: %d\n", word, index)
 	}
-	fmt.Println("~~~ this is the intent: ", intents)
+	fmt.Println("\nWord Vector Contents:")
+	for index, vector := range sw2v.WordVectors {
+		fmt.Printf("  %d: %v\n", index, vector)
+	}
+
+	i := intent.IntentClassifier{}
+	//com := InputScanDirections("what would you like to do?")
+
+	intents, err := i.ProcessCommand("generate a webserver", sw2v.Ann.Index, c)
+	if err != nil {
+		fmt.Println("Error with ProcessCommand", err)
+	}
+
+	// Embed the command (user input) using the Word2Vec model.
+	commandVector, err := embedCommand("generate a webserver", sw2v)
+	if err != nil {
+		fmt.Println("Error embedding command:", err)
+		return
+	}
+
 	myModel, err := semanticrole.NewSemanticRoleModel("word2vec_model.gob", "bilstm_model.gob", "role_map.gob")
 	if err != nil {
 		fmt.Println("Error creating SemanticRoleModel:", err)
 	} else {
 		fmt.Println("Semantic Role Model:", myModel)
 	}
+	// Load RAG documents.
+
+	documentFilename := "datas/ragdata/ragdocs.txt" // Or "your_rag_data.json"
+
+	ragDocs, err := rag.ReadPlainTextDocuments(documentFilename, sw2v) // Use the new function
+	if err != nil {
+		fmt.Println("Error reading document:", err)
+		return
+	}
+
+	// fmt.Println("ragdocs before read:", ragDocs)
+	if ragDocs.Documents == nil {
+		fmt.Println("ragDocs is nil after reading the file")
+		return
+	}
+
+	ragDocs.CalculateIDF() // Corrected the call to CalculateIDF
+
+	relevantDocs := ragDocs.Search(commandVector, "generate a webserver named jim and handler named jill", similaritythreshold)
+
+	// Incorporate relevant documents into the response.
+	fmt.Println("~~~ this is the intent: ", intents+"\n")
+	fmt.Println(" ")
+	// add the docs information here
+	if len(relevantDocs) > 0 {
+		for i, doc := range relevantDocs {
+			fmt.Println("Relevant Doc:", i, "--", doc.Content)
+		}
+		fmt.Println("Number of relevant documents found:", len(relevantDocs))
+	} else {
+		fmt.Println("No relevant documents found.")
+	}
+
+	relevantDocs = ragDocs.Search(commandVector, "generate a webserver named jim and handler named jill", similaritythreshold)
+	fmt.Println("MyModel:", myModel)
 
 }
 
@@ -142,4 +199,35 @@ func InputScanDirections(directions string) string {
 	} else {
 		return ""
 	}
+}
+
+// embedCommand embeds the command using the Word2Vec model.
+func embedCommand(command string, sw2v *word2vec.SimpleWord2Vec) ([]float64, error) {
+	words := strings.Split(command, " ")
+	var embeddings [][]float64
+	for _, word := range words {
+		if vector, ok := sw2v.WordVectors[sw2v.Vocabulary[word]]; ok {
+			embeddings = append(embeddings, vector)
+		} else {
+			embeddings = append(embeddings, sw2v.WordVectors[sw2v.Vocabulary[sw2v.UNKToken]]) // Use UNK token embedding if word not found
+		}
+
+	}
+
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings found for command")
+	}
+
+	// Average the embeddings to get a command vector
+	commandVector := make([]float64, len(embeddings[0]))
+	for _, embedding := range embeddings {
+		for i, val := range embedding {
+			commandVector[i] += val
+		}
+	}
+	for i := range commandVector {
+		commandVector[i] /= float64(len(embeddings))
+	}
+
+	return commandVector, nil
 }

@@ -13,6 +13,7 @@
     pkgs.nano
     pkgs.sudo
     pkgs.graphviz
+    pkgs.direnv
 
     
   ];

@@ -1,0 +1,22 @@
+[
+  {
+    "ID": "1",
+    "Content": "This is a test document for Retrieval Augmented Generation (RAG). RAG is a powerful technique that enhances large language models (LLMs) by grounding them in specific knowledge."
+  },
+  {
+    "ID": "2",
+    "Content": "It works by retrieving relevant information from a database and using it to inform the LLM's responses. This makes the LLM more accurate, reliable, and context-aware."
+  },
+  {
+    "ID": "3",
+    "Content": "RAG's applications are diverse. One of the prominent ones is question answering system. The system can improve its accuracy and relevance. RAG allows user to use its own data."
+  },
+  {
+    "ID": "4",
+    "Content": "With RAG's ability to learn from external knowledge bases, it will become more powerful. RAG is also helpful to provide source of the information."
+  },
+  {
+    "ID": "5",
+    "Content": "This is an example of how RAG work in the model. More document will be added later."
+  }
+]

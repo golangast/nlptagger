@@ -1016,3 +1016,17 @@
 2025/04/27 10:29:54 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
 2025/04/27 11:00:23 main.go:40: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
 2025/04/27 15:46:15 main.go:41: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10, save=%!d(string=true)
+2025/05/07 21:02:22 main.go:59: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 21:53:03 main.go:59: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 21:55:02 main.go:59: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:32:09 main.go:59: Starting training with model=true, epochs=100, learningRate=0.100000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:33:10 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:36:43 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:48:47 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:50:26 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:52:06 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:54:31 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 22:58:10 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 23:19:09 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 23:20:02 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
+2025/05/07 23:21:12 main.go:59: Starting training with model=true, epochs=1, learningRate=0.010000, vectorSize=100, hiddenSize=100, maxGrad=20.000000, window=10
