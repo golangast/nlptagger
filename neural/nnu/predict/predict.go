@@ -252,7 +252,7 @@ func PredictTags(nn *nnu.SimpleNN, sentence []string) ([]string, []string, []str
 			// Add new token to vocabulary and update the model.gob file
 			tokenVocab = AddNewTokenToVocab(token, tokenVocab)
 			tokenIndex = tokenVocab[token] // Use the newly assigned index
-			if err := saveTokenVocabToGob("model.gob", tokenVocab); err != nil {
+			if err := saveTokenVocabToGob("./gob_models/model.gob", tokenVocab); err != nil {
 				log.Printf("Error saving vocabulary to GOB: %v", err)
 				// Handle error appropriately, e.g., return an error or a default value
 			}
@@ -295,9 +295,9 @@ func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]i
 // CreateTokenVocab creates or loads the token vocabulary.
 func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 	// Check if the GOB file exists
-	if _, err := os.Stat("model.gob"); err == nil {
+	if _, err := os.Stat("./gob_models/model.gob"); err == nil {
 		// Load vocabulary from GOB file
-		tokenVocab, err := loadTokenVocabFromGob("model.gob")
+		tokenVocab, err := loadTokenVocabFromGob("./gob_models/model.gob")
 		if err != nil {
 			log.Println("Error loading vocabulary from GOB:", err)
 			return make(map[string]int) // Return empty map on error
@@ -336,7 +336,7 @@ func createAndSaveTokenVocab(trainingData []tag.Tag) map[string]int {
 	}
 
 	// Save the vocabulary to GOB file
-	if err := saveTokenVocabToGob("model.gob", tokenVocab); err != nil {
+	if err := saveTokenVocabToGob("./gob_models/model.gob", tokenVocab); err != nil {
 		log.Println("Error saving vocabulary to GOB:", err)
 		return make(map[string]int) // Return empty map on error
 	}

@@ -353,13 +353,13 @@ func TrainAndSaveModel(modeldirectory string, sw2v *word2vec.SimpleWord2Vec) (*n
 	_, _, _, _, _, trainingData := vocab.CreateVocab(modeldirectory)
 
 	// Delete existing model file if it exists.
-	// if _, err := os.Stat("trained_model.gob"); err == nil {
-	// 	// If the file exists, remove it.
-	// 	if err := os.Remove("trained_model.gob"); err != nil {
-	// 		// If there's an error during removal, return an error.
-	// 		return nil, fmt.Errorf("error deleting model file: %w", err)
-	// 	}
-	// }
+	if _, err := os.Stat("./gob_models/trained_model.gob"); err == nil {
+		// If the file exists, remove it.
+		if err := os.Remove("./gob_models/trained_model.gob"); err != nil {
+			// If there's an error during removal, return an error.
+			return nil, fmt.Errorf("error deleting model file: %w", err)
+		}
+	}
 
 	// Load or train the neural network model.
 	nn, err := LoadModelOrTrainNew(trainingData, modeldirectory, sw2v)
@@ -369,7 +369,7 @@ func TrainAndSaveModel(modeldirectory string, sw2v *word2vec.SimpleWord2Vec) (*n
 
 	nnn, err := TrainModel(trainingData.Sentences, nn, sw2v)
 	// Save the trained model to a file.
-	if err := gobs.SaveModelToGOB(nnn, "trained_model.gob"); err != nil {
+	if err := gobs.SaveModelToGOB(nnn, "./gob_models/trained_model.gob"); err != nil {
 		return nil, fmt.Errorf("error saving model: %w", err)
 	}
 
@@ -386,7 +386,7 @@ func LoadModelOrTrainNew(trainingData *vocab.TrainingDataJSON, modeldirectory st
 		}
 	}()
 
-	nn, err := gobs.LoadModelFromGOB("trained_model.gob")
+	nn, err := gobs.LoadModelFromGOB("./gob_models/trained_model.gob")
 	if err != nil {
 		return nn, err
 	}
@@ -419,7 +419,7 @@ func LoadModelOrTrainNew(trainingData *vocab.TrainingDataJSON, modeldirectory st
 	fmt.Printf("Final Phrase Accuracy: %.2f%%\n", phraseaccuracy*100)
 	fmt.Printf("Final Dependency relation Accuracy: %.2f%%\n", draccuracy*100)
 	// Save the newly trained model
-	err = gobs.SaveModelToGOB(nn, "trained_model.gob")
+	err = gobs.SaveModelToGOB(nn, "./gob_models/trained_model.gob")
 	if err != nil {
 		return nil, fmt.Errorf("error saving model: %w", err)
 	}

@@ -98,19 +98,15 @@ func CosineSimilarityVecDense(a, b *VecDense) float64 {
 // Search function to find similar documents
 func (docs RagDocuments) Search(commandVector []float64, command string, similarityThreshold float64) []RagDocument {
 	// Remove preliminary filtering by directy considering all docs
-	filteredDocs := docs.Documents
 
 	var relevantDocs []RagDocument
-	for _, doc := range filteredDocs {
-
+	for _, doc := range docs.Documents {
 		commandVecDense := NewVecDense(len(commandVector))
 		commandVecDense.data = commandVector
 		similarity := CosineSimilarityVecDense(commandVecDense, &VecDense{data: doc.Embedding})
-		// fmt.Printf("Searching document: %s, Similarity: %f", doc.ID, similarity)
 
 		// Apply the similarity threshold
 		if similarity > 0.1 {
-			// fmt.Printf("Relevant document found: %s (Similarity: %f)", doc.ID, similarity)
 			relevantDocs = append(relevantDocs, *doc)
 			// fmt.Println("doc.ID:", doc.ID, "similarity:", similarity, "len(relevantDocs):", len(relevantDocs))
 		}
@@ -238,10 +234,8 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 		}
 	}
 
-	log.Println("Processed all lines in file:", filename)
-
 	if paragraph.Len() > 0 {
-		log.Printf("Processing paragraph: %s", paragraph.String())
+		fmt.Printf("Processing paragraph: %s", paragraph.String())
 		doc := &RagDocument{
 			ID:              fmt.Sprintf("paragraph-%d", len(docs.Documents)+1),
 			Content:         paragraph.String(),
@@ -253,8 +247,6 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 		if err != nil {
 			return docs, fmt.Errorf("error embedding paragraph: %w", err)
 		}
-		log.Printf("Embedding for paragraph: %s", paragraph.String())
-		log.Printf("Embedding result: %v", embedding)
 		doc.Embedding = embedding
 		paragraph.Reset()
 
@@ -266,7 +258,6 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 
 // embedParagraph embeds the paragraph using the Word2Vec model.
 func embedParagraph(paragraph string, sw2v *word2vec.SimpleWord2Vec) ([]float64, error) {
-	log.Println("Embedding paragraph:", paragraph)
 	words := strings.Fields(paragraph)
 	var filteredWords []string
 	for _, word := range words {
@@ -275,7 +266,6 @@ func embedParagraph(paragraph string, sw2v *word2vec.SimpleWord2Vec) ([]float64,
 		}
 	}
 	if len(filteredWords) == 0 {
-		log.Println("No filtered words found after stop word removal.")
 		return nil, fmt.Errorf("no embeddings found for paragraph after stop words")
 	}
 	var embeddings [][]float64

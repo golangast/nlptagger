@@ -1,8 +1,10 @@
 package intent
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"strings"
 
@@ -130,10 +132,17 @@ func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]fl
 	tokens := strings.Split(command, " ")
 	// 2. Train or load the Word2Vec embedding model
 	if ic.SemanticRoleModel == nil {
+
+		if _, err := os.Stat("./gob_models/bilstm_model.gob"); errors.Is(err, os.ErrNotExist) {
+			// path/to/whatever does not exist
+			fmt.Println("bilstm_model.gob does not exist")
+			train_bilstm.Train_bilstm()
+		}
+
 		ic.SemanticRoleModel, err = semanticrole.NewSemanticRoleModel(
-			"word2vec_model.gob",
-			"bilstm_model.gob",
-			"role_map.gob",
+			"./gob_models/trained_model.gob",
+			"./gob_models/bilstm_model.gob",
+			"./gob_models/role_map.gob",
 		)
 		if err != nil {
 			fmt.Println("failed to load semantic role model: %w", err)

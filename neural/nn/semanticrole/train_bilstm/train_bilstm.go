@@ -40,10 +40,10 @@ const (
 
 // Placeholder file paths
 const (
-	word2vecModelPath = "word2vec_model.gob"
-	trainingDataPath  = "datas/roledata/training_data.json" // Assumed format: "token|ROLE token|ROLE ..." per line
-	bilstmModelPath   = "bilstm_model.gob"
-	roleMapPath       = "role_map.gob"
+	word2vecModelPath = "./gob_models/trained_model.gob"
+	trainingDataPath  = "./datas/roledata/training_data.json" // Assumed format: "token|ROLE token|ROLE ..." per line
+	bilstmModelPath   = "./gob_models/bilstm_model.gob"
+	roleMapPath       = "./gob_models/role_map.gob"
 )
 
 func Train_bilstm() {

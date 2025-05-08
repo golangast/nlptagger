@@ -18,12 +18,6 @@ import (
 	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 )
 
-// var (
-// 	epochs, vectorsize, hiddensize, window     int
-// 	learningrate, maxgrad, similaritythreshold float64
-// 	logfile, model                             string
-// )
-
 var model = "true"
 var hiddensize = 100
 var vectorsize = 100
@@ -71,7 +65,6 @@ func main() {
 	trainWord2VecModel()
 }
 
-// ... (rest of your existing code, variable declarations, etc.)
 func trainWord2VecModel() {
 
 	var sw2v *word2vec.SimpleWord2Vec
@@ -113,19 +106,9 @@ func trainWord2VecModel() {
 	}
 
 	// Save the trained model
-	err = sw2v.SaveModel("trained_model.gob")
+	err = sw2v.SaveModel("./gob_models/trained_model.gob")
 	if err != nil {
 		fmt.Println("Error saving the model:", err)
-	}
-
-	// Print the contents of the vocabulary and word vectors
-	fmt.Println("Vocabulary Contents:")
-	for word, index := range sw2v.Vocabulary {
-		fmt.Printf("  %s: %d\n", word, index)
-	}
-	fmt.Println("\nWord Vector Contents:")
-	for index, vector := range sw2v.WordVectors {
-		fmt.Printf("  %d: %v\n", index, vector)
 	}
 
 	i := intent.IntentClassifier{}
@@ -142,8 +125,8 @@ func trainWord2VecModel() {
 		fmt.Println("Error embedding command:", err)
 		return
 	}
-
-	myModel, err := semanticrole.NewSemanticRoleModel("word2vec_model.gob", "bilstm_model.gob", "role_map.gob")
+	//./gob_models/word2vec_model.gob
+	myModel, err := semanticrole.NewSemanticRoleModel("./gob_models/trained_model.gob", "./gob_models/bilstm_model.gob", "./gob_models/role_map.gob")
 	if err != nil {
 		fmt.Println("Error creating SemanticRoleModel:", err)
 	} else {
@@ -151,9 +134,7 @@ func trainWord2VecModel() {
 	}
 	// Load RAG documents.
 
-	documentFilename := "datas/ragdata/ragdocs.txt" // Or "your_rag_data.json"
-
-	ragDocs, err := rag.ReadPlainTextDocuments(documentFilename, sw2v) // Use the new function
+	ragDocs, err := rag.ReadPlainTextDocuments("datas/ragdata/ragdocs.txt", sw2v) // Use the new function
 	if err != nil {
 		fmt.Println("Error reading document:", err)
 		return
@@ -183,7 +164,6 @@ func trainWord2VecModel() {
 	}
 
 	relevantDocs = ragDocs.Search(commandVector, "generate a webserver named jim and handler named jill", similaritythreshold)
-	fmt.Println("MyModel:", myModel)
 
 }
 
