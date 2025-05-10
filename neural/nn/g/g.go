@@ -1,3 +1,5 @@
+// Package g provides a basic implementation for an Approximate Nearest Neighbor search.
+
 package g
 
 import (
@@ -90,7 +92,7 @@ func (ann *ANN) NearestNeighbors(sentence string, vector []float64, k int) ([]Ne
 			neighbors = append(neighbors, Neighbor{Word: word, Vector: wordVector, Similarity: similarity, ContextualRelevance: contextualRelevance})
 
 		}
-		// trainingdata, err := LoadTrainingData("datas/training_data.json")
+		// trainingdata, err := LoadTrainingData("trainingdata/context/data/training_data.json")
 		// if err != nil {
 		// 	fmt.Println("Error loading training data:", err)
 		// }

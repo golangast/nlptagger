@@ -1,3 +1,4 @@
+// Package calc provides functions for calculating neural network performance metrics.
 package calc
 
 import (

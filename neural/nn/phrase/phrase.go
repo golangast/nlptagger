@@ -1,3 +1,5 @@
+// Package phrase provides a simple neural network for phrase tagging.
+
 package phrase
 
 import (

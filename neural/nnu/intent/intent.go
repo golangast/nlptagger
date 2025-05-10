@@ -1,3 +1,6 @@
+// Package intent provides functionality for interpreting user commands and determining their intent.
+// It utilizes dependency analysis, semantic role labeling, and contextual information.
+
 package intent
 
 import (
@@ -122,7 +125,7 @@ func LoadRoleData(filePath string) ([]semanticrole.SentenceRoleData, error) {
 func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]float64, c train.ContextRelevance) (string, error) {
 
 	tag := tagger.Tagging(command)
-	trainingdata, err := g.LoadTrainingData("datas/training_data.json")
+	trainingdata, err := g.LoadTrainingData("trainingdata/contextdata/training_data.json")
 	if err != nil {
 		fmt.Println("Error loading training data:", err)
 		return "", err

@@ -1,8 +1,5 @@
-/*
-Package bilstm_model implements a Bidirectional LSTM (BiLSTM) model for semantic role labeling (SRL).
-
-The BiLSTM model learns to understand the role of each word in a sentence by analyzing it in both forward and backward directions.
-*/
+// Package bilstm_model provides a Bidirectional LSTM for semantic role labeling.
+// It processes sentences forward and backward to understand word roles.
 package bilstm_model
 
 import (

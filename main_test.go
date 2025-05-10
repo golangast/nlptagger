@@ -114,7 +114,7 @@ func BenchmarkMain(b *testing.B) {
 		//ask command
 		//com := InputScanDirections("what would you like to do?")
 
-		com := "generate a webserver"
+		com := "generate a webserver named jim and handler named jill"
 
 		//process command
 		tokens := strings.Split(com, " ")

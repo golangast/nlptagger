@@ -11,11 +11,12 @@ import (
 	"sort"
 	"strings"
 
+// Package word2vec implements a basic Word2Vec model for creating word embeddings.
+
 	"github.com/golangast/nlptagger/neural/nn/g"
 )
 
 // SimpleWord2Vec is a basic Word2Vec implementation in Go.
-// Note: This is a highly simplified example for illustration. It
 // does NOT include negative sampling or other important optimizations.
 // WordVectors represents the word embeddings
 type WordVectors map[int][]float64

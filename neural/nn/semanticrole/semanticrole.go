@@ -1,3 +1,6 @@
+// Package semanticrole provides tools for semantic role labeling using a BiLSTM and word embeddings.
+// It defines data structures and functions for predicting the roles of tokens in a sentence.
+
 package semanticrole
 
 import (
@@ -5,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"os"
+	"strings"
 
 	"github.com/golangast/nlptagger/neural/nn/semanticrole/bilstm_model"
 	"github.com/golangast/nlptagger/neural/nnu/word2vec"
@@ -50,7 +53,6 @@ type RoleExample struct {
 	Roles  []string
 }
 
-
 func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 	tokenIDs := make([]int, len(tokens))
 	for i, token := range tokens {
@@ -68,8 +70,8 @@ func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 		return []string{}, nil // Return empty slice if no tokens
 
 	}
-	
-	trainingData, err := LoadRoleData("datas/roledata/training_data.json")
+
+	trainingData, err := LoadRoleData("trainingdata/roledata/training_data.json")
 	if err != nil {
 		fmt.Println("Error loading training data: ", err)
 		// Depending on your needs, you might want to return an error here
@@ -82,14 +84,14 @@ func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 		for _, sentenceData := range trainingData {
 			var exampleTokens []string
 			var exampleRoles []string
-		for _, roleData := range sentenceData.Tokens {
-			exampleTokens = append(exampleTokens, roleData.Token)
-			exampleRoles = append(exampleRoles, roleData.Role)
-		}
+			for _, roleData := range sentenceData.Tokens {
+				exampleTokens = append(exampleTokens, roleData.Token)
+				exampleRoles = append(exampleRoles, roleData.Role)
+			}
 			if strings.Join(exampleTokens, " ") == strings.Join(tokens, " ") {
 				matchingExample = &RoleExample{
 					Tokens: exampleTokens,
-					Roles: exampleRoles,
+					Roles:  exampleRoles,
 				}
 				break
 			}

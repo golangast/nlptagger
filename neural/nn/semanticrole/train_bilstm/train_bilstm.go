@@ -1,3 +1,5 @@
+// Package train_bilstm provides functions for training a BiLSTM model for Semantic Role Labeling.
+
 package train_bilstm
 
 import (
@@ -41,7 +43,7 @@ const (
 // Placeholder file paths
 const (
 	word2vecModelPath = "./gob_models/trained_model.gob"
-	trainingDataPath  = "./datas/roledata/training_data.json" // Assumed format: "token|ROLE token|ROLE ..." per line
+	trainingDataPath  = "./trainingdata/roledata/training_data.json" // Assumed format: "token|ROLE token|ROLE ..." per line
 	bilstmModelPath   = "./gob_models/bilstm_model.gob"
 	roleMapPath       = "./gob_models/role_map.gob"
 )

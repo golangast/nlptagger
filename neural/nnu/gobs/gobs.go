@@ -1,3 +1,6 @@
+// Package gobs handles saving and loading neural network models using the gob encoding.
+// gob is used for serialization of Go data structures.
+
 package gobs
 
 import (

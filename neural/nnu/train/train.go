@@ -1,3 +1,6 @@
+// Package train implements neural network training functions.
+// It handles loading data, preparing inputs, running training epochs,
+// and evaluating model accuracy.
 package train
 
 import (
@@ -449,7 +452,7 @@ func LoadTrainingDataFromJSON(filePath string) (*TrainingDataJSON, error) {
 }
 
 func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
-	trainingData, err := LoadTrainingDataFromJSON("data/training_data.json")
+	trainingData, err := LoadTrainingDataFromJSON("trainingdata/tagdata/nlp_training_data.json")
 	if err != nil {
 		fmt.Println("error loading training data: %w", err)
 	}

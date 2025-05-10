@@ -1,3 +1,4 @@
+// Package nnu implements simple neural network structures and operations.
 package nnu
 
 import (

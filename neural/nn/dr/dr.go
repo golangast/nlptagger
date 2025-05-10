@@ -1,3 +1,5 @@
+// Package dr implements a neural network for dependency relation tagging.
+
 package dr
 
 import (

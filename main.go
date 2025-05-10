@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golangast/nlptagger/crf/crf_model"
 	"github.com/golangast/nlptagger/neural/nn/g"
 	"github.com/golangast/nlptagger/neural/nn/semanticrole"
 	"github.com/golangast/nlptagger/neural/nnu"
@@ -27,10 +26,6 @@ var learningrate = 0.01
 var maxgrad = 20.0
 var similaritythreshold = .6
 var logfile = "train.log"
-
-type WordExample crf_model.WordExample
-type TrainingExample crf_model.TrainingExample
-type ViterbiOutput crf_model.ViterbiOutput
 
 func init() {
 	flag.StringVar(&model, "model", "true", "whether or not to use model or manual")
@@ -98,7 +93,7 @@ func trainWord2VecModel() {
 		return                                  // Exit if ANN creation fails
 	}
 
-	nn := nnu.NewSimpleNN("datas/tagdata/training_data.json")
+	nn := nnu.NewSimpleNN("trainingdata/tagdata/nlp_training_data.json")
 	// Train the model
 	c, err := train.JsonModelTrain(sw2v, nn)
 	if err != nil {
@@ -114,13 +109,13 @@ func trainWord2VecModel() {
 	i := intent.IntentClassifier{}
 	//com := InputScanDirections("what would you like to do?")
 
-	intents, err := i.ProcessCommand("generate a webserver", sw2v.Ann.Index, c)
+	intents, err := i.ProcessCommand("generate a webserver named jim and handler named jill", sw2v.Ann.Index, c)
 	if err != nil {
 		fmt.Println("Error with ProcessCommand", err)
 	}
 
 	// Embed the command (user input) using the Word2Vec model.
-	commandVector, err := embedCommand("generate a webserver", sw2v)
+	commandVector, err := embedCommand("generate a webserver named jim and handler named jill", sw2v)
 	if err != nil {
 		fmt.Println("Error embedding command:", err)
 		return
@@ -134,7 +129,7 @@ func trainWord2VecModel() {
 	}
 	// Load RAG documents.
 
-	ragDocs, err := rag.ReadPlainTextDocuments("datas/ragdata/ragdocs.txt", sw2v) // Use the new function
+	ragDocs, err := rag.ReadPlainTextDocuments("trainingdata/ragdata/ragdocs.txt", sw2v) // Use the new function
 	if err != nil {
 		fmt.Println("Error reading document:", err)
 		return

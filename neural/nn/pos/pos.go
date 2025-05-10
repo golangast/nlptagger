@@ -1,3 +1,4 @@
+// Package pos provides functions for Part-of-Speech tagging using a neural network.
 package pos
 
 import (

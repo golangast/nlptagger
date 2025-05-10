@@ -1,3 +1,6 @@
+// Package contextvector computes context vectors for text.
+// It's pretty simple, just averages word vectors for now.
+
 package contextvector
 
 import (

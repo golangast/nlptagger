@@ -1,3 +1,6 @@
+// Package vocab provides functions for creating and managing vocabularies
+// for natural language processing tasks.
+
 package vocab
 
 import (

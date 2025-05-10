@@ -1,3 +1,5 @@
+// Package rag provides functions for Retrieval Augmented Generation (RAG).
+
 package rag
 
 import (
@@ -209,7 +211,6 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 		if line == "" {
 
 			if paragraph.Len() > 0 {
-				log.Printf("Processing paragraph: %s", paragraph.String())
 				doc := &RagDocument{
 					ID:              fmt.Sprintf("paragraph-%d", len(docs.Documents)+1),
 					Content:         paragraph.String(),
@@ -235,7 +236,6 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 	}
 
 	if paragraph.Len() > 0 {
-		fmt.Printf("Processing paragraph: %s", paragraph.String())
 		doc := &RagDocument{
 			ID:              fmt.Sprintf("paragraph-%d", len(docs.Documents)+1),
 			Content:         paragraph.String(),

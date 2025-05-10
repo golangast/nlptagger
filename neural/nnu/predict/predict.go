@@ -1,3 +1,6 @@
+// Package predict handles predicting various tags for input text using a neural network.
+// It includes functions for forward passing, vocabulary handling, and loss calculation.
+
 package predict
 
 import (
@@ -57,8 +60,6 @@ func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, ph
 			return ""
 		}
 	}
-	// Make predictions
-
 	nnOutput := nn.ForwardPass(inputs)
 
 	// Predict each tag
@@ -74,7 +75,6 @@ func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, ph
 }
 
 func ForwardPassPos(nn *nnu.SimpleNN, inputs []float64) []float64 {
-	// Check if the inputs are nil or empty
 	if inputs == nil || len(inputs) == 0 {
 		log.Println("Warning: Empty or nil inputs provided to ForwardPassPos")
 		return []float64{} // Return an empty slice or handle this case as needed
@@ -278,9 +278,9 @@ func PredictTags(nn *nnu.SimpleNN, sentence []string) ([]string, []string, []str
 }
 
 func CreateVocab() (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
-	trainingData, err := LoadTrainingDataFromJSON("data/training_data.json")
+	trainingData, err := LoadTrainingDataFromJSON("trainingdata/tagdata/nlp_training_data.json")
 	if err != nil {
-		fmt.Printf("error loading training data: %w", err)
+		fmt.Println("error loading training data: ", err)
 	}
 	// Create vocabularies
 	tokenVocab := CreateTokenVocab(trainingData.Sentences)

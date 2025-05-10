@@ -1,5 +1,7 @@
 package ner
 
+// Package ner implements a basic neural network for Named Entity Recognition.
+
 import (
 	"fmt"
 
