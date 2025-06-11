@@ -1,1 +1,273 @@
-fdsfdsf
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NLPTagger - GitHub Readme Styled</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="card main-section">
+            <h1>NLPTagger</h1>
+            <p>A tagger for pos, ner, and phrases in Go.</p>
+            <p class="note">
+                This project is heavily under construction and will change a lot because I am learning as I am making and accuracy isn't #1 right now. When you need a program to understand context of commands.
+            </p>
+        </div>
+
+        <div class="card features-section">
+            <h2>General Info</h2>
+            <ul>
+                <li><strong>Tokenization:</strong> This is the very first step in most NLP pipelines. It involves breaking down text into individual units called tokens (words, punctuation marks, etc.). Tokenization is fundamental because it creates the building blocks for further analysis.</li>
+                <li><strong>Part-of-Speech (POS) Tagging:</strong> POS tagging assigns grammatical categories (noun, verb, adjective, etc.) to each token. It's a crucial step for understanding sentence structure and is often used as input for more complex tasks like phrase tagging.</li>
+                <li><strong>Named Entity Recognition (NER):</strong> NER identifies and classifies named entities (people, organizations, locations, dates, etc.) in text. This is more specific than POS tagging but still more generic than phrase tagging, as it focuses on individual entities rather than complete phrases.</li>
+                <li><strong>Dependency Parsing:</strong> Dependency parsing analyzes the grammatical relationships between words in a sentence, creating a tree-like structure that shows how words depend on each other. It provides a deeper understanding of sentence structure than phrase tagging, which focuses on contiguous chunks.</li>
+                <li><strong>Lemmatization and Stemming:</strong> These techniques reduce words to their base or root forms (e.g., "running" to "run"). They help to normalize text and improve the accuracy of other NLP tasks.</li>
+                <li><strong>Word2Vec:</strong> is a technique that represents words as numerical vectors capturing semantic relationships: words with similar meanings have closer vectors. This allows algorithms to understand and process text more effectively by leveraging word similarities.</li>
+                <li><strong>Semantic roles:</strong> describe the roles of words or phrases within a sentence, such as agent, action, or object. Identifying these roles helps to understand the meaning and relationships between different parts of a sentence.</li>
+            </ul>
+            <p class="note">
+                This project is used for tagging cli commands. It is not a LLM or trying to be. I am using it to generate go code but I made this completely separate so others can enjoy it.
+                I will keep working on it and hopefully improving the guessing of intent.
+            </p>
+        </div>
+
+        <div class="card basic-info-section">
+            <h2>Why build this?</h2>
+            <ul>
+                <li>Go never changes.</li>
+                <li>It is nice to not have terminal drop downs.</li>
+            </ul>
+
+            <h2>What does it do?</h2>
+            <p>It tags words for commands. I made an overview video on this project but there have been a lot of changes. <a href="YOUR_VIDEO_LINK_HERE">video</a>.</p>
+
+            <h2>Technologies</h2>
+            <p>Go</p>
+        </div>
+
+        <div class="card installation-section">
+            <h2>Requirements</h2>
+            <ul>
+                <li>Go 1.20+</li>
+            </ul>
+
+            <h2>Installation</h2>
+            <p>To install NLPTagger, use 'go get':</p>
+            <pre><code>go get github.com/golangast/nlptagger</code></pre>
+            <p>Or, to initialize a new project with NLPTagger using <code>gonew</code>:</p>
+            <pre><code>go install golang.org/x/tools/cmd/gonew@latest
+gonew github.com/golangast/nlptagger example.com/nlptagger</code></pre>
+        </div>
+
+        <div class="card repository-overview-section">
+            <h2>Repository overview</h2>
+            <p>Overview of the code:</p>
+            <ul>
+                <li><code>tagger/</code>: Core logic for tagging.</li>
+                <li><code>models/</code>: Contains pre-trained models.</li>
+                <li><code>cmd/</code>: Example usage and CLI tools.</li>
+                <li><code>test/</code>: Tests for the library.</li>
+            </ul>
+        </div>
+
+        <div class="card details-section">
+            <h2>Things to remember</h2>
+            <p>A larger <code>VectorSize</code> can allow for a more nuanced representation of words, but it also increases the computational cost of training and storage.</p>
+            <p>A larger hidden size usually allows the network to learn more complex patterns, but also increases the computational resources required.</p>
+            <p>By limiting the norm of the gradients to <code>maxGrad</code>, the updates to the model's weights are kept within a reasonable range, promoting more stable and effective training.</p>
+
+            <h2>Reference Commands</h2>
+            <pre><code>// Example command usage (replace with actual commands from the repo if available)
+nlptagger process "your text here"
+nlptagger train --model mymodel.json --data mydata.txt</code></pre>
+        </div>
+
+        <div class="card acknowledgements-section">
+            <h2>Special thanks</h2>
+            <ul>
+                <li>Go Team because they are gods.</li>
+                <li>Creators of <a href="https://github.com/golang/go">Go</a></li>
+            </ul>
+
+            <h2>Why Go?</h2>
+            <ul>
+                <li>Concurrency model with goroutines and channels.</li>
+                <li>Fast compilation times.</li>
+                <li>Strong standard library.</li>
+                <li>Static typing and strong tooling.</li>
+            </ul>
+
+            <h2>Just added</h2>
+            <p>Word2Vec integration and neural network for intent guessing.</p>
+        </div>
+    </div>
+</body>
+</html>
+
+
+<style>
+  body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f0f2f5; /* Light gray background */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    margin: 0;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Space between cards */
+}
+
+.card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+    padding: 30px;
+    transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+}
+
+.card:hover {
+    box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+}
+
+h1 {
+    font-size: 28px;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 22px;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #555;
+    margin-bottom: 16px; /* Default margin for paragraphs */
+}
+
+ul {
+    list-style: none; /* Remove default bullet points */
+    padding: 0;
+    margin: 0;
+    margin-bottom: 16px; /* Default margin for lists */
+}
+
+li {
+    font-size: 16px;
+    line-height: 1.8;
+    color: #555;
+    margin-bottom: 8px;
+    position: relative;
+    padding-left: 20px; /* Space for custom bullet */
+}
+
+li:last-child {
+    margin-bottom: 0;
+}
+
+li::before {
+    content: '•'; /* Custom bullet point */
+    color: #4CAF50; /* Green color for bullet */
+    font-size: 1.2em;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+li strong {
+    color: #333;
+    font-weight: 600;
+}
+
+pre {
+    background-color: #e8e8e8; /* Lighter gray for code block */
+    border-radius: 6px;
+    padding: 15px;
+    overflow-x: auto;
+    font-family: 'Roboto Mono', monospace; /* Monospaced font for code */
+    font-size: 14px;
+    color: #333;
+    white-space: pre-wrap; /* Ensures code wraps */
+    word-break: break-all; /* Breaks long words */
+    margin-bottom: 16px; /* Default margin for pre blocks */
+}
+
+code {
+    font-family: 'Roboto Mono', monospace; /* Monospaced font for code */
+    font-size: 85%;
+    background-color: rgba(27,31,35,.05); /* Light background for inline code */
+    border-radius: 3px;
+    padding: .2em .4em;
+    color: #007bff; /* Blue color for code inside pre */
+}
+
+a {
+    color: #007bff; /* Blue link color */
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.note {
+    background-color: #fff8e1; /* Light yellow background */
+    border-left: 4px solid #ffeb3b; /* Yellow left border */
+    padding: 15px;
+    margin-top: 15px; /* Space above note */
+    margin-bottom: 15px; /* Space below note */
+    border-radius: 4px;
+    font-size: 15px;
+    color: #856404; /* Darker yellow text */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card {
+        padding: 20px;
+    }
+
+    h1 {
+        font-size: 24px;
+    }
+
+    h2 {
+        font-size: 20px;
+    }
+
+    p, ul li {
+        font-size: 15px;
+    }
+
+    pre {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 20px 10px;
+    }
+    .card {
+        padding: 15px;
+    }
+}
+</style>
