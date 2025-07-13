@@ -11,6 +11,13 @@ import (
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
+const (
+	BOS_ID int = 1
+	EOS_ID int = 2
+	PAD_ID int = 0
+	UNK_ID int = 3
+)
+
 // checking and returning the tags
 func Tagging(text string) tag.Tag {
 

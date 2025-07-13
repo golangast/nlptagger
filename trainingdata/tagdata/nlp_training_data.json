@@ -1875,6 +1875,668 @@
                   "dep": "nmod"
               }
           ]
+      },
+      {
+          "tokens": [
+              "design",
+              "a",
+              "RESTful",
+              "API",
+              "for",
+              "product",
+              "management"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "ADJ",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_DESIGN_TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "configure",
+              "a",
+              "database",
+              "connection",
+              "pool"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CONFIGURE_TOOL",
+              "O",
+              "TOOL_DATABASE",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "user",
+              "interface",
+              "for",
+              "managing",
+              "orders"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "TOOL_INTERFACE",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "password",
+              "reset",
+              "functionality"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "logging",
+              "to",
+              "the",
+              "application"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "define",
+              "access",
+              "control",
+              "rules"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_DEFINE_TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ]
+      },
+      {
+          "tokens": [
+              "build",
+              "a",
+              "microservice",
+              "for",
+              "user",
+              "profiles"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_BUILD_TOOL",
+              "O",
+              "TOOL_MICROSERVICE",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "queue",
+              "for",
+              "processing",
+              "tasks"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "TOOL_QUEUE",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "caching",
+              "for",
+              "API",
+              "responses"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "input",
+              "validation",
+              "to",
+              "the",
+              "form"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "DET",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_ADD",
+              "O",
+              "O",
+              "O",
+              "O",
+              "TOOL_FORM"
+          ]
+      },
+      {
+          "tokens": [
+              "generate",
+              "API",
+              "documentation",
+              "with",
+              "swagger"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_GENERATE_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ]
+      },
+      {
+          "tokens": [
+              "configure",
+              "a",
+              "CI",
+              "CD",
+              "pipeline"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "TOOL",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_CONFIGURE_TOOL",
+              "O",
+              "TOOL",
+              "TOOL",
+              "TOOL"
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "scheduled",
+              "task",
+              "for",
+              "database",
+              "backups"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "ADJ",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "O",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "O",
+              "TOOL_TASK",
+              "O",
+              "TOOL_DATABASE",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "rate",
+              "limiting",
+              "for",
+              "API",
+              "calls"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "TOOL",
+              "O",
+              "O",
+              "TOOL",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "internationalization",
+              "support"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "TOOL",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "define",
+              "error",
+              "handling",
+              "strategies"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_DEFINE_TOOL",
+              "O",
+              "O",
+              "TOOL"
+          ]
+      },
+      {
+          "tokens": [
+              "build",
+              "a",
+              "chat",
+              "application",
+              "with",
+              "realtime",
+              "updates"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "ADJ",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_BUILD_TOOL",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "create",
+              "a",
+              "monitoring",
+              "dashboard",
+              "for",
+              "server",
+              "metrics"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "NOUN",
+              "ADP",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION_CREATE",
+              "O",
+              "TOOL",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_CREATE_TOOL",
+              "O",
+              "TOOL",
+              "TOOL",
+              "O",
+              "TOOL",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "implement",
+              "server",
+              "side",
+              "rendering"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_IMPLEMENT_TOOL",
+              "TOOL",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "add",
+              "a",
+              "webhook",
+              "for",
+              "processing",
+              "events"
+          ],
+          "posTag": [
+              "VERB",
+              "DET",
+              "NOUN",
+              "ADP",
+              "VERB",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "O",
+              "TOOL",
+              "O",
+              "O",
+              "O"
+          ],
+          "phraseTag": [
+              "ACTION_ADD_TOOL",
+              "O",
+              "TOOL_WEBHOOK",
+              "O",
+              "O",
+              "O"
+          ]
+      },
+      {
+          "tokens": [
+              "define",
+              "API",
+              "versioning",
+              "strategy"
+          ],
+          "posTag": [
+              "VERB",
+              "NOUN",
+              "NOUN",
+              "NOUN"
+          ],
+          "nerTag": [
+              "ACTION",
+              "TOOL",
+              "O",
+              "TOOL"
+          ],
+          "phraseTag": [
+              "ACTION_DEFINE_TOOL",
+              "TOOL",
+              "O",
+              "TOOL"
+          ]
       }
   ]
 }

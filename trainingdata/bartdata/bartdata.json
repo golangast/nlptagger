@@ -1,0 +1,147 @@
+[
+    {
+      "text": "summarize The quick brown fox jumps over the lazy dog.",
+      "summary": "A fox jumps over a dog."
+    },
+    {
+      "text": "summarize Natural language processing (NLP) is a subfield of linguistics, computer science, and artificial intelligence concerned with the interactions between computers and human (natural) languages.",
+      "summary": "NLP is a field focused on computer-human language interaction."
+    },
+    {
+      "text": "summarize BART is a denoising autoencoder for pretraining sequence-to-sequence models. It is trained by corrupting text with an arbitrary noising function and learning a model to reconstruct the original text.",
+      "summary": "BART is a model that reconstructs corrupted text."
+    },
+    {
+      "text": "hello",
+      "summary": "Hello! How can I help you today?"
+    },
+    {
+      "text": "what can you do?",
+      "summary": "I can summarize text using a BART model."
+    },
+    {
+      "text": "exit",
+      "summary": "Goodbye!"
+    },
+    {
+        "text": "generate a webserver named Jim",
+        "summary": "Okay, I am generating a webserver instance named Jim."
+      },
+      {
+        "text": "what are handlers?",
+        "summary": "Handlers are components of web servers that process incoming requests and generate responses."
+      },
+      {
+        "text": "define handler Kate",
+        "summary": "Kate is a handler, representing a specific set of code or configurations for request handling."
+      },
+      {
+        "text": "delete file example.txt",
+        "summary": "I will delete the file example.txt using operating system tools."
+      },
+      {
+        "text": "synchronize file data.csv",
+        "summary": "Ensuring all copies of data.csv are synchronized to prevent confusion."
+      },
+      {
+        "text": "create file new_document.txt",
+        "summary": "Creating a new file named new_document.txt programmatically."
+      },
+      {
+        "text": "read file config.json",
+        "summary": "Reading the contents of config.json."
+      },
+      {
+        "text": "write to file output.txt data: hello world",
+        "summary": "Writing 'hello world' to output.txt."
+      },
+      {
+        "text": "handle errors in file operations",
+        "summary": "Implementing proper error handling to prevent data loss during file operations."
+      },
+        {
+        "text": "check operating system for file paths",
+        "summary": "Checking the operating system to use the correct file paths."
+      },
+      {
+        "text": "read data from report.pdf",
+        "summary": "Accessing and reading data from the PDF file named report.pdf."
+      },
+      {
+        "text": "write log entry to server.log: server started successfully",
+        "summary": "Appending the message 'server started successfully' to the server log file."
+      },
+      {
+        "text": "delete temporary file cache.tmp",
+        "summary": "Removing the temporary file cache.tmp from the system."
+      },
+      {
+        "text": "create directory backups",
+        "summary": "Creating a new directory called 'backups' to store copies of files."
+      },
+      {
+        "text": "synchronize user profiles across servers",
+        "summary": "Initiating the process to synchronize user profile data across all connected servers."
+      },
+      {
+        "text": "ensure error handling for database operations",
+        "summary": "Implementing robust error handling for all database interactions."
+      },
+      {
+        "text": "check file permissions for config.yaml",
+        "summary": "Verifying the access permissions for the configuration file config.yaml."
+      },
+      {
+        "text": "generate a webserver instance for production",
+        "summary": "Provisioning a webserver instance optimized for production environments."
+      },
+      {
+        "text": "configure handler for API requests",
+        "summary": "Setting up a specific handler to process incoming API requests."
+      },
+      {
+        "text": "start webserver",
+        "summary": "Initiating the startup sequence for the webserver."
+      },
+      {
+        "text": "stop webserver Jim",
+        "summary": "Sending a command to gracefully shut down webserver Jim."
+      },
+      {
+        "text": "check status of webserver",
+        "summary": "Querying the current operational status of the webserver."
+      },
+      {
+        "text": "list files in current directory",
+        "summary": "Retrieving a list of all files present in the current working directory."
+      },
+      {
+        "text": "read the contents of script.sh",
+        "summary": "Reading and displaying the content of the shell script file script.sh."
+      },
+      {
+        "text": "write output to results.txt",
+        "summary": "Directing the program's output to a file named results.txt."
+      },
+      {
+        "text": "remove old log files",
+        "summary": "Deleting log files that are no longer needed to free up space."
+      },
+      {
+        "text": "create a new project folder called myproject",
+        "summary": "Making a new directory named myproject for a new project."
+      },
+      {
+        "text": "sync data with remote server",
+        "summary": "Synchronizing local data with a remote server to ensure consistency."
+      },
+      {
+        "text": "handle network errors",
+        "summary": "Implementing error handling specifically for network communication issues."
+      },
+      {
+        "text": "check available disk space",
+        "summary": "Querying the operating system for the amount of free disk space."
+      }
+  ]
+  

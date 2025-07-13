@@ -4,6 +4,8 @@ package rag
 
 import (
 	"bufio"
+	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -12,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/golangast/nlptagger/neural/nnu"
 	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 )
 
@@ -99,13 +102,11 @@ func CosineSimilarityVecDense(a, b *VecDense) float64 {
 
 // Search function to find similar documents
 func (docs RagDocuments) Search(commandVector []float64, command string, similarityThreshold float64) []RagDocument {
-	// Remove preliminary filtering by directy considering all docs
-
 	var relevantDocs []RagDocument
 	for _, doc := range docs.Documents {
 		commandVecDense := NewVecDense(len(commandVector))
 		commandVecDense.data = commandVector
-		similarity := CosineSimilarityVecDense(commandVecDense, &VecDense{data: doc.Embedding})
+		similarity := CosineSimilarityVecDense(commandVecDense, &VecDense{data: doc.Embedding}) // Use doc.Embedding directly here
 
 		// Apply the similarity threshold
 		if similarity > 0.1 {
@@ -185,6 +186,8 @@ func calculateTF(content string) map[string]float64 {
 	return tf
 }
 
+const trainingDataPath = ".././trainingdata/ragdata/rag_data.json"
+
 // ReadRagDocuments reads RagDocuments from a file, either JSON or plain text.
 func ReadRagDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (RagDocuments, error) {
 	if strings.HasSuffix(filename, ".txt") || strings.HasSuffix(filename, ".md") {
@@ -254,6 +257,57 @@ func ReadPlainTextDocuments(filename string, sw2v *word2vec.SimpleWord2Vec) (Rag
 
 	return docs, scanner.Err()
 
+}
+
+// averageEmbeddings calculates the average of a slice of embeddings.
+func averageEmbeddings(embeddings [][]float64, vectorSize int) []float64 {
+	averagedEmbedding := make([]float64, vectorSize)
+	if len(embeddings) == 0 {
+		return averagedEmbedding // Return zero vector if no embeddings
+	}
+
+	for _, embedding := range embeddings {
+		for i, val := range embedding {
+			averagedEmbedding[i] += val
+		}
+	}
+
+	// Divide by the number of embeddings to get the average
+	for i := range averagedEmbedding {
+		averagedEmbedding[i] /= float64(len(embeddings))
+	}
+
+	return averagedEmbedding
+}
+
+// generateQueryEmbedding generates an embedding for a query string
+// using the provided SimpleWord2Vec model.
+func GenerateQueryEmbedding(query string, sw2v *word2vec.SimpleWord2Vec) ([]float64, error) {
+	words := strings.Fields(strings.ToLower(query))
+	var filteredWords []string
+	for _, word := range words {
+		if !stopWords[word] && len(word) > 0 {
+			filteredWords = append(filteredWords, word)
+		}
+	}
+
+	if len(filteredWords) == 0 {
+		return make([]float64, sw2v.VectorSize), nil // Return zero vector if no words
+	}
+
+	var embeddings [][]float64
+	for _, word := range filteredWords {
+		if vocabIndex, ok := sw2v.Vocabulary[word]; ok {
+			if vector, ok := sw2v.WordVectors[vocabIndex]; ok {
+				embeddings = append(embeddings, vector)
+			}
+		}
+	}
+
+	if len(embeddings) == 0 {
+		return make([]float64, sw2v.VectorSize), nil // Return zero vector if no words found in vocabulary
+	}
+	return averageEmbeddings(embeddings, sw2v.VectorSize), nil
 }
 
 // embedParagraph embeds the paragraph using the Word2Vec model.
@@ -329,4 +383,302 @@ func NewG(layers, size int) *G {
 		input:  make([]float64, size),
 		output: make([]float64, size),
 	}
+}
+
+// SaveRagModelToGOB saves a SimpleNN model associated with RAG to a GOB file.
+func SaveRagModelToGOB(model *nnu.SimpleNN, filePath string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("error creating gob file: %w", err)
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(model)
+	if err != nil {
+		return fmt.Errorf("error encoding model to gob: %w", err)
+	}
+
+	return nil
+}
+
+// LoadRagModelFromGOB loads a SimpleNN model associated with RAG from a GOB file.
+func LoadRagModelFromGOB(filePath string) (*nnu.SimpleNN, error) {
+
+	if _, err := os.Stat(filePath); err == nil {
+		file, err := os.Open(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("error opening gob file: %w", err)
+		}
+		defer file.Close()
+
+		decoder := gob.NewDecoder(file)
+		var model nnu.SimpleNN
+		err = decoder.Decode(&model)
+		if err != nil {
+			return nil, fmt.Errorf("error decoding model from gob: %w", err)
+		}
+
+		return &model, nil
+	} else if os.IsNotExist(err) {
+		loadedNN := nnu.NewSimpleNN("trainingdata/tagdata/nlp_training_data.json")
+		err = SaveRagModelToGOB(loadedNN, filePath)
+		if err != nil {
+			fmt.Println("Error saving trained RAG model: ", err)
+		}
+		return loadedNN, nil
+
+	} else {
+		fmt.Println("Error checking file:", err)
+	}
+	return nil, nil
+
+}
+
+// RagForwardPass performs a forward pass through the neural network,
+// augmented with RAG. It takes a SimpleNN model, RagDocuments,
+// and a query embedding as input.
+func RagForwardPass(nn *nnu.SimpleNN, docs RagDocuments, queryEmbedding []float64) ([]float64, error) {
+	// The 'docs' parameter is a RagDocuments struct, which is expected // Updated comment
+	// to have its 'Documents' field populated with a slice of RagDocument.
+
+	// 1. Search for relevant documents using the query embedding
+	relevantDocs := docs.Search(queryEmbedding, "", 0.1)
+
+	averageDocEmbedding := make([]float64, len(queryEmbedding))
+
+	for _, doc := range relevantDocs {
+		// 2. Pool relevant document embeddings (e.g., by averaging)
+		// This creates a fixed-size representation of the retrieved documents.
+		if len(doc.Embedding) != len(queryEmbedding) {
+			// Handle embedding size mismatch if necessary, e.g., log a warning
+			log.Printf("Warning: Document embedding size (%d) does not match query embedding size (%d). Document ID: %s", len(doc.Embedding), len(queryEmbedding), doc.ID)
+		}
+		for i := range averageDocEmbedding {
+			averageDocEmbedding[i] += doc.Embedding[i]
+		}
+	}
+	// Calculate the average if there are relevant documents
+	if len(relevantDocs) > 0 {
+		for i := range averageDocEmbedding {
+			averageDocEmbedding[i] /= float64(len(relevantDocs))
+		}
+	} else {
+		fmt.Println("Debug: RagForwardPass - No relevant documents found, averageDocEmbedding remains zero.")
+	}
+
+	// 3. Combine query embedding and the pooled document embedding
+	combinedInput := append(queryEmbedding, averageDocEmbedding...)
+
+	// 4. Check if the combined input size matches the neural network's input size.
+	// This is crucial because the input layer of the neural network expects a fixed size.
+	if len(combinedInput) != nn.InputSize {
+		// If this error occurs after implementing pooling, it indicates an issue
+		// with how the combined input size was calculated or how the neural network
+		// was initialized.
+		return nil, fmt.Errorf("combined input size (%d) does not match neural network input size (%d) after pooling", len(combinedInput), nn.InputSize)
+	}
+
+	// Call the existing forward pass logic from nnu.go
+	// Assuming SimpleNN has a method like CalculateOutputs() or similar
+	// You might need to adapt the SimpleNN struct or add a method to it
+	// to expose the internal forward pass steps.
+	nn.Inputs = combinedInput
+
+	// For now, let's directly use the calculation logic based on our knowledge
+	// of SimpleNN structure, assuming the weights and biases are initialized.
+	// Calculate hidden layer outputs
+	// For now, let's directly use the calculation logic based on our knowledge
+	// of SimpleNN structure, assuming the weights and biases are initialized.
+	// Calculate hidden layer outputs
+	hiddenOutputs := make([]float64, nn.HiddenSize)
+	for i := 0; i < nn.HiddenSize; i++ {
+		// Add checks for nn.WeightsIH and nn.Inputs before accessing
+		if nn.WeightsIH == nil || i >= len(nn.WeightsIH) || len(nn.WeightsIH[i]) != nn.InputSize {
+			return nil, fmt.Errorf("nn.WeightsIH is nil or has incorrect dimensions at row %d. Expected column size %d, got %d", i, nn.InputSize, len(nn.WeightsIH[i]))
+		}
+		if nn.Inputs == nil || len(nn.Inputs) != nn.InputSize {
+			return nil, fmt.Errorf("nn.Inputs is nil or has incorrect length (%d), expected (%d)", len(nn.Inputs), nn.InputSize)
+		}
+
+		sum := 0.0
+		for j := 0; j < nn.InputSize; j++ {
+			// Make sure nn.Inputs is set with combinedInput before this loop
+			sum += nn.WeightsIH[i][j] * nn.Inputs[j]
+		}
+		// Assuming a sigmoid activation function as in nnu.go
+		// Ensure nn.Sigmoid method exists and is accessible
+		hiddenOutputs[i] = 1.0 / (1.0 + math.Exp(-sum))
+	}
+
+	nn.HiddenOutputs = hiddenOutputs
+
+	// Calculate output layer outputs
+	outputOutputs := make([]float64, nn.OutputSize)
+	for i := 0; i < nn.OutputSize; i++ {
+		sum := 0.0
+		// Add checks for nn.WeightsHO and hiddenOutputs before accessing
+		if nn.WeightsHO == nil || i >= len(nn.WeightsHO) || len(nn.WeightsHO[i]) != nn.HiddenSize {
+			return nil, fmt.Errorf("nn.WeightsHO is nil or has incorrect dimensions at row %d. Expected column size %d, got %d", i, nn.HiddenSize, len(nn.WeightsHO[i]))
+		}
+		if 0 > len(nn.HiddenOutputs) || len(nn.HiddenOutputs) != nn.HiddenSize {
+			return nil, fmt.Errorf("hiddenOutputs is nil or has incorrect length (%d), expected (%d)", len(hiddenOutputs), nn.HiddenSize)
+		}
+		for j := 0; j < nn.HiddenSize; j++ {
+			sum += nn.WeightsHO[i][j] * hiddenOutputs[j]
+		}
+		// Assuming a sigmoid activation function for the output layer as well
+		outputOutputs[i] = 1.0 / (1.0 + math.Exp(-sum))
+	}
+
+	nn.Outputs = outputOutputs // Update the network's output field
+	return outputOutputs, nil
+}
+
+// RagTraining trains the SimpleNN model with RAG.
+// It takes the neural network model, RagDocuments, training data (query embeddings and target outputs),
+// and training parameters (learning rate, epochs) as input.
+func RagTraining(nn *nnu.SimpleNN, docs RagDocuments, trainingData map[string][]float64, epochs int, sw2v *word2vec.SimpleWord2Vec, similarityThreshold float64) error { // Added similarityThreshold
+	// Initialize training process
+	// Assuming trainingData is a map where keys are query strings
+	// and values are the corresponding target output vectors (e.g., document embeddings).
+	// You will need to generate query embeddings for the queries in your training data.
+
+	// The `sw2v` parameter is required to generate query embeddings.
+	for epoch := 0; epoch < epochs; epoch++ {
+		fmt.Println("Epoch:", epoch+1)
+		for queryString, targetOutput := range trainingData {
+			// Generate query embedding
+			queryEmbedding, err := GenerateQueryEmbedding(queryString, sw2v)
+			if err != nil {
+				log.Printf("Error generating query embedding for '%s': %v", queryString, err)
+				continue // Skip this training example if embedding generation fails
+			}
+
+			// Perform RAG-augmented forward pass
+			predictedOutput, err := RagForwardPass(nn, docs, queryEmbedding) // Removed hardcoded threshold
+			if err != nil {
+				fmt.Println("Error during RAG forward pass for query ", queryString, err)
+				continue // Skip this training example if forward pass fails
+			}
+
+			// --- Backpropagation ---
+
+			outputErrors := make([]float64, nn.OutputSize)
+			for i := 0; i < nn.OutputSize; i++ {
+				outputErrors[i] = targetOutput[i] - predictedOutput[i]
+			}
+
+			// Calculate output layer gradients
+			// Assuming sigmoid activation for the output layer
+			outputGradients := make([]float64, nn.OutputSize)
+			for i := 0; i < nn.OutputSize; i++ {
+				outputGradients[i] = outputErrors[i] * predictedOutput[i] * (1 - predictedOutput[i])
+			}
+
+			// Calculate hidden layer errors (error backpropagated from the output layer)
+			hiddenErrors := make([]float64, nn.HiddenSize)
+			for i := 0; i < nn.HiddenSize; i++ {
+				sum := 0.0
+				for j := 0; j < nn.OutputSize; j++ {
+					sum += nn.WeightsHO[j][i] * outputErrors[j]
+				}
+				hiddenErrors[i] = sum
+			}
+
+			// Calculate hidden layer gradients (based on hidden error and derivative of activation)
+			// Assuming sigmoid activation for the hidden layer
+			hiddenGradients := make([]float64, nn.HiddenSize)
+			for i := 0; i < nn.HiddenSize; i++ {
+				// We need the hidden layer outputs from the forward pass for the derivative
+				// Assuming you stored them in the SimpleNN struct
+				hiddenOutput := nn.HiddenOutputs[i] // Assuming you added HiddenOutputs field to SimpleNN
+				hiddenGradients[i] = hiddenErrors[i] * hiddenOutput * (1 - hiddenOutput)
+			}
+
+			// Update output layer weights (WeightsHO) using an iterator
+			outputWeightIterator := nn.NewOutputWeightIterator()
+			for outputWeightIterator.Next() {
+				i, j, weight := outputWeightIterator.Current()
+				// Calculate gradient for this specific weight
+				gradient := outputGradients[i] * nn.HiddenOutputs[j] // Using calculated gradients and hidden outputs
+				outputWeightIterator.Update(weight + nn.LearningRate*gradient)
+			}
+
+			// Update hidden layer weights (WeightsIH) using an iterator
+			hiddenWeightIterator := nn.NewHiddenWeightIterator()
+			for hiddenWeightIterator.Next() {
+				i, j, weight := hiddenWeightIterator.Current()
+				// Calculate gradient for this specific weight
+				gradient := hiddenGradients[i] * nn.Inputs[j] // Using calculated gradients and inputs
+				hiddenWeightIterator.Update(weight + nn.LearningRate*gradient)
+			}
+
+			// Update biases using iterators
+			outputBiasIterator := nn.NewOutputBiasIterator()
+			for outputBiasIterator.Next() {
+				i, bias := outputBiasIterator.Current()
+				// Calculate gradient for this specific bias (same as output gradient)
+				gradient := outputGradients[i]
+				outputBiasIterator.Update(bias + nn.LearningRate*gradient)
+			}
+
+			hiddenBiasIterator := nn.NewHiddenBiasIterator()
+			for hiddenBiasIterator.Next() {
+				i, bias := hiddenBiasIterator.Current()
+				// Calculate gradient for this specific bias (same as hidden gradient)
+				gradient := hiddenGradients[i]
+				hiddenBiasIterator.Update(bias + nn.LearningRate*gradient)
+			}
+		}
+	}
+	return nil
+}
+
+// generateExampleTrainingData creates some example training data for RAG training.
+// In a real application, you would generate this data based on your specific task and dataset.
+func GenerateExampleTrainingData(docs []RagDocument, sw2v *word2vec.SimpleWord2Vec) (map[string][]float64, error) {
+	trainingData := make(map[string][]float64)
+
+	// Read the training data from the JSON file
+	file, err := os.Open(trainingDataPath)
+	if err != nil {
+		return nil, fmt.Errorf("error opening training data file: %w", err)
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	var rawData []struct {
+		ID      string `json:"ID"`
+		Content string `json:"Content"`
+	}
+	if err := decoder.Decode(&rawData); err != nil {
+		return nil, fmt.Errorf("error decoding training data JSON: %w", err)
+	}
+
+	// Map content (queries) to document indices
+	for i, dataEntry := range rawData {
+		query := dataEntry.Content
+
+		// Generate embedding for the query
+		_, err := GenerateQueryEmbedding(query, sw2v)
+		if err != nil {
+			log.Printf("Error generating embedding for query '%s': %v", query, err)
+			continue
+		}
+		var targetOutput []float64
+
+		// The target output is the embedding of the document at the current index
+		if i < len(docs) {
+			targetOutput = docs[i].Embedding
+		} else {
+			log.Printf("Document index %d out of bounds for docs slice (length %d) for query '%s'", i, len(docs), query)
+			continue
+		}
+
+		// Add to training data
+		trainingData[query] = targetOutput
+	}
+
+	return trainingData, nil
 }

@@ -72,7 +72,6 @@ func Train_bilstm() {
 
 	// Training loop with SentenceRoleData
 	for epoch := 0; epoch < epochs; epoch++ { // start of epoch
-		fmt.Printf("Epoch %d\n", epoch+1)
 
 		// Shuffle training data
 		rand.Shuffle(len(trainingData), func(i, j int) {
@@ -147,7 +146,6 @@ func Train_bilstm() {
 	saveModel(model, bilstmModelPath)
 	saveRoleMap(roleMap, roleMapPath)
 
-	fmt.Println("Training complete. Model and role map saved.")
 }
 
 func saveModel(model *bilstm_model.BiLSTMModel, path string) error {
@@ -206,7 +204,6 @@ func TrainWithActiveLearning(iterations, batchSize int, samplingMethod string) {
 		}
 
 		// b. Predict on unlabeled data and select uncertain examples
-		fmt.Println("Predicting on unlabeled data...")
 		predictions := predictRoles(model, unlabeledData, word2vecModel, roleMap)
 		var selectedIndices []int
 		switch samplingMethod {

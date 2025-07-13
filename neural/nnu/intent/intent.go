@@ -4,10 +4,8 @@
 package intent
 
 import (
-	"errors"
 	"fmt"
 	"math"
-	"os"
 	"regexp"
 	"strings"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/golangast/nlptagger/neural/nn/semanticrole"
 	"github.com/golangast/nlptagger/neural/nn/semanticrole/train_bilstm"
 	"github.com/golangast/nlptagger/neural/nnu/train"
-	"github.com/golangast/nlptagger/tagger"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
@@ -110,63 +107,6 @@ var phraseTagMap = map[string]string{
 
 func LoadRoleData(filePath string) ([]semanticrole.SentenceRoleData, error) {
 	return semanticrole.LoadRoleData(filePath)
-}
-
-// ProcessCommand: The entry point for processing a command.
-// This function takes a raw command string, a word-to-vector index, and context relevance
-// information, then performs dependency analysis, intent interpretation, and returns the detected intent.
-//
-// Parameters:
-// - command: The raw command string.
-// - index: The word-to-vector index used for context vector calculation.
-// - c: Contextual relevance information.
-//
-// Returns the detected intent string and any errors encountered.
-func (ic *IntentClassifier) ProcessCommand(command string, index map[string][]float64, c train.ContextRelevance) (string, error) {
-
-	tag := tagger.Tagging(command)
-	trainingdata, err := g.LoadTrainingData("trainingdata/contextdata/training_data.json")
-	if err != nil {
-		fmt.Println("Error loading training data:", err)
-		return "", err
-	}
-
-	// 1. Obtain tokens from the command (replace with your actual tokenization logic)
-	tokens := strings.Split(command, " ")
-	// 2. Train or load the Word2Vec embedding model
-	if ic.SemanticRoleModel == nil {
-
-		if _, err := os.Stat("./gob_models/bilstm_model.gob"); errors.Is(err, os.ErrNotExist) {
-			// path/to/whatever does not exist
-			fmt.Println("bilstm_model.gob does not exist")
-			train_bilstm.Train_bilstm()
-		}
-
-		ic.SemanticRoleModel, err = semanticrole.NewSemanticRoleModel(
-			"./gob_models/trained_model.gob",
-			"./gob_models/bilstm_model.gob",
-			"./gob_models/role_map.gob",
-		)
-		if err != nil {
-			fmt.Println("failed to load semantic role model: %w", err)
-		}
-	}
-	// 3. Predict roles
-	roles, err := ic.SemanticRoleModel.PredictRoles(tokens)
-	if err != nil {
-		fmt.Println("failed to predict roles: %w", err)
-	}
-
-	// 4. Intent Interpretation (This is where the new logic goes)
-	intent, err := ic.InterpretIntent(tag, trainingdata, index, command, c, roles)
-	if err != nil {
-		return "", err
-	}
-
-	fmt.Println("Tokens:", tokens)
-	fmt.Println("Roles:", roles)
-
-	return intent, nil
 }
 
 // InterpretIntent: Interprets the intent behind a given command by analyzing its

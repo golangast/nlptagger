@@ -5,6 +5,7 @@ package gobs
 
 import (
 	"encoding/gob"
+	"fmt"
 	"os"
 
 	"github.com/golangast/nlptagger/neural/nnu"
@@ -42,4 +43,13 @@ func LoadModelFromGOB(filePath string) (*nnu.SimpleNN, error) {
 	}
 	file.Close()
 	return nn, nil
+}
+
+func DeleteGobFile(filePath string) error {
+	err := os.Remove(filePath)
+	if err != nil {
+		// Handle the error (e.g., log it, return it)
+		return fmt.Errorf("failed to delete gob file %s: %w", filePath, err)
+	}
+	return nil // Indicate success
 }

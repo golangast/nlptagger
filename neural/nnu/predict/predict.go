@@ -19,6 +19,7 @@ import (
 	"github.com/golangast/nlptagger/neural/nn/phrase"
 	"github.com/golangast/nlptagger/neural/nn/pos"
 	"github.com/golangast/nlptagger/neural/nnu"
+	"github.com/golangast/nlptagger/neural/nnu/gobs"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
 
@@ -336,7 +337,7 @@ func createAndSaveTokenVocab(trainingData []tag.Tag) map[string]int {
 	}
 
 	// Save the vocabulary to GOB file
-	if err := saveTokenVocabToGob("./gob_models/model.gob", tokenVocab); err != nil {
+	if err := saveTokenVocabToGob(".././gob_models/model.gob", tokenVocab); err != nil {
 		log.Println("Error saving vocabulary to GOB:", err)
 		return make(map[string]int) // Return empty map on error
 	}
@@ -368,14 +369,28 @@ func LoadTrainingDataFromJSON(filePath string) (*TrainingDataJSON, error) {
 
 // saveTokenVocabToGob saves the token vocabulary to a GOB file.
 func saveTokenVocabToGob(filePath string, tokenVocab map[string]int) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	return encoder.Encode(tokenVocab)
+	if _, err := os.Stat(filePath); err == nil {
+		gobs.DeleteGobFile(filePath)
+		file, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		encoder := gob.NewEncoder(file)
+		return encoder.Encode(tokenVocab)
+	} else {
+		file, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		encoder := gob.NewEncoder(file)
+		return encoder.Encode(tokenVocab)
+	}
+
 }
 
 // loadTokenVocabFromGob loads the token vocabulary from a GOB file.

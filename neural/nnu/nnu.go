@@ -26,6 +26,9 @@ type SimpleNN struct {
 	HiddenSize int
 	// OutputSize is the number of output neurons.
 	OutputSize int
+	// Add these fields to store intermediate values for backpropagation
+	HiddenOutputs []float64 // Store the outputs of the hidden layer
+
 	// OutputWeights is a matrix of weights from hidden layer to output layer.
 	OutputWeights [][]float64
 	// HiddenWeights is a matrix of weights from input layer to hidden layer.
@@ -198,10 +201,12 @@ func NewSimpleNN(filePath string) *SimpleNN {
 	nnn := SimpleNN{}
 	// Only take the first sentence to set the sizes, all sentences should be the same length
 	for _, sentence := range trainingData.Sentences {
-
-		nnn.InputSize = len(sentence.Tokens)                // Assuming we are just going to use this for a single sentence at a time.
-		nnn.HiddenSize = len(sentence.Tokens)               // hidden size should be a tunable parameter later.
-		nnn.OutputSize = len(sentence.Tokens)               // outputs should be a tunable parameter.
+		nnn.InputSize = 200 // Assuming we are just going to use this for a single sentence at a time.
+		//nnn.InputSize = len(sentence.Tokens)
+		nnn.Inputs = make([]float64, nnn.InputSize)
+		// Assuming we are just going to use this for a single sentence at a time.
+		nnn.WeightsIH = NewMatrix(nnn.HiddenSize, nnn.InputSize)
+		nnn.WeightsHO = NewMatrix(nnn.OutputSize, nnn.HiddenSize)
 		nnn.Targets = make([]float64, len(sentence.Tokens)) // These may not be appropriate here.
 		nnn.Outputs = make([]float64, len(sentence.Tokens)) // These may not be appropriate here.
 		nnn.PPosTag = sentence.PosTag                       // These may not be appropriate here.
@@ -514,11 +519,195 @@ type SentenceData struct {
 	Sentence     string                `json:"sentence"`
 }
 
-// NewMatrix initializes a new matrix (2D slice) of the specified dimensions.
+// NewMatrix initializes a new matrix (2D slice) of the specified dimensions
+// and fills it with small random values.
 func NewMatrix(rows, cols int) [][]float64 {
 	matrix := make([][]float64, rows)
+	// Ensure rand.Seed is called once in your program, e.g., in main.go
+	rand.Seed(time.Now().UnixNano()) // Consider moving this to main()
+
 	for i := range matrix {
 		matrix[i] = make([]float64, cols)
+		for j := range matrix[i] {
+			// Initialize with small random values, e.g., between -0.01 and 0.01
+			randVal := rand.Float64()*0.02 - 0.01
+			matrix[i][j] = randVal
+		}
 	}
 	return matrix
+}
+
+// NewRagSimpleNN initializes a new SimpleNN specifically for the RAG task.
+// It allocates and initializes the weights and biases of the network with random values.
+func NewRagSimpleNN(hiddenSize, outputSize int) *SimpleNN {
+	nnn := SimpleNN{}
+	nnn.InputSize = 200         // Fixed input size for RAG (query + pooled doc embedding)
+	nnn.HiddenSize = hiddenSize // Parameterized hidden layer size
+	nnn.OutputSize = outputSize // Parameterized output layer size
+
+	// Initialize weights and biases using the Randomize method
+	// This ensures both WeightsIH and WeightsHO are initialized with random values
+	nnn.Randomize()
+
+	// Note: The fields related to training data (Sentences, Targets, etc.)
+	// are likely not needed in the SimpleNN struct itself for the RAG forward pass.
+	// They are used during training data loading and preparation *before* the forward pass.
+	// Consider if these fields truly belong in the SimpleNN struct or if they should be
+	// part of a separate training data structure used during training.
+
+	return &nnn
+}
+
+type HiddenWeightIterator struct {
+	nn *SimpleNN
+	i  int // current row (hidden neuron index)
+	j  int // current column (input neuron index)
+}
+
+// NewHiddenWeightIterator creates a new iterator for the hidden layer weights.
+func (nn *SimpleNN) NewHiddenWeightIterator() *HiddenWeightIterator {
+	return &HiddenWeightIterator{
+		nn: nn,
+		i:  0,
+		j:  0,
+	}
+}
+
+// Next moves the iterator to the next weight.
+// It returns true if there are more weights, false otherwise.
+func (it *HiddenWeightIterator) Next() bool {
+	it.j++ // Move to the next column (input neuron)
+
+	// If we reached the end of the current row, move to the next row
+	if it.j >= it.nn.InputSize {
+		it.j = 0 // Reset column to the beginning
+		it.i++   // Move to the next row (hidden neuron)
+	}
+
+	// Continue as long as the current row index is within bounds
+	return it.i < it.nn.HiddenSize
+}
+
+// Current returns the current indices (i, j) and the weight value.
+func (it *HiddenWeightIterator) Current() (int, int, float64) {
+	return it.i, it.j, it.nn.WeightsIH[it.i][it.j]
+}
+
+// Update sets the value of the current weight.
+func (it *HiddenWeightIterator) Update(value float64) {
+	it.nn.WeightsIH[it.i][it.j] = value
+}
+
+// OutputWeightIterator iterates over the weights from the hidden to the output layer.
+type OutputWeightIterator struct {
+	nn *SimpleNN
+	i  int // current row (output neuron index)
+	j  int // current column (hidden neuron index)
+}
+
+// NewOutputWeightIterator creates a new iterator for the output layer weights.
+func (nn *SimpleNN) NewOutputWeightIterator() *OutputWeightIterator {
+	return &OutputWeightIterator{
+		nn: nn,
+		i:  0,
+		j:  0,
+	}
+}
+
+// Next moves the iterator to the next weight.
+// It returns true if there are more weights, false otherwise.
+func (it *OutputWeightIterator) Next() bool {
+	if it.i < it.nn.OutputSize && it.j < it.nn.HiddenSize {
+		it.j++
+		if it.j >= it.nn.HiddenSize {
+			it.j = 0
+			it.i++
+		}
+	}
+	return false
+}
+
+// Current returns the current indices (i, j) and the weight value.
+func (it *OutputWeightIterator) Current() (int, int, float64) {
+	return it.i, it.j, it.nn.WeightsHO[it.i][it.j]
+}
+
+// Update sets the value of the current weight.
+func (it *OutputWeightIterator) Update(value float64) {
+	it.nn.WeightsHO[it.i][it.j] = value
+}
+
+// HiddenBiasIterator iterates over the hidden layer biases.
+type HiddenBiasIterator struct {
+	nn *SimpleNN
+	i  int // current index (hidden neuron index)
+}
+
+// NewHiddenBiasIterator creates a new iterator for the hidden layer biases.
+func (nn *SimpleNN) NewHiddenBiasIterator() *HiddenBiasIterator {
+	return &HiddenBiasIterator{
+		nn: nn,
+		i:  0,
+	}
+}
+
+// Next moves the iterator to the next bias.
+// It returns true if there are more biases, false otherwise.
+func (it *HiddenBiasIterator) Next() bool {
+	it.i++
+	// The check if there are more biases should be after the increment
+	// to correctly handle the last element.
+	return it.i < it.nn.HiddenSize
+}
+
+// Current returns the current index (i) and the bias value.
+func (it *HiddenBiasIterator) Current() (int, float64) {
+	return it.i, it.nn.HiddenBiases[it.i]
+}
+
+// Update sets the value of the current bias.
+func (it *HiddenBiasIterator) Update(value float64) {
+	it.nn.HiddenBiases[it.i] = value
+}
+
+// OutputBiasIterator iterates over the output layer biases.
+type OutputBiasIterator struct {
+	nn *SimpleNN
+	i  int // current index (output neuron index)
+}
+
+// NewOutputBiasIterator creates a new iterator for the output layer biases.
+func (nn *SimpleNN) NewOutputBiasIterator() *OutputBiasIterator {
+	return &OutputBiasIterator{
+		nn: nn,
+		i:  0, // Start at index 0
+	}
+}
+
+// Next moves the iterator to the next bias.
+// It returns true if there are more biases, false otherwise.
+func (it *OutputBiasIterator) Next() bool {
+	// Check if the current index is less than the number of output biases
+	if it.i < it.nn.OutputSize {
+		// Increment the index for the next iteration *after* checking
+		it.i++
+		return true // There is a next bias at the new index
+	}
+	return false // No more biases
+}
+
+// Current returns the current index (i) and the bias value.
+func (it *OutputBiasIterator) Current() (int, float64) {
+	// The index `it.i` was incremented in the last call to `Next()`.
+	// The current element is at the *previous* index.
+	currentIndex := it.i - 1
+	return currentIndex, it.nn.OutputBiases[currentIndex]
+}
+
+// Update sets the value of the current bias.
+func (it *OutputBiasIterator) Update(value float64) {
+	// The index `it.i` was incremented in the last call to `Next()`.
+	// The current element is at the *previous* index.
+	currentIndex := it.i - 1
+	it.nn.OutputBiases[currentIndex] = value
 }

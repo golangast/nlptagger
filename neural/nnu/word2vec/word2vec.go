@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-// Package word2vec implements a basic Word2Vec model for creating word embeddings.
+	// Package word2vec implements a basic Word2Vec model for creating word embeddings.
 
 	"github.com/golangast/nlptagger/neural/nn/g"
 )
@@ -53,24 +53,11 @@ type SimpleWord2Vec struct {
 	Weights [][]float64
 	Biases  [][]float64
 	Ann     *g.ANN
-	
+
 	//MinWordFrequency
-	MinWordFrequency    int
+	MinWordFrequency int
 
 	// Consider if any new fields should be grouped here based on how they are used
-}
-
-// generateNgrams generates character n-grams for a word.
-func generateNgrams(word string, n int) []string {
-	var ngrams []string
-	word = "#" + word + "#" // Pad with special characters
-	for i := 0; i <= len(word)-n; i++ {
-		ngrams = append(ngrams, word[i:i+n])
-	}
-	if len(ngrams) == 0 {
-		ngrams = append(ngrams, word)
-	}
-	return ngrams
 }
 
 // convertToMap converts WordVectors to a map[string][]float64.
@@ -267,27 +254,6 @@ func (sw2v *SimpleWord2Vec) Backpropagate(output, context []float64) {
 	}
 }
 
-// cosineSimilarity calculates the cosine similarity between two vectors.
-func cosineSimilarity(v1, v2 []float64) float64 {
-	dotProduct := 0.0
-	magV1 := 0.0
-	magV2 := 0.0
-
-	for i := 0; i < len(v1); i++ {
-		dotProduct += v1[i] * v2[i]
-		magV1 += v1[i] * v1[i]
-		magV2 += v2[i] * v2[i]
-	}
-
-	magV1 = math.Sqrt(magV1)
-	magV2 = math.Sqrt(magV2)
-
-	if magV1 == 0 || magV2 == 0 {
-		return 0.0
-	}
-	return dotProduct / (magV1 * magV2)
-}
-
 // contains checks if a string slice contains a specific string.
 func contains(slice []string, str string) bool {
 	for _, s := range slice {
@@ -315,15 +281,6 @@ func (sw2v *SimpleWord2Vec) getWordByIndex(index int) string {
 		}
 	}
 	return "" // Or return an error if appropriate
-}
-
-// Helper function to flatten a 2D slice into a 1D slice
-func flatten(slice [][]float64) []float64 {
-	var result []float64
-	for _, row := range slice {
-		result = append(result, row...)
-	}
-	return result
 }
 
 // SaveModel saves the trained model to a GOB file.
@@ -389,7 +346,7 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 				wordCounts[word]++
 			}
 		}
-		
+
 		// Filter out words below the minimum frequency threshold
 		filteredWords := make([]string, 0)
 		for word, count := range wordCounts {
@@ -512,9 +469,9 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 						for n := 0; n < sw2v.NegativeSamples; n++ {
 							negIndex := wordIndices[rand.IntN(len(wordIndices))]
 							if negIndex == contextIndex {
-                continue
+								continue
 							}
-							if sw2v.WordVectors[negIndex] == nil{
+							if sw2v.WordVectors[negIndex] == nil {
 								sw2v.WordVectors[negIndex] = make([]float64, sw2v.VectorSize)
 							}
 							sw2v.Backpropagate(output, sw2v.WordVectors[negIndex])

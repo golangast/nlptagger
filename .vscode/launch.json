@@ -10,10 +10,10 @@
              "type": "go",
             "request": "launch",
              "mode": "auto",
-             "program": "${workspaceFolder}/main.go",
+             "program": "${workspaceFolder}",
              "console": "integratedTerminal",
              "args": [
-                "generate a webserver"
+                // "generate a webserver"
              ],
         },
         {
