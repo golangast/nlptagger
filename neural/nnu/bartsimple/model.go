@@ -2,7 +2,9 @@ package bartsimple
 
 import (
 	"encoding/gob"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -205,7 +207,8 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 
 	// Initialize embedding layers and output linear layer (simplified)
 	// These will need to be implemented in separate simple files
-	tokenEmbedding := NewEmbedding(len(vocabulary.WordToToken)+1, dimModel) // <--- Change here
+	tokenEmbedding := NewEmbedding(len(vocabulary.WordToToken), dimModel)
+
 	// Assuming NewEmbedding exists
 	positionalEmbedding := NewPositionalEmbedding(maxSequenceLength, dimModel) // Assuming NewPositionalEmbedding exists
 	outputLinear, err := NewLinear(dimModel, vocabSize)                        // Assuming NewLinear exists
@@ -263,11 +266,31 @@ func SaveSimplifiedBARTModelToGOB(model *SimplifiedBARTModel, filePath string) e
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
+	// 1. Check if the file exists
+	_, err := os.Stat(filePath)
+	if err == nil {
+		// File exists, proceed to delete
+		fmt.Printf("File '%s' exists. Deleting...\n", filePath)
+		err = os.Remove(filePath)
+		if err != nil {
+			log.Fatalf("Error deleting file '%s': %v\n", filePath, err)
+		}
+		fmt.Printf("File '%s' deleted successfully.\n", filePath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Handle other potential errors during Stat
+		log.Fatalf("Error checking file existence for '%s': %v\n", filePath, err)
+	} else {
+		fmt.Printf("File '%s' does not exist. Creating a new one.\n", filePath)
+	}
+
+	// 2. Create a new file (or truncate and open if it existed)
 	file, err := os.Create(filePath) // Need to import "os"
 	if err != nil {
 		return fmt.Errorf("failed to create file for saving simplified model: %w", err)
 	}
 	defer file.Close()
+
+	fmt.Printf("File '%s' created/replaced and written successfully.\n", filePath)
 
 	// Register all custom types used in your simplified model
 	// This is crucial for gob encoding/decoding.

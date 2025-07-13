@@ -2,6 +2,7 @@ package bartsimple // Assuming your vocabulary package is named vocab
 
 import (
 	"encoding/gob" // Import errors for returning errors
+	"errors"
 	"fmt"
 	"log" // Import log for warnings in GetTokenID
 	"os"
@@ -39,15 +40,33 @@ func NewVocabulary() *Vocabulary {
 	}
 }
 
-// AddToken adds a word to the vocabulary and assigns a new token ID if it's not already present.
-func (v *Vocabulary) AddToken(word string) {
-	if _, exists := v.WordToToken[word]; !exists {
-		tokenID := v.Size // Assign the next available ID
-		v.WordToToken[word] = tokenID
-		v.TokenToWord[tokenID] = word
-		v.Size++
+// AddToken adds a word to the vocabulary and assigns a given token ID.
+// It returns an error if the word already exists with a different token ID
+// or if the token ID is already assigned to a different word.
+func (v *Vocabulary) AddToken(word string, tokenID int) error {
+	if existingID, exists := v.WordToToken[word]; exists {
+		if existingID != tokenID {
+			return fmt.Errorf("word '%s' already exists with token ID %d, cannot add with ID %d", word, existingID, tokenID)
+		}
+		return nil // Word already exists with the same ID
 	}
+	if existingWord, exists := v.TokenToWord[tokenID]; exists {
+		return fmt.Errorf("token ID %d is already assigned to word '%s', cannot add '%s'", tokenID, existingWord, word)
+	}
+	v.WordToToken[word] = tokenID
+	v.TokenToWord[tokenID] = word
+	return nil
 }
+
+// // AddToken adds a word to the vocabulary and assigns a new token ID if it's not already present.
+// func (v *Vocabulary) AddToken(word string) {
+// 	if _, exists := v.WordToToken[word]; !exists {
+// 		tokenID := v.Size // Assign the next available ID
+// 		v.WordToToken[word] = tokenID
+// 		v.TokenToWord[tokenID] = word
+// 		v.Size++
+// 	}
+// }
 
 // GetTokenID retrieves the token ID for a given word.
 // Returns the UnknownTokenID if the word is not in the vocabulary.
@@ -114,16 +133,16 @@ func (v *Vocabulary) BuildFromCorpus(corpus string) {
 
 	// Add special tokens first and assign their IDs
 	// You might want to use constants for special token strings
-	v.AddToken("[UNK]") // Unknown
+	v.AddToken("[UNK]", len(v.TokenToWord)) // Unknown
 	v.UnknownTokenID = v.WordToToken["[UNK]"]
 
-	v.AddToken("[PAD]") // Padding
+	v.AddToken("[PAD]", len(v.TokenToWord)) // Padding
 	v.PaddingTokenID = v.WordToToken["[PAD]"]
 
-	v.AddToken("[BOS]") // Beginning of Sentence
+	v.AddToken("[BOS]", len(v.TokenToWord)) // Beginning of Sentence
 	v.BeginningOfSentenceID = v.WordToToken["[BOS]"]
 
-	v.AddToken("[EOS]") // End of Sentence
+	v.AddToken("[EOS]", len(v.TokenToWord)) // End of Sentence
 	v.EndOfSentenceID = v.WordToToken["[EOS]"]
 
 	// Simple whitespace tokenization for building vocabulary
@@ -133,13 +152,28 @@ func (v *Vocabulary) BuildFromCorpus(corpus string) {
 		// You might want to perform basic text cleaning here (lowercase, punctuation removal)
 		cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_")) // Basic cleaning
 		if cleanedWord != "" {
-			v.AddToken(cleanedWord) // Add the cleaned word
+			v.AddToken(cleanedWord, len(v.TokenToWord)) // Add the cleaned word
 		}
 	}
 }
 
 // Save saves the vocabulary to a file in Gob format.
 func (v *Vocabulary) Save(filePath string) error {
+
+	// 1. Check if the file exists
+	_, err := os.Stat(filePath)
+	if err == nil {
+		// File exists, proceed to delete
+		err = os.Remove(filePath)
+		if err != nil {
+			log.Fatalf("Error deleting file '%s': %v\n", filePath, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Handle other potential errors during Stat
+		log.Fatalf("Error checking file existence for '%s': %v\n", filePath, err)
+	}
+
+	// 2. Create a new file (or truncate and open if it existed)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create vocabulary file: %w", err)
