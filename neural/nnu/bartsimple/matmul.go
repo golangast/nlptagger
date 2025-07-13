@@ -282,14 +282,6 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 	return nil, fmt.Errorf("unsupported tensor shapes for matrix multiplication: %v and %v", t.Shape, other.Shape)
 }
 
-// Add a helper function for min (if not already present)
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // MatMulRow4d performs the matrix multiplication of a row from a 4D tensor (t)
 // with a 2D slice from another 4D tensor (other), writing the result into the
 // specified row of a 4D result tensor. It avoids creating temporary slices for
