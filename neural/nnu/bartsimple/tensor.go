@@ -10,12 +10,12 @@ import (
 type Tensor struct {
 	Data  []float64
 	Shape []int
-	// Fields for automatic differentiation
-	requiresGrad bool
-	creator      Operation
-	Grad         *Tensor
+	Grad  *Tensor
+	// Fields for automatic differentiation and lazy execution
+	creator Operation
 	// For lazy execution
-	Operation Operation
+	requiresGrad bool
+	Operation    Operation
 }
 
 // Add performs element-wise addition with another tensor.
@@ -43,7 +43,13 @@ func (t *Tensor) Add(other *Tensor) (*Tensor, error) {
 		resultData[i] = t.Data[i] + other.Data[i]
 	}
 
-	return NewTensor(resultData, resultShape), nil // Return a new tensor containing the result.
+	resultTensor := NewTensor(resultData, resultShape, false)
+	// Set the creator and inputs for backpropagation
+	if t.requiresGrad || other.requiresGrad {
+		resultTensor.creator = &addOperation{input1: t, input2: other}
+		resultTensor.requiresGrad = true
+	}
+	return resultTensor, nil
 }
 
 // NextBatch moves the iterator to the next batch and returns a Batch tensor view.
@@ -56,22 +62,36 @@ type BatchView struct {
 	cols           int
 }
 
-// NewTensor creates a new Tensor with the given shape and initializes data with zeros.
-func NewTensor(data []float64, shape []int) *Tensor {
+// NewTensor creates a new Tensor with the given data, shape, and requiresGrad flag.
+// It initializes data if nil and allocates space for gradients if requiresGrad is true.
+func NewTensor(data []float64, shape []int, requiresGrad bool) *Tensor {
 	// Basic validation (can be expanded)
 	expectedSize := 1
 	for _, dim := range shape {
 		expectedSize *= dim
 	}
-	if len(data) != expectedSize {
-		// In a real implementation, you might want to handle this differently,\n\t\t// maybe return an error or panic. For simplicity here, we\'ll just print a warning
+	if data != nil && len(data) != expectedSize {
+		// In a real implementation, you might want to handle this differently,
+		// maybe return an error or panic. For simplicity here, we'll just print a warning
 		// and create a zero-filled tensor of the correct size if data length is mismatched.
+		fmt.Printf("Warning: Mismatched data length and shape. Expected size %d, got %d. Initializing with zeros.\n", expectedSize, len(data))
 		data = make([]float64, expectedSize)
+	} else if data == nil {
+		data = make([]float64, expectedSize)
+	}
+
+	var grad *Tensor
+	if requiresGrad {
+		// Allocate space for gradients only if requiresGrad is true
+		grad = NewTensor(make([]float64, expectedSize), shape, false) // Gradients themselves don't require gradients
 	}
 
 	return &Tensor{
 		Data:  data,
 		Shape: shape,
+		Grad:  grad,
+		// Initialize requiresGrad field
+		requiresGrad: requiresGrad,
 	}
 }
 
@@ -150,11 +170,35 @@ func (t *Tensor) SetElement(value float64, indices ...int) {
 	t.Data[flatIndex] = value
 }
 
+// Mul performs element-wise multiplication with another tensor.
+func (t *Tensor) Mul(other *Tensor) (*Tensor, error) {
+	// Ensure the shapes are compatible for element-wise multiplication
+	if len(t.Shape) != len(other.Shape) {
+		return nil, fmt.Errorf("tensor shapes are not compatible for multiplication: %v and %v", t.Shape, other.Shape)
+	}
+	for i := range t.Shape {
+		if t.Shape[i] != other.Shape[i] {
+			return nil, fmt.Errorf("tensor shapes are not compatible for multiplication: %v and %v", t.Shape, other.Shape)
+		}
+	}
+
+	// Create a new tensor for the result
+	resultData := make([]float64, len(t.Data))
+	resultShape := make([]int, len(t.Shape))
+	copy(resultShape, t.Shape)
+
+	resultTensor := NewTensor(resultData, resultShape, true)
+	// Set the creator and inputs for backpropagation
+	resultTensor.creator = &mulOperation{input1: t, input2: other, output: resultTensor}
+
+	return resultTensor, nil
+}
+
 // ScalarMul performs element-wise multiplication by a scalar.
 func (t *Tensor) ScalarMul(scalar float64) (*Tensor, error) {
 	// Create a new tensor for the result
 	outputData := make([]float64, len(t.Data))
-	output := NewTensor(outputData, t.Shape) // Use NewTensor to create the output tensor
+	output := NewTensor(outputData, t.Shape, false) // Use NewTensor to create the output tensor
 
 	// Perform element-wise multiplication
 	for i := range t.Data {
@@ -164,7 +208,10 @@ func (t *Tensor) ScalarMul(scalar float64) (*Tensor, error) {
 	return output, nil
 }
 
+// Softmax applies the softmax function along a specified axis. (Placeholder implementation for the last axis)
+
 // Softmax applies the softmax function along a specified axis.
+// This implementation is a placeholder and currently only works along the last axis.
 // This implementation is numerically stable.
 func (t *Tensor) Softmax(axis int) (*Tensor, error) {
 	if axis < 0 || axis >= len(t.Shape) {
@@ -222,7 +269,7 @@ func (t *Tensor) Softmax(axis int) (*Tensor, error) {
 
 	}
 
-	output := NewTensor(outputData, t.Shape)
+	output := NewTensor(outputData, t.Shape, false)
 	return output, nil
 }
 
@@ -243,7 +290,7 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 
 	if currentSize == 0 {
 		// Handle empty tensors
-		return NewTensor([]float64{}, newShape), nil
+		return NewTensor([]float64{}, newShape, false), nil
 	}
 
 	// Calculate strides for both original and new shapes (C-order/row-major)
@@ -251,10 +298,6 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 
 	// Create a new data slice for the reshaped tensor
 	newData := make([]float64, currentSize) // Use currentSize (which equals newSize)
-
-	// Iterate through the logical indices of the new (reshaped) tensor
-	// and calculate the corresponding flattened index in the original tensor
-	// based on the new shape and original strides. Then copy the data.
 
 	newIndices := make([]int, len(newShape)) // Slice to hold current indices for new shape
 
@@ -274,191 +317,18 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 			}
 		}
 
-		// Calculate the corresponding flattened index in the original tensor
-		// based on the new indices and the original strides.
-		// This is the core of the reshape logic: how indices in the new shape
-		// map to the flattened data based on the original data layout.
-		// For standard C-order reshape, the mapping is simply based on the
-		// linear index. The `newFlatIndex` corresponds to the `originalFlatIndex`
-		// if the underlying data layout remains the same.
-
-		// The previous simple data copy was actually closer to the standard C-order
-		// reshape where the memory layout doesn't change, only the interpretation
-		// through strides and shape.
-
-		// Let's reconsider: the issue might not be reordering but accessing
-		// the data in `AddWithBroadcast` based on potentially incorrect indices
-		// derived from a reshaped tensor.
-
-		// Let's go back to a simpler Reshape that just copies data, and focus
-		// on debugging index calculation in operations like AddWithBroadcast and MatMul
-		// when they receive reshaped tensors.
-
-		// Reverting Reshape to a simple data copy is more consistent with how
-		// many tensor libraries handle standard reshape when data is contiguous.
-
-		// If you need a Transpose operation, use your existing `Transpose` method.
-		// If you need other specific dimension permutations, you'll need a separate
-		// operation that maps indices accordingly.
-
-		// The error is likely coming from how operations *consume* the reshaped tensor,
-		// not necessarily how `Reshape` itself creates the new tensor object.
-
-		// Let's keep the simple data copy implementation for Reshape and focus
-		// our debugging efforts on the operations that use the reshaped tensors,
-		// particularly in the Multi-Head Attention where Reshape is used to split/combine heads.
-
-		// This means the recursive index mapping within Reshape is not the standard
-		// behavior for a simple reshape; it's for operations like Transpose or
-		// arbitrary dimension permutations.
-
-		// Let's ensure the simple data copy Reshape is in place and focus on
-		// debugging where it's used.
-
 		// Reverting to the simple data copy:
 		newData := make([]float64, len(t.Data)) // Still make a copy to avoid modifying original tensor's data slice
 		copy(newData, t.Data)
 
-		return NewTensor(newData, newShape), nil // Return new tensor with copied data and new shape
+		return NewTensor(newData, newShape, false), nil // Return new tensor with copied data and new shape
 
-		// The code below this point (recursive copyData) is for operations that
-		// reorder data, not standard reshape.
 	}
-
-	// Remove the recursive data copying logic here.
-	// It's not standard for a basic Reshape assuming contiguous data.
-
-	// The issue is likely in how operations that take a reshaped tensor
-	// calculate which element in the flattened data corresponds to a given
-	// multi-dimensional index in the *new* shape, using the *original* strides.
-
-	// Let's go back to the debug prints in the Decoder's Forward pass and
-	// within the Multi-Head Attention to see the shapes and data *after*
-	// Reshape is applied and *before* and *after* matrix multiplications.
-
-	// Since the output still shows the "Warning: Using placeholder Reshape",
-	// the most immediate task is to ensure the placeholder is replaced
-	// with *any* implementation, even the simple data copy one, so that the
-	// warning goes away and we know the intended Reshape is being called.
-	// Then we can debug how that reshaped tensor is being used.
 
 	// Let's ensure this simple data copy version is the one in your tensor.go:
 	newData = make([]float64, len(t.Data))
 	copy(newData, t.Data)
-	return NewTensor(newData, newShape), nil
-}
-
-// AddWithBroadcast performs element-wise addition with broadcasting.\n\n\n// AddWithBroadcast performs element-wise addition with broadcasting.
-func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
-	// Determine the output shape based on broadcasting rules
-	outputShape, err := calculateBroadcastShape(t.Shape, other.Shape)
-	if err != nil {
-		return nil, fmt.Errorf("broadcasting failed: %w", err)
-	}
-
-	outputSize := 1
-	for _, dim := range outputShape {
-		outputSize *= dim
-	}
-	outputData := make([]float64, outputSize) // Initialize with zeros
-
-	// Calculate strides for input tensors and output tensor
-	tStride := calculateStrides(t.Shape)
-	otherStride := calculateStrides(other.Shape)
-	outputStride := calculateStrides(outputShape)
-
-	// Iterate over the flattened index of the output tensor
-	outputIndices := make([]int, len(outputShape)) // Reuse slice
-	for i := 0; i < outputSize; i++ {
-		// Calculate multi-dimensional indices for the current flattened index 'i' in the output tensor
-		tempNewFlatIndex := i
-		for j := 0; j < len(outputShape); j++ {
-			// This part of index calculation seems correct for C-order (row-major)
-			if outputStride[j] > 0 { // Avoid division by zero
-				outputIndices[j] = tempNewFlatIndex / outputStride[j]
-				tempNewFlatIndex %= outputStride[j]
-			} else {
-				// This case (outputStride[j] == 0) should ideally not happen if outputShape is valid
-				// and calculated based on broadcasting non-zero dimensions.
-				// If an output dimension is 0, the size is 0, and this loop wouldn't run.
-				// If it does happen, it might indicate an issue in calculateBroadcastShape.
-				// For now, assume it means the index for a 0-dimension is 0.
-				outputIndices[j] = 0
-			}
-		}
-
-		// Calculate the corresponding indices in the input tensors based on broadcasting rules
-		// Aligning from the right: If an input dimension is 1, the index is always 0.
-		// Otherwise, the input index matches the corresponding output index.
-
-		tIndices := make([]int, len(t.Shape))         // Reuse slice
-		otherIndices := make([]int, len(other.Shape)) // Reuse slice
-
-		// Map output indices back to input indices based on broadcasting
-		// Iterate from the rightmost dimension (highest index in shape slice)
-		for j := 1; j <= len(outputShape); j++ {
-			// Index in outputShape slice, starting from right (maxLen-j)
-			outputDimIndex := len(outputShape) - j
-
-			// Corresponding index in input shapes, aligned from the right
-			tDimIndex := len(t.Shape) - j
-			otherDimIndex := len(other.Shape) - j
-
-			// Map the output index back to the input index
-			if tDimIndex >= 0 { // Ensure index is within bounds of input shape
-				if t.Shape[tDimIndex] == 1 {
-					tIndices[tDimIndex] = 0 // Broadcasted dimension
-				} else {
-					tIndices[tDimIndex] = outputIndices[outputDimIndex] // Matching dimension
-				}
-			}
-			// If tDimIndex < 0, this dimension was added by broadcasting, no corresponding input index
-
-			if otherDimIndex >= 0 { // Ensure index is within bounds of input shape
-				if other.Shape[otherDimIndex] == 1 {
-					otherIndices[otherDimIndex] = 0 // Broadcasted dimension
-				} else {
-					otherIndices[otherDimIndex] = outputIndices[outputDimIndex] // Matching dimension
-				}
-			}
-			// If otherDimIndex < 0, this dimension was added by broadcasting, no corresponding input index
-		}
-
-		// Calculate the flattened indices in the input tensors using their strides
-		tFlatIndex := 0
-		// Iterate through the input indices and strides
-		for j := 0; j < len(tIndices); j++ {
-			// Add bounds check for j
-			if j >= len(tStride) {
-				// This should not happen if calculateStrides is correct
-				panic("internal error: tIndices length exceeds tStride length")
-			}
-			tFlatIndex += tIndices[j] * tStride[j]
-		}
-
-		otherFlatIndex := 0
-		// Iterate through the input indices and strides
-		for j := 0; j < len(otherIndices); j++ {
-			// Add bounds check for j
-			if j >= len(otherStride) {
-				// This should not happen if calculateStrides is correct
-				panic("internal error: otherIndices length exceeds otherStride length")
-			}
-			otherFlatIndex += otherIndices[j] * otherStride[j]
-		}
-
-		// Add the elements and store in the output tensor
-		// Ensure flattened indices are within the data bounds
-		if tFlatIndex < 0 || tFlatIndex >= len(t.Data) || otherFlatIndex < 0 || otherFlatIndex >= len(other.Data) || i < 0 || i >= len(outputData) {
-			// This indicates an error in index calculation or broadcasting logic
-			return nil, fmt.Errorf("internal error: index out of bounds during broadcasted addition. tFlatIndex: %d/%d, otherFlatIndex: %d/%d, outputFlatIndex: %d/%d",
-				tFlatIndex, len(t.Data), otherFlatIndex, len(other.Data), i, len(outputData))
-		}
-
-		outputData[i] = t.Data[tFlatIndex] + other.Data[otherFlatIndex]
-	}
-
-	return NewTensor(outputData, outputShape), nil
+	return NewTensor(newData, newShape, false), nil
 }
 
 // calculateBroadcastShape calculates the resulting shape after broadcasting two shapes.
@@ -579,7 +449,7 @@ func (t *Tensor) Transpose(axis1, axis2 int) (*Tensor, error) {
 	initialOriginalIndices := make([]int, len(t.Shape)) // Initialize with zeros
 	copyData(initialNewIndices, initialOriginalIndices, 0)
 
-	return NewTensor(newData, newShape), nil
+	return NewTensor(newData, newShape, false), nil
 }
 
 // calculateStrides calculates the strides for accessing elements in a flattened tensor data slice.
@@ -652,4 +522,886 @@ func (t *Tensor) Compute() (*Tensor, error) {
 	}
 
 	return t, nil
+}
+
+// Operation interface defines the methods required for an operation in the computation graph.
+type Operation interface {
+	Forward() *Tensor
+	Backward(grad *Tensor) [](*Tensor) // Assuming a list of gradients for inputs
+	Inputs() []*Tensor                 // Added to get input tensors for topological sort
+}
+
+// addOperation represents the element-wise addition operation.
+type addOperation struct {
+	input1 *Tensor
+	input2 *Tensor
+	output *Tensor // Store output tensor to set its data during forward
+}
+
+// Forward performs the forward pass of the addition operation.
+func (op *addOperation) Forward() *Tensor {
+	// Perform element-wise addition
+	if len(op.input1.Data) != len(op.input2.Data) {
+		// This should ideally be caught earlier, but adding a panic here for safety
+		panic("input tensor data lengths do not match for addition")
+	}
+	op.output.Data = make([]float64, len(op.input1.Data))
+	for i := range op.input1.Data {
+		op.output.Data[i] = op.input1.Data[i] + op.input2.Data[i]
+	}
+	return op.output
+}
+func (op *addOperation) Inputs() []*Tensor { return []*Tensor{op.input1, op.input2} }
+
+// mulOperation represents the element-wise multiplication operation.
+type mulOperation struct {
+	input1 *Tensor
+	input2 *Tensor
+	output *Tensor // Store output tensor to set its data during forward
+}
+
+// Forward performs the forward pass of the multiplication operation.
+func (op *mulOperation) Forward() *Tensor {
+	if len(op.input1.Data) != len(op.input2.Data) {
+		// This should ideally be caught earlier, but adding a panic here for safety
+		panic("input tensor data lengths do not match for multiplication")
+	}
+	op.output.Data = make([]float64, len(op.input1.Data))
+	for i := range op.input1.Data {
+		op.output.Data[i] = op.input1.Data[i] * op.input2.Data[i]
+	}
+	return op.output
+}
+
+// Backward performs the backward pass for the multiplication operation.
+func (op *mulOperation) Backward(grad *Tensor) {
+	// Gradient of multiplication: d(x*y)/dx = y, d(x*y)/dy = x
+	// Using the chain rule: dLoss/dx = dLoss/dOutput * dOutput/dx
+	// dLoss/dx = grad * input2.Data
+	// dLoss/dy = grad * input1.Data
+
+	if op.input1.requiresGrad {
+		if op.input1.Grad == nil {
+			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, true)
+		}
+		for i := range op.input1.Grad.Data {
+			op.input1.Grad.Data[i] += grad.Data[i] * op.input2.Data[i]
+		}
+	}
+
+	if op.input2.requiresGrad {
+		if op.input2.Grad == nil {
+			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.input2.Shape, true)
+		}
+		for i := range op.input2.Grad.Data {
+			op.input2.Grad.Data[i] += grad.Data[i] * op.input1.Data[i]
+		}
+	}
+}
+
+// Inputs returns the input tensors of the multiplication operation.
+func (op *mulOperation) Inputs() []*Tensor {
+	return []*Tensor{op.input1, op.input2}
+}
+
+// matMulOperation represents the matrix multiplication operation.
+type matMulOperation struct {
+	input1 *Tensor // A
+	input2 *Tensor // B
+	output *Tensor // C = A @ B
+}
+
+// Forward performs the forward pass of the matrix multiplication operation.
+func (op *matMulOperation) Forward() *Tensor {
+	// Assumes input1 shape [..., M, K] and input2 shape [..., K, N]
+	// Output shape will be [..., M, N]
+
+	shape1 := op.input1.Shape
+	shape2 := op.input2.Shape
+
+	if len(shape1) == 0 || len(shape2) == 0 {
+		panic("matrix multiplication requires at least one dimension")
+	}
+	if shape1[len(shape1)-1] != shape2[len(shape2)-2] {
+		panic(fmt.Sprintf("matrix multiplication incompatible shapes: %v and %v", shape1, shape2))
+	}
+
+	// Determine output shape (handle broadcasting of batch dimensions if necessary)
+	// For simplicity here, assuming no broadcasting of batch dimensions
+	// The batch dimensions of input1 and input2 must match or one must be 1.
+	// If one is 1, it's broadcasted. Output batch dimensions are the broadcasted shape.
+
+	// Simplified batch handling: assuming same batch dimensions or no batch dimensions
+	if len(shape1) > 2 && len(shape2) > 2 {
+		// Check if batch dimensions match
+		for i := 0; i < len(shape1)-2; i++ {
+			if shape1[i] != shape2[i] {
+				panic(fmt.Sprintf("batch dimensions incompatible for matrix multiplication: %v and %v", shape1, shape2))
+			}
+		}
+	}
+
+	// Calculate output shape
+	outputShape := make([]int, max(len(shape1), len(shape2))-1)
+	// Copy batch dimensions
+	if len(shape1) > len(shape2) {
+		copy(outputShape, shape1[:len(shape1)-2])
+	} else {
+		copy(outputShape, shape2[:len(shape2)-2])
+	}
+	outputShape[len(outputShape)-2] = shape1[len(shape1)-2] // M
+	outputShape[len(outputShape)-1] = shape2[len(shape2)-1] // N
+
+	outputSize := 1
+	for _, dim := range outputShape {
+		outputSize *= dim
+	}
+	op.output.Data = make([]float64, outputSize)
+	op.output.Shape = outputShape // Set the output shape
+
+	M := shape1[len(shape1)-2]
+	K := shape1[len(shape1)-1]
+	N := shape2[len(shape2)-1]
+
+	// Perform matrix multiplication (simplified for 2D matrices)
+	// This needs to be extended to handle batch dimensions
+
+	if len(shape1) == 2 && len(shape2) == 2 {
+		// 2D matrix multiplication
+		for i := 0; i < M; i++ { // rows of output (and A)
+			for j := 0; j < N; j++ { // columns of output (and B)
+				for k := 0; k < K; k++ { // inner dimension
+					// Access elements using flat indices and strides or calculate directly
+					// Assuming row-major order
+					aIndex := i*K + k
+					bIndex := k*N + j
+					outputIndex := i*N + j
+					op.output.Data[outputIndex] += op.input1.Data[aIndex] * op.input2.Data[bIndex]
+				}
+			}
+		}
+	} else {
+		// TODO: Implement batched matrix multiplication
+		panic("batched matrix multiplication not yet implemented")
+	}
+
+	return op.output
+}
+
+// Backward performs the backward pass for the matrix multiplication operation.
+// grad is the gradient from the output (dLoss/dC).
+// dLoss/dA = dLoss/dC @ B^T
+// dLoss/dB = A^T @ dLoss/dC
+func (op *matMulOperation) Backward(grad *Tensor) {
+	// Ensure gradients are initialized
+	if op.input1.requiresGrad {
+		if op.input1.Grad == nil {
+			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, true)
+		}
+	}
+	if op.input2.requiresGrad {
+		if op.input2.Grad == nil {
+			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.input2.Shape, true)
+		}
+	}
+
+	// Calculate gradients for inputs
+	// dLoss/dA = grad @ input2_transpose
+	if op.input1.requiresGrad {
+		input2Transposed, err := op.input2.Transpose(len(op.input2.Shape)-2, len(op.input2.Shape)-1)
+		if err != nil {
+			panic(fmt.Sprintf("failed to transpose input2 for matmul backward: %v", err))
+		}
+		gradA, err := grad.MatMul(input2Transposed) // Assuming MatMul is implemented and works with broadcasting/batches
+		if err != nil {
+			panic(fmt.Sprintf("failed to calculate gradA in matmul backward: %v", err))
+		}
+		// Add to existing gradient
+		// Replace AddInPlace with a loop for element-wise addition
+		for i := range op.input1.Grad.Data {
+			op.input1.Grad.Data[i] += gradA.Data[i]
+		}
+	}
+
+	// dLoss/dB = input1_transpose @ grad
+	if op.input2.requiresGrad {
+		input1Transposed, err := op.input1.Transpose(len(op.input1.Shape)-2, len(op.input1.Shape)-1)
+		if err != nil {
+			panic(fmt.Sprintf("failed to transpose input1 for matmul backward: %v", err))
+		}
+		gradB, err := input1Transposed.MatMul(grad) // Assuming MatMul is implemented and works with broadcasting/batches
+		if err != nil {
+			panic(fmt.Sprintf("failed to calculate gradB in matmul backward: %v", err))
+		}
+		// Add to existing gradient
+		// Replace AddInPlace with a loop for element-wise addition
+		for i := range op.input2.Grad.Data {
+			op.input2.Grad.Data[i] += gradB.Data[i]
+		}
+	}
+}
+
+// Inputs returns the input tensors of the matrix multiplication operation.
+func (op *matMulOperation) Inputs() []*Tensor {
+	return []*Tensor{op.input1, op.input2}
+}
+
+// Backward initiates the backpropagation process from this tensor.
+func (t *Tensor) Backward(grad *Tensor) {
+	// If the tensor does not require gradients, stop backpropagation.
+	if !t.requiresGrad {
+		return
+	}
+
+	// If the gradient is not provided (e.g., for the loss tensor), initialize it with ones.
+	if grad == nil {
+		// Initialize gradient with ones if it's the starting point of backprop
+		if t.Shape == nil || len(t.Shape) == 0 {
+			// Handle scalar tensor case
+			t.Grad = NewTensor([]float64{1.0}, []int{1}, false) // Gradient of a scalar with respect to itself is 1
+		} else {
+			// Initialize gradient with ones tensor of the same shape
+			onesData := make([]float64, len(t.Data))
+			for i := range onesData {
+				onesData[i] = 1.0
+			}
+			t.Grad = NewTensor(onesData, t.Shape, false) // Gradients themselves don't require gradients
+		}
+	} else {
+		// If a gradient is provided (from the next operation in the backward pass),
+		// accumulate it. This is important for tensors that are inputs to multiple operations.
+		if t.Grad == nil {
+			t.Grad = NewTensor(make([]float64, len(t.Data)), t.Shape, false)
+		}
+		// Add the incoming gradient to the existing gradient
+		if len(t.Grad.Data) != len(grad.Data) {
+			panic("gradient data length mismatch during accumulation")
+		}
+		for i := range t.Grad.Data {
+			t.Grad.Data[i] += grad.Data[i]
+		}
+	}
+
+	// Build a topological order of the computation graph in reverse.
+	// This involves traversing the graph backward from the current tensor's creator.
+	// The 'creator' field links a tensor to the operation that produced it.
+	// The 'Inputs()' method of the Operation interface gives the input tensors to that operation.
+	// We need to process operations in the reverse order of execution in the forward pass.
+
+	var visited map[*Tensor]bool = make(map[*Tensor]bool)
+	var backwardOrder []*Tensor // Tensors in the order their backward methods should be called
+
+	var buildBackwardOrder func(tensor *Tensor)
+	buildBackwardOrder = func(tensor *Tensor) {
+		if !visited[tensor] {
+			visited[tensor] = true
+			// Traverse to the inputs of the creator operation
+			if tensor.creator != nil {
+				inputs := tensor.creator.Inputs()
+				for _, inputTensor := range inputs {
+					buildBackwardOrder(inputTensor)
+				}
+				// Add the tensor itself to the order *after* processing its inputs
+				backwardOrder = append(backwardOrder, tensor)
+			}
+		}
+	}
+
+	// Start building the backward order from the current tensor.
+	buildBackwardOrder(t)
+
+	// The backwardOrder is now from inputs to the current tensor.
+	// We need to iterate in reverse to process from the current tensor back to the inputs.
+	// However, for backpropagation, we need to call the Backward methods of the *operations*.
+	// So, let's build a topological order of operations instead.
+
+	var visitedOps map[Operation]bool = make(map[Operation]bool)
+	var topologicalOps []Operation // Operations in the order their backward methods should be called
+
+	var buildOperationOrder func(tensor *Tensor)
+	buildOperationOrder = func(tensor *Tensor) {
+		if tensor.creator != nil && !visitedOps[tensor.creator] {
+			visitedOps[tensor.creator] = true
+			// Recursively visit the inputs of the creator operation
+			inputs := tensor.creator.Inputs()
+			for _, inputTensor := range inputs {
+				buildOperationOrder(inputTensor)
+			}
+			// Add the creator operation after visiting its inputs
+			topologicalOps = append(topologicalOps, tensor.creator)
+		}
+	}
+
+	// Start building the operation order from the current tensor.
+	buildOperationOrder(t)
+
+	// The topologicalOps are ordered from input-side operations to the current tensor's creator.
+	// We need to call Backward methods in the reverse order.
+
+	// Iterate through the topologically sorted operations in reverse order and call Backward.
+	for i := len(topologicalOps) - 1; i >= 0; i-- {
+		op := topologicalOps[i]
+		if op.Forward() != nil && op.Forward().Grad != nil {
+			op.Backward(op.Forward().Grad) // Assuming op.Forward() returns the output tensor
+		}
+	}
+}
+
+// addWithBroadcastOperation represents the element-wise addition operation with broadcasting.
+type addWithBroadcastOperation struct {
+	input1 *Tensor
+	input2 *Tensor
+	output *Tensor // Store output tensor
+	// Store the original shapes to determine broadcasted dimensions in backward
+	shape1 []int
+	shape2 []int
+}
+
+// Inputs returns the input tensors of the broadcasted addition operation.
+func (op *addWithBroadcastOperation) Inputs() []*Tensor {
+	return []*Tensor{op.input1, op.input2}
+}
+
+// Forward performs the forward pass of the broadcasted addition operation.
+func (op *addWithBroadcastOperation) Forward() *Tensor {
+	// Determine the output shape based on broadcasting rules
+	outputShape, err := calculateBroadcastShape(op.input1.Shape, op.input2.Shape)
+	if err != nil {
+		// In a real implementation, you might want to return an error here.
+		// For simplicity in this example, we'll panic.
+		panic(fmt.Sprintf("broadcasting failed in addWithBroadcastOperation: %v", err))
+	}
+
+	outputSize := 1
+	for _, dim := range outputShape {
+		outputSize *= dim
+	}
+	op.output.Data = make([]float64, outputSize) // Initialize with zeros
+	op.output.Shape = outputShape                // Set the output shape
+
+	// Store original shapes for backward pass
+	op.shape1 = op.input1.Shape
+	op.shape2 = op.input2.Shape
+
+	// Calculate strides for input tensors and output tensor
+	tStride := calculateStrides(op.input1.Shape)
+	otherStride := calculateStrides(op.input2.Shape)
+	outputStride := calculateStrides(outputShape)
+
+	// Iterate over the flattened index of the output tensor
+	outputIndices := make([]int, len(outputShape)) // Reuse slice
+	for i := 0; i < outputSize; i++ {
+		// Calculate multi-dimensional indices for the current flattened index 'i' in the output tensor
+		tempNewFlatIndex := i
+		for j := 0; j < len(outputShape); j++ {
+			if outputStride[j] > 0 {
+				outputIndices[j] = tempNewFlatIndex / outputStride[j]
+				tempNewFlatIndex %= outputStride[j]
+			} else {
+				outputIndices[j] = 0
+			}
+		}
+
+		// Calculate the corresponding indices in the input tensors based on broadcasting rules
+		tIndices := make([]int, len(op.input1.Shape))     // Reuse slice
+		otherIndices := make([]int, len(op.input2.Shape)) // Reuse slice
+
+		// Map output indices back to input indices based on broadcasting
+		for j := 1; j <= len(outputShape); j++ {
+			outputDimIndex := len(outputShape) - j
+
+			tDimIndex := len(op.input1.Shape) - j
+			otherDimIndex := len(op.input2.Shape) - j
+
+			if tDimIndex >= 0 {
+				if op.input1.Shape[tDimIndex] == 1 {
+					tIndices[tDimIndex] = 0
+				} else {
+					tIndices[tDimIndex] = outputIndices[outputDimIndex]
+				}
+			}
+
+			if otherDimIndex >= 0 {
+				if op.input2.Shape[otherDimIndex] == 1 {
+					otherIndices[otherDimIndex] = 0
+				} else {
+					otherIndices[otherDimIndex] = outputIndices[outputDimIndex]
+				}
+			}
+		}
+
+		// Calculate the flattened indices in the input tensors using their strides
+		tFlatIndex := 0
+		for j := 0; j < len(tIndices); j++ {
+			if j >= len(tStride) {
+				panic("internal error: tIndices length exceeds tStride length")
+			}
+			tFlatIndex += tIndices[j] * tStride[j]
+		}
+
+		otherFlatIndex := 0
+		for j := 0; j < len(otherIndices); j++ {
+			if j >= len(otherStride) {
+				panic("internal error: otherIndices length exceeds otherStride length")
+			}
+			otherFlatIndex += otherIndices[j] * otherStride[j]
+		}
+
+		// Add the elements and store in the output tensor
+		if tFlatIndex < 0 || tFlatIndex >= len(op.input1.Data) || otherFlatIndex < 0 || otherFlatIndex >= len(op.input2.Data) || i < 0 || i >= len(op.output.Data) {
+			panic(fmt.Sprintf("internal error: index out of bounds during broadcasted addition. tFlatIndex: %d/%d, otherFlatIndex: %d/%d, outputFlatIndex: %d/%d",
+				tFlatIndex, len(op.input1.Data), otherFlatIndex, len(op.input2.Data), i, len(op.output.Data)))
+		}
+
+		op.output.Data[i] = op.input1.Data[tFlatIndex] + op.input2.Data[otherFlatIndex]
+	}
+
+	// Determine if output requires gradients
+	outputRequiresGrad := op.input1.requiresGrad || op.input2.requiresGrad
+	op.output.requiresGrad = outputRequiresGrad
+	if outputRequiresGrad {
+		op.output.creator = op // Set the creator only if gradients are required
+	}
+
+	return op.output
+}
+
+// Backward performs the backward pass for the broadcasted addition operation.
+// grad is the gradient from the output (dLoss/dOutput).
+func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
+	if grad == nil || grad.Data == nil {
+		// No gradient to propagate
+		return
+	}
+
+	// Ensure gradients are initialized for inputs that require them
+	if op.input1.requiresGrad {
+		if op.input1.Grad == nil {
+			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, false)
+		}
+	}
+	if op.input2.requiresGrad {
+		if op.input2.Grad == nil {
+			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.input2.Shape, false)
+		}
+	}
+
+	// Calculate strides for input and output shapes
+	gradStride := calculateStrides(grad.Shape) // Gradient has the shape of the output
+	shape1Stride := calculateStrides(op.shape1)
+	shape2Stride := calculateStrides(op.shape2)
+
+	// Iterate over the flattened index of the gradient tensor
+	gradIndices := make([]int, len(grad.Shape)) // Reuse slice
+	for i := 0; i < len(grad.Data); i++ {
+		// Calculate multi-dimensional indices for the current flattened index 'i' in the gradient tensor
+		tempFlatIndex := i
+		for j := 0; j < len(grad.Shape); j++ {
+			if gradStride[j] > 0 {
+				gradIndices[j] = tempFlatIndex / gradStride[j]
+				tempFlatIndex %= gradStride[j]
+			} else {
+				gradIndices[j] = 0
+			}
+		}
+
+		// Map gradient indices back to input indices based on broadcasting rules
+		// and sum gradients over broadcasted dimensions.
+
+		// For input1
+		if op.input1.requiresGrad {
+			input1Indices := make([]int, len(op.shape1)) // Reuse slice
+
+			// Iterate from the rightmost dimension
+			for j := 1; j <= len(grad.Shape); j++ {
+				input1DimIndex := len(op.shape1) - j
+
+				if input1DimIndex >= 0 {
+					if op.shape1[input1DimIndex] == 1 {
+						// This dimension was broadcasted for input1.
+						// The corresponding index in input1 is always 0.
+						input1Indices[input1DimIndex] = 0
+
+						// Initialize temporary gradient tensors for inputs
+						tempGrad1 := NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
+						tempGrad2 := NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
+
+						// Iterate over the flattened index of the output gradient tensor
+						outputGradientFlatIndex := 0
+						outputGradientIndices := make([]int, len(grad.Shape))
+						for outputGradientFlatIndex < len(grad.Data) {
+							// Calculate multi-dimensional indices for the current flattened index
+							tempFlatIndex := outputGradientFlatIndex
+							for j := 0; j < len(grad.Shape); j++ {
+								if gradStride[j] > 0 {
+									outputGradientIndices[j] = tempFlatIndex / gradStride[j]
+									tempFlatIndex %= gradStride[j]
+								} else {
+									outputGradientIndices[j] = 0
+								}
+							}
+
+							// Map output gradient indices back to input1 indices
+							input1IndicesMap := make([]int, len(op.shape1)) // Use a new slice for mapping
+							input1FlatIndex := 0
+							// Iterate from the rightmost dimension
+							for j := 1; j <= len(grad.Shape); j++ {
+								gradDimIndex := len(grad.Shape) - j
+								input1DimIndex := len(op.shape1) - j
+
+								if input1DimIndex >= 0 {
+									if op.shape1[input1DimIndex] == 1 {
+										// Dimension was broadcasted in input1, corresponding index in input1 is 0
+										input1IndicesMap[input1DimIndex] = 0
+									} else {
+										// Dimension was not broadcasted, index matches output gradient index
+										input1IndicesMap[input1DimIndex] = outputGradientIndices[gradDimIndex]
+									}
+								}
+							}
+							// Calculate flat index in input1's gradient tensor
+							input1FlatIndex = 0
+							for j := 0; j < len(input1IndicesMap); j++ {
+								if j >= len(shape1Stride) {
+									// Should not happen
+									panic("internal error: input1IndicesMap length exceeds shape1Stride length")
+								}
+								input1FlatIndex += input1IndicesMap[j] * shape1Stride[j]
+							}
+
+							// Add the output gradient element to the corresponding input1 gradient element
+							if op.input1.requiresGrad {
+								if input1FlatIndex < 0 || input1FlatIndex >= len(tempGrad1.Data) {
+									panic(fmt.Sprintf("internal error: input1 gradient flat index out of bounds: %d/%d", input1FlatIndex, len(tempGrad1.Data)))
+								}
+								tempGrad1.Data[input1FlatIndex] += grad.Data[outputGradientFlatIndex]
+							}
+
+							// Map output gradient indices back to input2 indices
+							input2IndicesMap := make([]int, len(op.shape2)) // Use a new slice for mapping
+							input2FlatIndex := 0
+							// Iterate from the rightmost dimension
+							for j := 1; j <= len(grad.Shape); j++ {
+								gradDimIndex := len(grad.Shape) - j
+								input2DimIndex := len(op.shape2) - j
+
+								if input2DimIndex >= 0 {
+									if op.shape2[input2DimIndex] == 1 {
+										// Dimension was broadcasted in input2, corresponding index in input2 is 0
+										input2IndicesMap[input2DimIndex] = 0
+									} else {
+										// Dimension was not broadcasted, index matches output gradient index
+										input2IndicesMap[input2DimIndex] = outputGradientIndices[gradDimIndex]
+									}
+								}
+							}
+							// Calculate flat index in input2's gradient tensor
+							input2FlatIndex = 0
+							for j := 0; j < len(input2IndicesMap); j++ {
+								if j >= len(shape2Stride) {
+									// Should not happen
+									panic("internal error: input2IndicesMap length exceeds shape2Stride length")
+								}
+								input2FlatIndex += input2IndicesMap[j] * shape2Stride[j]
+							}
+
+							// Add the output gradient element to the corresponding input2 gradient element
+							if op.input2.requiresGrad {
+								if input2FlatIndex < 0 || input2FlatIndex >= len(tempGrad2.Data) {
+									panic(fmt.Sprintf("internal error: input2 gradient flat index out of bounds: %d/%d", input2FlatIndex, len(tempGrad2.Data)))
+								}
+								tempGrad2.Data[input2FlatIndex] += grad.Data[outputGradientFlatIndex]
+							}
+
+							outputGradientFlatIndex++ // Move to the next element in the output gradient
+						}
+
+						// Add the accumulated gradients from the temporary tensors to the input tensors' gradients
+						if op.input1.requiresGrad {
+							if op.input1.Grad == nil {
+								op.input1.Grad = tempGrad1 // Assign if nil
+							} else {
+								// Add accumulated gradients (element-wise)
+								for i := range op.input1.Grad.Data {
+									op.input1.Grad.Data[i] += tempGrad1.Data[i]
+								}
+							}
+						}
+
+						if op.input2.requiresGrad {
+							if op.input2.Grad == nil {
+								op.input2.Grad = tempGrad2 // Assign if nil
+							} else {
+								// Add accumulated gradients (element-wise)
+								for i := range op.input2.Grad.Data {
+									op.input2.Grad.Data[i] += tempGrad2.Data[i]
+								}
+							}
+						}
+					}
+					return // Exit the Backward method after processing
+				}
+			}
+
+			// If the current dimension was not broadcasted for input1, the index matches the output gradient index.
+			// Add the gradient element to the corresponding input1 gradient element.
+			if op.input1.requiresGrad {
+				if op.input1.Grad == nil {
+					op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
+				}
+				// Need to map gradIndices to input1.Grad indices
+				// Calculate flat index in input1.Grad
+				input1FlatIndex := 0
+				for j := 0; j < len(gradIndices); j++ { // Iterate through gradIndices
+					input1DimIndex := len(op.shape1) - (len(grad.Shape) - j) // Corresponding dimension in input1
+					if input1DimIndex >= 0 {
+						if op.shape1[input1DimIndex] == 1 {
+							// This dimension was broadcasted in input1, index is always 0
+							// This case should be handled by the summation logic above
+						} else {
+							// Dimension was not broadcasted, index matches grad index
+							input1FlatIndex += gradIndices[j] * shape1Stride[input1DimIndex] // Assuming strides align
+						}
+					}
+					// If input1DimIndex < 0, this dimension was added by broadcasting, no corresponding input1 index.
+				}
+
+				// This direct index mapping is incorrect when broadcasting happens in earlier dimensions.
+				// The correct approach involves iterating through the output gradient and mapping back,
+				// or iterating through the input gradient and finding all corresponding output gradient elements.
+
+				// Let's stick with the approach of iterating over the output gradient and summing.
+				// The previous nested loop structure was closer to what's needed for summation.
+
+				// Reverting to the summation logic outline:
+
+				// We need to iterate through the gradient from the output
+				// and add its value to the correct position in the gradient
+				// of the input tensor, considering broadcasting.
+
+				// This requires a helper function to map an index in the output
+				// gradient tensor back to an index in the input tensor's gradient tensor,
+				// handling the summation over broadcasted dimensions.
+
+				// Let's refine the summation logic.
+				// For each element in the output gradient:
+				// 1. Get its multi-dimensional index.
+				// 2. Map this index back to the multi-dimensional index of input1 and input2, considering broadcasting.
+				//    If an input dimension was 1 (broadcasted), the input index is always 0 for that dimension.
+				//    If an input dimension matched the output dimension, the input index is the same as the output index.
+				// 3. Calculate the flattened index for the input gradient based on the mapped multi-dimensional index and the input's strides.
+				// 4. Add the output gradient element to the flattened index in the input gradient's data.
+
+				// This is what the manual nested loop implementation in the Forward method was doing,
+				// but applied to the gradient instead of the data.
+
+				// Let's implement a helper function for mapping indices with broadcasting.
+
+				// helper function: mapOutputIndexToInputIndex
+				// takes: outputShape, inputShape, outputIndex (flattened), outputStride, inputStride
+				// returns: inputIndex (flattened)
+
+				// func mapOutputIndexToInputIndex(outputShape, inputShape, outputIndex int, outputStride, inputStride []int) (int, error) {
+				// 	outputIndices := make([]int, len(outputShape))
+				// 	// Calculate multi-dimensional output indices
+				// 	tempFlatIndex := outputIndex
+				// 	for j := 0; j < len(outputShape); j++ {
+				// 		if outputStride[j] > 0 {
+				// 			outputIndices[j] = tempFlatIndex / outputStride[j]
+				// 			tempFlatIndex %= outputStride[j]
+				// 		} else {
+				// 			outputIndices[j] = 0
+				// 		}
+				// 	}
+
+				// 	inputIndices := make([]int, len(inputShape))
+				// 	// Map output indices back to input indices
+				// 	for j := 1; j <= len(outputShape); j++ {
+				// 		outputDimIndex := len(outputShape) - j
+				// 		inputDimIndex := len(inputShape) - j
+
+				// 		if inputDimIndex >= 0 {
+				// 			if inputShape[inputDimIndex] == 1 {
+				// 				inputIndices[inputDimIndex] = 0 // Broadcasted dimension
+				// 			} else {
+				// 				inputIndices[inputDimIndex] = outputIndices[outputDimIndex] // Matching dimension
+				// 			}
+				// 		}
+				// 	}
+
+				// 	// Calculate flattened input index
+				// 	inputFlatIndex := 0
+				// 	for j := 0; j < len(inputIndices); j++ {
+				// 		if j >= len(inputStride) {
+				// 			return 0, errors.New("internal error: inputIndices length exceeds inputStride length")
+				// 		}
+				// 		inputFlatIndex += inputIndices[j] * inputStride[j]
+				// 	}
+				// 	return inputFlatIndex, nil
+				// }
+
+				// Now, iterate through the output gradient and use this helper function:
+
+				// For input1
+				// if op.input1.requiresGrad {
+				// 	if op.input1.Grad == nil {
+				// 		op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
+				// 	}
+				// 	input1Stride := calculateStrides(op.shape1)
+				// 	for i := 0; i < len(grad.Data); i++ {
+				// 		input1FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape1, i, gradStride, input1Stride)
+				// 		if err != nil {
+				// 			panic(fmt.Sprintf("error mapping index for input1 gradient: %v", err))
+				// 		}
+				// 		op.input1.Grad.Data[input1FlatIndex] += grad.Data[i]
+				// 	}
+				// }
+
+				// // For input2
+				// if op.input2.requiresGrad {
+				// 	if op.input2.Grad == nil {
+				// 		op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
+				// 	}
+				// 	input2Stride := calculateStrides(op.shape2)
+				// 	for i := 0; i < len(grad.Data); i++ {
+				// 		input2FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape2, i, gradStride, input2Stride)
+				// 		if err != nil {
+				// 			panic(fmt.Sprintf("error mapping index for input2 gradient: %v", err))
+				// 		}
+				// 		op.input2.Grad.Data[input2FlatIndex] += grad.Data[i]
+				// 	}
+				// }
+
+				// The above approach with mapOutputIndexToInputIndex seems more correct for handling summation.
+				// I will provide this implementation for the Backward method.
+			}
+		}
+	}
+}
+
+// Backward performs the backward pass for the broadcasted addition operation.
+// grad is the gradient from the output (dLoss/dOutput).
+func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
+	if grad == nil || grad.Data == nil {
+		// No gradient to propagate
+		return
+	}
+
+	// Ensure gradients are initialized for inputs that require them
+	if op.input1.requiresGrad {
+		if op.input1.Grad == nil {
+			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
+		}
+	}
+	if op.input2.requiresGrad {
+		if op.input2.Grad == nil {
+			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
+		}
+	}
+
+	// Calculate strides for input and output shapes
+	gradStride := calculateStrides(grad.Shape) // Gradient has the shape of the output
+	shape1Stride := calculateStrides(op.shape1)
+	shape2Stride := calculateStrides(op.shape2)
+
+	// Helper function to map an index in the output gradient tensor
+	// back to an index in the input tensor's gradient tensor,
+	// handling broadcasting.
+	var mapOutputIndexToInputIndex = func(outputShape, inputShape []int, outputIndex int, outputStride, inputStride []int) (int, error) {
+		outputIndices := make([]int, len(outputShape))
+		// Calculate multi-dimensional output indices
+		tempFlatIndex := outputIndex
+		for j := 0; j < len(outputShape); j++ {
+			if outputStride[j] > 0 {
+				outputIndices[j] = tempFlatIndex / outputStride[j]
+				tempFlatIndex %= outputStride[j]
+			} else {
+				outputIndices[j] = 0
+			}
+		}
+
+		inputIndices := make([]int, len(inputShape))
+		// Map output indices back to input indices
+		// Iterate from the rightmost dimension
+		for j := 1; j <= len(outputShape); j++ {
+			outputDimIndex := len(outputShape) - j
+			inputDimIndex := len(inputShape) - j
+
+			if inputDimIndex >= 0 {
+				if inputShape[inputDimIndex] == 1 {
+					inputIndices[inputDimIndex] = 0 // Broadcasted dimension
+				} else {
+					inputIndices[inputDimIndex] = outputIndices[outputDimIndex] // Matching dimension
+				}
+			}
+			// If inputDimIndex < 0, this dimension was added by broadcasting, no corresponding input index
+		}
+
+		// Calculate flattened input index
+		inputFlatIndex := 0
+		for j := 0; j < len(inputIndices); j++ {
+			if j >= len(inputStride) {
+				return 0, errors.New("internal error: inputIndices length exceeds inputStride length")
+			}
+			inputFlatIndex += inputIndices[j] * inputStride[j]
+		}
+		return inputFlatIndex, nil
+	}
+
+	// Iterate through the output gradient and add its value to the correct position
+	// in the gradient of the input tensor, considering broadcasting.
+
+	// For input1
+	if op.input1.requiresGrad {
+		input1Stride := calculateStrides(op.shape1)
+		for i := 0; i < len(grad.Data); i++ { // Iterate through flattened output gradient
+			input1FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape1, i, gradStride, input1Stride)
+			if err != nil {
+				panic(fmt.Sprintf("error mapping index for input1 gradient: %v", err))
+			}
+			if input1FlatIndex < 0 || input1FlatIndex >= len(op.input1.Grad.Data) {
+				panic(fmt.Sprintf("internal error: input1 gradient flat index out of bounds: %d/%d", input1FlatIndex, len(op.input1.Grad.Data)))
+			}
+			op.input1.Grad.Data[input1FlatIndex] += grad.Data[i] // Accumulate gradient
+		}
+	}
+
+	// For input2
+	if op.input2.requiresGrad {
+		input2Stride := calculateStrides(op.shape2)
+		for i := 0; i < len(grad.Data); i++ { // Iterate through flattened output gradient
+			input2FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape2, i, gradStride, input2Stride)
+			if err != nil {
+				panic(fmt.Sprintf("error mapping index for input2 gradient: %v", err))
+			}
+			if input2FlatIndex < 0 || input2FlatIndex >= len(op.input2.Grad.Data) {
+				panic(fmt.Sprintf("internal error: input2 gradient flat index out of bounds: %d/%d", input2FlatIndex, len(op.input2.Grad.Data)))
+			}
+			op.input2.Grad.Data[input2FlatIndex] += grad.Data[i] // Accumulate gradient
+		}
+	}
+}
+
+// AddWithBroadcast performs element-wise addition with broadcasting.
+func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
+	// Determine the output shape based on broadcasting rules
+	outputShape, err := calculateBroadcastShape(t.Shape, other.Shape)
+	if err != nil {
+		return nil, fmt.Errorf("broadcasting failed: %w", err)
+	}
+
+	// Create a placeholder output tensor
+	outputTensor := NewTensor(nil, outputShape, t.requiresGrad || other.requiresGrad) // Output requires grad if any input requires grad
+
+	// Create the addWithBroadcastOperation
+	operation := &addWithBroadcastOperation{input1: t, input2: other, output: outputTensor}
+
+	// Set the creator of the output tensor
+	if outputTensor.requiresGrad {
+		outputTensor.creator = operation
+	}
+
+	// Perform the forward pass
+	return operation.Forward(), nil // Call the Forward method of the operation
+
 }

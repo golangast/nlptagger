@@ -153,7 +153,7 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		dataSize := batchSize * resultRows * resultCols
 		// Create a slice of float64 with the calculated size and initialize it with zeros
 		data := make([]float64, dataSize)
-		result := NewTensor(data, []int{batchSize, resultRows, resultCols})
+		result := NewTensor(data, []int{batchSize, resultRows, resultCols}, false)
 
 		// Get a batch iterator for tensor t
 		batchIter, err := t.BatchIterator()
@@ -238,7 +238,7 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		}
 		// Create a slice of float64 with the calculated size and initialize it with zeros
 		data := make([]float64, dataSize)
-		result := NewTensor(data, resultShape) // Create the result tensor
+		result := NewTensor(data, resultShape, false) // Create the result tensor
 
 		// Create the 4D matrix multiplication iterator
 		// Add print statements to inspect input tensor data before multiplication
@@ -265,16 +265,43 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		//fmt.Printf("4D MatMul: result.Data (first %d elements): %v\n", min(20, len(result.Data)), result.Data[:min(20, len(result.Data))])
 
 		elapsed := time.Since(start)
-		fmt.Printf("4D x 4D MatMul (no goroutines) took %s\n", elapsed)
+		fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
 		return result, nil
 	} else if len(t.Shape) == 2 && len(other.Shape) == 2 {
-		// Existing 2D x 2D logic
-		result, err := t.MatMulFromScratch(other)
-		if err != nil {
-			return nil, fmt.Errorf("2D matrix multiplication failed: %w", err)
+		for i := 0; i < len(t.Shape)-2; i++ {
+			if t.Shape[i] != other.Shape[i] {
+				return nil, fmt.Errorf("batch dimensions incompatible for matrix multiplication: %v and %v", t.Shape, other.Shape)
+			}
 		}
 
-		return result, nil
+		// Calculate output shape
+		outputShape := make([]int, max(len(t.Shape), len(other.Shape))-1)
+		// Copy batch dimensions
+		if len(t.Shape) > len(other.Shape) {
+			copy(outputShape, t.Shape[:len(t.Shape)-2])
+		} else {
+			copy(outputShape, other.Shape[:len(other.Shape)-2])
+		}
+		outputShape[len(outputShape)-2] = t.Shape[len(t.Shape)-2]         // M
+		outputShape[len(outputShape)-1] = other.Shape[len(other.Shape)-1] // N
+
+		// Create a placeholder output tensor
+		outputTensor := NewTensor(nil, outputShape, false) // Data will be filled in Forward
+
+		// Create the matMulOperation
+		operation := &matMulOperation{input1: t, input2: other, output: outputTensor}
+
+		// Set the creator of the output tensor
+		outputTensor.creator = operation
+
+		return outputTensor, nil
+		// Existing 2D x 2D logic
+		// result, err := t.MatMulFromScratch(other)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("2D matrix multiplication failed: %w", err)
+		// }
+
+		// return result, nil
 
 	}
 	elapsed := time.Since(start)
@@ -430,7 +457,7 @@ func (t *Tensor) MatMulFromScratch(other *Tensor) (*Tensor, error) {
 	}
 	// Create a slice of float64 with the calculated size and initialize it with zeros
 	data := make([]float64, dataSize)
-	result := NewTensor(data, resultShape) // Assuming NewTensor allocates the Data slice
+	result := NewTensor(data, resultShape, false) // Assuming NewTensor allocates the Data slice
 
 	// Pre-calculate strides for efficiency
 	strideA := colsA

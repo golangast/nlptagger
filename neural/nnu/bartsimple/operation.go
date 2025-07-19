@@ -2,16 +2,6 @@ package bartsimple
 
 import "fmt"
 
-// Operation interface defines the methods required for an operation in the computation graph.
-type Operation interface {
-	// Forward performs the forward pass of the operation.
-	Forward() *Tensor
-	// Backward performs the backward pass of the operation.
-	Backward(gradOutput *Tensor)
-	// Inputs returns the input tensors of the operation.
-	Inputs() []*Tensor
-}
-
 // AddOperation represents an element-wise addition operation for autograd.
 type AddOperation struct {
 	Input1, Input2 *Tensor
@@ -56,7 +46,7 @@ func (op *MatMulOperation) Backward(gradOutput *Tensor) {
 		}
 		// If the gradient for Input1 is nil, initialize it. Otherwise, accumulate the new gradient.
 		if op.Input1.Grad == nil {
-			op.Input1.Grad = NewTensor(gradInput1.Data, gradInput1.Shape) // Initialize Grad with the computed gradient
+			op.Input1.Grad = NewTensor(gradInput1.Data, gradInput1.Shape, true) // Initialize Grad with the computed gradient
 		} else {
 			op.Input1.Grad, err = op.Input1.Grad.Add(gradInput1) // Accumulate gradient by adding to the existing gradient
 			if err != nil {
@@ -82,7 +72,7 @@ func (op *MatMulOperation) Backward(gradOutput *Tensor) {
 		}
 		// If the gradient for Input2 is nil, initialize it. Otherwise, accumulate the new gradient.
 		if op.Input2.Grad == nil {
-			op.Input2.Grad = NewTensor(gradInput2.Data, gradInput2.Shape) // Initialize Grad with the computed gradient
+			op.Input2.Grad = NewTensor(gradInput2.Data, gradInput2.Shape, true) // Initialize Grad with the computed gradient
 		} else {
 			op.Input2.Grad, err = op.Input2.Grad.Add(gradInput2) // Accumulate gradient by adding to the existing gradient
 			if err != nil {
@@ -109,4 +99,27 @@ func (op *AddOperation) Inputs() []*Tensor {
 // Implement the Inputs() method for MatMulOperation.
 func (op *MatMulOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input1, op.Input2}
+}
+func (op *addOperation) Backward(grad *Tensor) {
+	// For element-wise addition, the gradient is distributed to the inputs.
+	if op.input1.requiresGrad {
+		if op.input1.Grad == nil {
+			// Initialize gradient tensor if nil
+			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, true)
+		}
+		// Accumulate gradients
+		for i := range op.input1.Grad.Data {
+			op.input1.Grad.Data[i] += grad.Data[i]
+		}
+	}
+	if op.input2.requiresGrad {
+		if op.input2.Grad == nil {
+			// Initialize gradient tensor if nil
+			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.input2.Shape, true)
+		}
+		// Accumulate gradients
+		for i := range op.input2.Grad.Data {
+			op.input2.Grad.Data[i] += grad.Data[i]
+		}
+	}
 }

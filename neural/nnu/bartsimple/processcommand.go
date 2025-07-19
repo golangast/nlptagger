@@ -54,7 +54,7 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 		inputTensorData[i] = float64(id)
 	}
 	// Assuming NewTensor function is available
-	inputTensor := NewTensor(inputTensorData, []int{1, len(inputTokenIDs)}) // Batch size 1
+	inputTensor := NewTensor(inputTensorData, []int{1, len(inputTokenIDs)}, true) // Batch size 1
 
 	// Embed the input tensor
 	// Assuming TokenEmbedding.Forward exists and returns *Tensor
@@ -81,13 +81,6 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 		return "", fmt.Errorf("simplified encoder layer forward pass failed: %w", err)
 	}
 
-	// Prepare decoder input (simplified: using the BOS token for the first step)
-	// In a real autoregressive decoder, this would be the previously generated token embedding.
-	// For this simplified non-autoregressive version within BartProcessCommand,
-	// we'll create a decoder input tensor with the BOS token ID repeated for the target sequence length.
-	// This is a simplification and not how a real autoregressive decoder works.
-	// However, for the purpose of getting *some* output from the decoder, we'll do this.
-
 	// Assuming m.Tokenizer.BosID exists and returns int
 	bosTokenID := m.Tokenizer.BosID
 	// Let's assume the target sequence length is the same as the input sequence length for this simplification
@@ -97,7 +90,7 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 		decoderInputIDs[i] = float64(bosTokenID)
 	}
 	// Assuming NewTensor function is available
-	decoderInputTensor := NewTensor(decoderInputIDs, []int{1, targetSeqLength}) // Batch size 1
+	decoderInputTensor := NewTensor(decoderInputIDs, []int{1, targetSeqLength}, true) // Batch size 1
 
 	// Embed the decoder input
 	// Assuming TokenEmbedding.Forward exists and returns *Tensor

@@ -178,9 +178,9 @@ func (l *BARTDecoderLayer) Forward(inputTensor *Tensor, encoderOutput *Tensor, s
 type SimplifiedBARTModel struct {
 	Encoder             *BARTEncoder
 	Decoder             *BARTDecoder
-	Tokenizer           *Tokenizer           // We'll add a simple one later
-	TokenEmbedding      *Embedding           // We'll add a simple one later
-	PositionalEmbedding *PositionalEmbedding // We'll add a simple one later
+	Tokenizer           *Tokenizer
+	TokenEmbedding      *Embedding
+	PositionalEmbedding *PositionalEmbedding
 	OutputLinear        *Linear
 	TokenIds            []int // Final linear layer for output
 	VocabSize           int
@@ -362,4 +362,83 @@ func LoadSimplifiedBARTModelFromGOB(filePath string) (*SimplifiedBARTModel, erro
 	}
 
 	return &loadedModel, nil
+}
+// ForwardForTraining performs the forward pass of the BART model for training.
+// It takes input and target tensors and returns the raw output logits.
+func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor *Tensor) (*Tensor, error) {
+	// Ensure necessary components are initialized
+	if m.Encoder == nil {
+		return nil, errors.New("model encoder is not initialized")
+	}
+	if m.Decoder == nil {
+		return nil, errors.New("model decoder is not initialized")
+	}
+	if m.TokenEmbedding == nil {
+		return nil, errors.New("model token embedding is not initialized")
+	}
+	if m.PositionalEmbedding == nil {
+		return nil, errors.New("model positional embedding is not initialized")
+	}
+	if m.OutputLinear == nil {
+		return nil, errors.New("model output linear layer is not initialized")
+	}
+
+	// --- Encoder Forward Pass ---
+	// Input embeddings
+	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor) // Assuming TokenEmbedding.Forward takes *Tensor and returns *Tensor
+	if err != nil {
+		return nil, fmt.Errorf("encoder token embedding failed: %w", err)
+	}
+
+	// Add positional embeddings
+	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings) // Assuming PositionalEmbedding.Forward takes *Tensor and returns *Tensor
+	if err != nil {
+		return nil, fmt.Errorf("encoder positional embedding failed: %w", err)
+	}
+
+	// TODO: Implement encoder masking if necessary (e.g., padding mask)
+	var encoderMask *Tensor = nil
+
+	// Pass through the encoder layer
+	// Assuming m.Encoder.Layer.Forward takes input tensor and mask, and returns output tensor
+	encoderOutput, err := m.Encoder.Layer.Forward(encoderInputWithPos, encoderMask)
+	if err != nil {
+		return nil, fmt.Errorf("encoder forward pass failed: %w", err)
+	}
+
+	// --- Decoder Forward Pass ---
+	// Target embeddings
+	decoderInputEmbeddings, err := m.TokenEmbedding.Forward(targetTensor) // Assuming TokenEmbedding.Forward takes *Tensor and returns *Tensor
+	if err != nil {
+		return nil, fmt.Errorf("decoder token embedding failed: %w", err)
+	}
+
+	// Add positional embeddings to decoder input
+	decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings) // Assuming PositionalEmbedding.Forward takes *Tensor and returns *Tensor
+	if err != nil {
+		return nil, fmt.Errorf("decoder positional embedding failed: %w", err)
+	}
+
+	// TODO: Implement decoder self-attention mask (causal mask)
+	var selfAttentionMask *Tensor = nil
+
+	// TODO: Implement decoder cross-attention mask (based on encoder padding)
+	var crossAttentionMask *Tensor = nil
+
+	// Pass through the decoder layer
+	// Assuming m.Decoder.Layer.Forward takes decoder input, encoder output, self-attention mask, and cross-attention mask
+	decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
+	if err != nil {
+		return nil, fmt.Errorf("decoder forward pass failed: %w", err)
+	}
+
+	// --- Final Linear Layer ---
+	// Pass decoder output through the final linear layer to get logits
+	// Assuming m.OutputLinear.Forward takes input tensor and returns output tensor (logits)
+	outputLogits, err := m.OutputLinear.Forward(decoderOutput)
+	if err != nil {
+		return nil, fmt.Errorf("output linear layer failed: %w", err)
+	}
+
+	return outputLogits, nil
 }
