@@ -69,7 +69,7 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 	for epoch := 0; epoch < epochs; epoch++ {
 		totalLoss := 0.0
 		for i, sentencePair := range data.Sentences {
-			loss, err := trainBARTStep(model, sentencePair.Input, sentencePair.Output, learningRate)
+			loss, err := trainBARTStep(model, sentencePair.Input, sentencePair.Output)
 			if err != nil {
 				log.Printf("Error during training step %d in epoch %d: %v\n", i, epoch, err)
 				continue // Or handle error more strictly
@@ -89,7 +89,7 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 // and targetIDs are flat [batch*seq_len].
 // It returns the average loss per token.
 // trainBARTStep performs a single training step (forward pass, loss calculation, placeholder for backprop).
-func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence string, learningRate float64) (float64, error) {
+func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence string) (float64, error) {
 	// 1. Prepare Input and Target
 	inputTokenIDs, err := model.Tokenizer.Encode(inputSentence)
 	if err != nil {

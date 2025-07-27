@@ -11,39 +11,6 @@ type Optimizer struct {
 	Parameters   []*Tensor // Slice of tensors representing the model parameters
 }
 
-// argmax returns the index of the maximum value in a slice of float64.
-// This is a simple implementation; you might need a more robust version.
-// This function will likely need to be called after evaluating a tensor.
-func argmax(data []float64) int {
-	maxVal := data[0]
-	maxIndex := 0
-	for i, v := range data {
-		if v > maxVal {
-			maxVal = v
-			maxIndex = i
-		}
-	}
-	return int(maxIndex)
-}
-
-// onesTensor creates a tensor of the given shape with all elements set to 1.0.
-func onesTensor(shape []int) *Tensor {
-	size := 1
-	for _, dim := range shape {
-		size *= dim
-	}
-
-	data := make([]float64, size)
-	for i := range data {
-		data[i] = 1.0
-	}
-
-	return &Tensor{
-		Data:  data,
-		Shape: shape,
-	}
-}
-
 // BatchIterator allows iterating over batches of a 3D tensor.
 type BatchIterator struct {
 	tensor       *Tensor

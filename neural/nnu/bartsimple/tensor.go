@@ -11,6 +11,7 @@ type Tensor struct {
 	Data  []float64
 	Shape []int
 	Grad  *Tensor
+	Mask  *Tensor
 	// Fields for automatic differentiation and lazy execution
 	creator Operation
 	// For lazy execution
@@ -511,7 +512,14 @@ func (t *Tensor) Compute() (*Tensor, error) {
 			// If the tensor has a creator and its data is not yet computed,
 			// execute the creator operation's Forward method.
 			// The Forward method should compute the tensor's data and store it.
-			_ = tensor.creator.Forward() // Assuming Forward() computes and sets tensor.Data
+			outputTensor, err := tensor.creator.Forward()
+			if err != nil {
+				// Handle the error appropriately, e.g., return it or log it
+				return nil, fmt.Errorf("error during forward pass for tensor creator: %w", err)
+			}
+			// Assign the computed data to the tensor
+			tensor.Data = outputTensor.Data
+			// Assuming Forward() computes and sets tensor.Data
 			// You might want to add error handling here if Forward() can return an error.
 		}
 	}
@@ -526,9 +534,9 @@ func (t *Tensor) Compute() (*Tensor, error) {
 
 // Operation interface defines the methods required for an operation in the computation graph.
 type Operation interface {
-	Forward() *Tensor
-	Backward(grad *Tensor) [](*Tensor) // Assuming a list of gradients for inputs
-	Inputs() []*Tensor                 // Added to get input tensors for topological sort
+	Forward(...*Tensor) (*Tensor, error) // Use variadic arguments if the number of inputs varies
+	Backward(*Tensor) error
+	Inputs() []*Tensor
 }
 
 // addOperation represents the element-wise addition operation.
@@ -539,18 +547,34 @@ type addOperation struct {
 }
 
 // Forward performs the forward pass of the addition operation.
-func (op *addOperation) Forward() *Tensor {
+// Forward performs the forward pass of the addition operation.
+func (op *addOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
+	if len(inputs) != 2 {
+		return nil, fmt.Errorf("addOperation requires exactly two input tensors, got %d", len(inputs))
+	}
+
+	op.input1 = inputs[0]
+	op.input2 = inputs[1]
+
 	// Perform element-wise addition
 	if len(op.input1.Data) != len(op.input2.Data) {
-		// This should ideally be caught earlier, but adding a panic here for safety
-		panic("input tensor data lengths do not match for addition")
+		return nil, fmt.Errorf("input tensor data lengths do not match for addition: %d vs %d", len(op.input1.Data), len(op.input2.Data))
 	}
-	op.output.Data = make([]float64, len(op.input1.Data))
+
+	op.output = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, op.input1.requiresGrad || op.input2.requiresGrad) // Assuming element-wise op preserves shape and combines requiresGrad
+
 	for i := range op.input1.Data {
 		op.output.Data[i] = op.input1.Data[i] + op.input2.Data[i]
 	}
-	return op.output
+
+	// Set the creator of the output tensor
+	if op.output.requiresGrad {
+		op.output.creator = op // Set the creator to the addOperation itself
+	}
+
+	return op.output, nil // Return the output tensor and nil for no error
 }
+
 func (op *addOperation) Inputs() []*Tensor { return []*Tensor{op.input1, op.input2} }
 
 // mulOperation represents the element-wise multiplication operation.
@@ -561,20 +585,36 @@ type mulOperation struct {
 }
 
 // Forward performs the forward pass of the multiplication operation.
-func (op *mulOperation) Forward() *Tensor {
-	if len(op.input1.Data) != len(op.input2.Data) {
-		// This should ideally be caught earlier, but adding a panic here for safety
-		panic("input tensor data lengths do not match for multiplication")
+func (op *mulOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
+	if len(inputs) != 2 {
+		return nil, fmt.Errorf("mulOperation requires exactly two input tensors, got %d", len(inputs))
 	}
-	op.output.Data = make([]float64, len(op.input1.Data))
+
+	op.input1 = inputs[0]
+	op.input2 = inputs[1]
+
+	if len(op.input1.Data) != len(op.input2.Data) {
+		return nil, fmt.Errorf("input tensor data lengths do not match for multiplication: %d vs %d", len(op.input1.Data), len(op.input2.Data))
+	}
+
+	// Create the output tensor
+	op.output = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, op.input1.requiresGrad || op.input2.requiresGrad)
+
+	// Perform element-wise multiplication
 	for i := range op.input1.Data {
 		op.output.Data[i] = op.input1.Data[i] * op.input2.Data[i]
 	}
-	return op.output
+
+	// Set the creator of the output tensor
+	if op.output.requiresGrad {
+		op.output.creator = op // Set the creator to the mulOperation itself
+	}
+
+	return op.output, nil // Return the output tensor and nil for no error
 }
 
 // Backward performs the backward pass for the multiplication operation.
-func (op *mulOperation) Backward(grad *Tensor) {
+func (op *mulOperation) Backward(grad *Tensor) error {
 	// Gradient of multiplication: d(x*y)/dx = y, d(x*y)/dy = x
 	// Using the chain rule: dLoss/dx = dLoss/dOutput * dOutput/dx
 	// dLoss/dx = grad * input2.Data
@@ -597,152 +637,11 @@ func (op *mulOperation) Backward(grad *Tensor) {
 			op.input2.Grad.Data[i] += grad.Data[i] * op.input1.Data[i]
 		}
 	}
+	return nil
 }
 
 // Inputs returns the input tensors of the multiplication operation.
 func (op *mulOperation) Inputs() []*Tensor {
-	return []*Tensor{op.input1, op.input2}
-}
-
-// matMulOperation represents the matrix multiplication operation.
-type matMulOperation struct {
-	input1 *Tensor // A
-	input2 *Tensor // B
-	output *Tensor // C = A @ B
-}
-
-// Forward performs the forward pass of the matrix multiplication operation.
-func (op *matMulOperation) Forward() *Tensor {
-	// Assumes input1 shape [..., M, K] and input2 shape [..., K, N]
-	// Output shape will be [..., M, N]
-
-	shape1 := op.input1.Shape
-	shape2 := op.input2.Shape
-
-	if len(shape1) == 0 || len(shape2) == 0 {
-		panic("matrix multiplication requires at least one dimension")
-	}
-	if shape1[len(shape1)-1] != shape2[len(shape2)-2] {
-		panic(fmt.Sprintf("matrix multiplication incompatible shapes: %v and %v", shape1, shape2))
-	}
-
-	// Determine output shape (handle broadcasting of batch dimensions if necessary)
-	// For simplicity here, assuming no broadcasting of batch dimensions
-	// The batch dimensions of input1 and input2 must match or one must be 1.
-	// If one is 1, it's broadcasted. Output batch dimensions are the broadcasted shape.
-
-	// Simplified batch handling: assuming same batch dimensions or no batch dimensions
-	if len(shape1) > 2 && len(shape2) > 2 {
-		// Check if batch dimensions match
-		for i := 0; i < len(shape1)-2; i++ {
-			if shape1[i] != shape2[i] {
-				panic(fmt.Sprintf("batch dimensions incompatible for matrix multiplication: %v and %v", shape1, shape2))
-			}
-		}
-	}
-
-	// Calculate output shape
-	outputShape := make([]int, max(len(shape1), len(shape2))-1)
-	// Copy batch dimensions
-	if len(shape1) > len(shape2) {
-		copy(outputShape, shape1[:len(shape1)-2])
-	} else {
-		copy(outputShape, shape2[:len(shape2)-2])
-	}
-	outputShape[len(outputShape)-2] = shape1[len(shape1)-2] // M
-	outputShape[len(outputShape)-1] = shape2[len(shape2)-1] // N
-
-	outputSize := 1
-	for _, dim := range outputShape {
-		outputSize *= dim
-	}
-	op.output.Data = make([]float64, outputSize)
-	op.output.Shape = outputShape // Set the output shape
-
-	M := shape1[len(shape1)-2]
-	K := shape1[len(shape1)-1]
-	N := shape2[len(shape2)-1]
-
-	// Perform matrix multiplication (simplified for 2D matrices)
-	// This needs to be extended to handle batch dimensions
-
-	if len(shape1) == 2 && len(shape2) == 2 {
-		// 2D matrix multiplication
-		for i := 0; i < M; i++ { // rows of output (and A)
-			for j := 0; j < N; j++ { // columns of output (and B)
-				for k := 0; k < K; k++ { // inner dimension
-					// Access elements using flat indices and strides or calculate directly
-					// Assuming row-major order
-					aIndex := i*K + k
-					bIndex := k*N + j
-					outputIndex := i*N + j
-					op.output.Data[outputIndex] += op.input1.Data[aIndex] * op.input2.Data[bIndex]
-				}
-			}
-		}
-	} else {
-		// TODO: Implement batched matrix multiplication
-		panic("batched matrix multiplication not yet implemented")
-	}
-
-	return op.output
-}
-
-// Backward performs the backward pass for the matrix multiplication operation.
-// grad is the gradient from the output (dLoss/dC).
-// dLoss/dA = dLoss/dC @ B^T
-// dLoss/dB = A^T @ dLoss/dC
-func (op *matMulOperation) Backward(grad *Tensor) {
-	// Ensure gradients are initialized
-	if op.input1.requiresGrad {
-		if op.input1.Grad == nil {
-			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, true)
-		}
-	}
-	if op.input2.requiresGrad {
-		if op.input2.Grad == nil {
-			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.input2.Shape, true)
-		}
-	}
-
-	// Calculate gradients for inputs
-	// dLoss/dA = grad @ input2_transpose
-	if op.input1.requiresGrad {
-		input2Transposed, err := op.input2.Transpose(len(op.input2.Shape)-2, len(op.input2.Shape)-1)
-		if err != nil {
-			panic(fmt.Sprintf("failed to transpose input2 for matmul backward: %v", err))
-		}
-		gradA, err := grad.MatMul(input2Transposed) // Assuming MatMul is implemented and works with broadcasting/batches
-		if err != nil {
-			panic(fmt.Sprintf("failed to calculate gradA in matmul backward: %v", err))
-		}
-		// Add to existing gradient
-		// Replace AddInPlace with a loop for element-wise addition
-		for i := range op.input1.Grad.Data {
-			op.input1.Grad.Data[i] += gradA.Data[i]
-		}
-	}
-
-	// dLoss/dB = input1_transpose @ grad
-	if op.input2.requiresGrad {
-		input1Transposed, err := op.input1.Transpose(len(op.input1.Shape)-2, len(op.input1.Shape)-1)
-		if err != nil {
-			panic(fmt.Sprintf("failed to transpose input1 for matmul backward: %v", err))
-		}
-		gradB, err := input1Transposed.MatMul(grad) // Assuming MatMul is implemented and works with broadcasting/batches
-		if err != nil {
-			panic(fmt.Sprintf("failed to calculate gradB in matmul backward: %v", err))
-		}
-		// Add to existing gradient
-		// Replace AddInPlace with a loop for element-wise addition
-		for i := range op.input2.Grad.Data {
-			op.input2.Grad.Data[i] += gradB.Data[i]
-		}
-	}
-}
-
-// Inputs returns the input tensors of the matrix multiplication operation.
-func (op *matMulOperation) Inputs() []*Tensor {
 	return []*Tensor{op.input1, op.input2}
 }
 
@@ -839,12 +738,30 @@ func (t *Tensor) Backward(grad *Tensor) {
 	// We need to call Backward methods in the reverse order.
 
 	// Iterate through the topologically sorted operations in reverse order and call Backward.
+	// Iterate through the topologically sorted operations in reverse order and call Backward.
 	for i := len(topologicalOps) - 1; i >= 0; i-- {
 		op := topologicalOps[i]
-		if op.Forward() != nil && op.Forward().Grad != nil {
-			op.Backward(op.Forward().Grad) // Assuming op.Forward() returns the output tensor
+
+		// Call Forward once and handle the potential error
+		outputTensor, err := op.Forward()
+		if err != nil {
+			// Handle the error appropriately, e.g., log it or skip this operation
+			fmt.Printf("Error during forward pass for operation in backward pass: %v\n", err)
+			continue // Skip to the next operation
+		}
+
+		// Check if the output tensor and its gradient are not nil
+		if outputTensor != nil && outputTensor.Grad != nil {
+			// Call Backward with the gradient of the output tensor
+			backwardErr := op.Backward(outputTensor.Grad)
+			if backwardErr != nil {
+				// Handle the error during backward pass
+				fmt.Printf("Error during backward pass for operation: %v\n", backwardErr)
+				// Decide whether to continue or stop based on your error handling strategy
+			}
 		}
 	}
+
 }
 
 // addWithBroadcastOperation represents the element-wise addition operation with broadcasting.
@@ -863,19 +780,28 @@ func (op *addWithBroadcastOperation) Inputs() []*Tensor {
 }
 
 // Forward performs the forward pass of the broadcasted addition operation.
-func (op *addWithBroadcastOperation) Forward() *Tensor {
+func (op *addWithBroadcastOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
+	if len(inputs) != 2 {
+		return nil, fmt.Errorf("addWithBroadcastOperation requires exactly two input tensors, got %d", len(inputs))
+	}
+
+	op.input1 = inputs[0]
+	op.input2 = inputs[1]
+
 	// Determine the output shape based on broadcasting rules
 	outputShape, err := calculateBroadcastShape(op.input1.Shape, op.input2.Shape)
 	if err != nil {
-		// In a real implementation, you might want to return an error here.
-		// For simplicity in this example, we'll panic.
-		panic(fmt.Sprintf("broadcasting failed in addWithBroadcastOperation: %v", err))
+		return nil, fmt.Errorf("broadcasting failed in addWithBroadcastOperation: %w", err)
 	}
 
 	outputSize := 1
 	for _, dim := range outputShape {
 		outputSize *= dim
 	}
+
+	// Create the output tensor
+	op.output = NewTensor(make([]float64, outputSize), outputShape, op.input1.requiresGrad || op.input2.requiresGrad) // Initialize with zeros and set shape
+
 	op.output.Data = make([]float64, outputSize) // Initialize with zeros
 	op.output.Shape = outputShape                // Set the output shape
 
@@ -963,15 +889,15 @@ func (op *addWithBroadcastOperation) Forward() *Tensor {
 		op.output.creator = op // Set the creator only if gradients are required
 	}
 
-	return op.output
+	return op.output, nil
 }
 
 // Backward performs the backward pass for the broadcasted addition operation.
 // grad is the gradient from the output (dLoss/dOutput).
-func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
+func (op *addWithBroadcastOperation) Backward(grad *Tensor) error {
 	if grad == nil || grad.Data == nil {
 		// No gradient to propagate
-		return
+		return nil
 	}
 
 	// Ensure gradients are initialized for inputs that require them
@@ -1139,7 +1065,7 @@ func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
 							}
 						}
 					}
-					return // Exit the Backward method after processing
+					return nil // Exit the Backward method after processing
 				}
 			}
 
@@ -1277,109 +1203,7 @@ func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
 			}
 		}
 	}
-}
-
-// Backward performs the backward pass for the broadcasted addition operation.
-// grad is the gradient from the output (dLoss/dOutput).
-func (op *addWithBroadcastOperation) Backward(grad *Tensor) {
-	if grad == nil || grad.Data == nil {
-		// No gradient to propagate
-		return
-	}
-
-	// Ensure gradients are initialized for inputs that require them
-	if op.input1.requiresGrad {
-		if op.input1.Grad == nil {
-			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
-		}
-	}
-	if op.input2.requiresGrad {
-		if op.input2.Grad == nil {
-			op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
-		}
-	}
-
-	// Calculate strides for input and output shapes
-	gradStride := calculateStrides(grad.Shape) // Gradient has the shape of the output
-	shape1Stride := calculateStrides(op.shape1)
-	shape2Stride := calculateStrides(op.shape2)
-
-	// Helper function to map an index in the output gradient tensor
-	// back to an index in the input tensor's gradient tensor,
-	// handling broadcasting.
-	var mapOutputIndexToInputIndex = func(outputShape, inputShape []int, outputIndex int, outputStride, inputStride []int) (int, error) {
-		outputIndices := make([]int, len(outputShape))
-		// Calculate multi-dimensional output indices
-		tempFlatIndex := outputIndex
-		for j := 0; j < len(outputShape); j++ {
-			if outputStride[j] > 0 {
-				outputIndices[j] = tempFlatIndex / outputStride[j]
-				tempFlatIndex %= outputStride[j]
-			} else {
-				outputIndices[j] = 0
-			}
-		}
-
-		inputIndices := make([]int, len(inputShape))
-		// Map output indices back to input indices
-		// Iterate from the rightmost dimension
-		for j := 1; j <= len(outputShape); j++ {
-			outputDimIndex := len(outputShape) - j
-			inputDimIndex := len(inputShape) - j
-
-			if inputDimIndex >= 0 {
-				if inputShape[inputDimIndex] == 1 {
-					inputIndices[inputDimIndex] = 0 // Broadcasted dimension
-				} else {
-					inputIndices[inputDimIndex] = outputIndices[outputDimIndex] // Matching dimension
-				}
-			}
-			// If inputDimIndex < 0, this dimension was added by broadcasting, no corresponding input index
-		}
-
-		// Calculate flattened input index
-		inputFlatIndex := 0
-		for j := 0; j < len(inputIndices); j++ {
-			if j >= len(inputStride) {
-				return 0, errors.New("internal error: inputIndices length exceeds inputStride length")
-			}
-			inputFlatIndex += inputIndices[j] * inputStride[j]
-		}
-		return inputFlatIndex, nil
-	}
-
-	// Iterate through the output gradient and add its value to the correct position
-	// in the gradient of the input tensor, considering broadcasting.
-
-	// For input1
-	if op.input1.requiresGrad {
-		input1Stride := calculateStrides(op.shape1)
-		for i := 0; i < len(grad.Data); i++ { // Iterate through flattened output gradient
-			input1FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape1, i, gradStride, input1Stride)
-			if err != nil {
-				panic(fmt.Sprintf("error mapping index for input1 gradient: %v", err))
-			}
-			if input1FlatIndex < 0 || input1FlatIndex >= len(op.input1.Grad.Data) {
-				panic(fmt.Sprintf("internal error: input1 gradient flat index out of bounds: %d/%d", input1FlatIndex, len(op.input1.Grad.Data)))
-			}
-			op.input1.Grad.Data[input1FlatIndex] += grad.Data[i] // Accumulate gradient
-		}
-	}
-
-	// For input2
-	if op.input2.requiresGrad {
-		input2Stride := calculateStrides(op.shape2)
-		for i := 0; i < len(grad.Data); i++ { // Iterate through flattened output gradient
-			input2FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape2, i, gradStride, input2Stride)
-			if err != nil {
-				panic(fmt.Sprintf("error mapping index for input2 gradient: %v", err))
-			}
-			if input2FlatIndex < 0 || input2FlatIndex >= len(op.input2.Grad.Data) {
-				panic(fmt.Sprintf("internal error: input2 gradient flat index out of bounds: %d/%d", input2FlatIndex, len(op.input2.Grad.Data)))
-			}
-			op.input2.Grad.Data[input2FlatIndex] += grad.Data[i] // Accumulate gradient
-		}
-	}
+	return nil
 }
 
 // AddWithBroadcast performs element-wise addition with broadcasting.
@@ -1402,6 +1226,10 @@ func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
 	}
 
 	// Perform the forward pass
-	return operation.Forward(), nil // Call the Forward method of the operation
+	outputTensor, err = operation.Forward(t, other) // Call the Forward method of the operation
+	if err != nil {
+		return nil, fmt.Errorf("error during forward pass: %w", err)
+	}
+	return outputTensor, nil
 
 }

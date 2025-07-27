@@ -1,6 +1,7 @@
 package bartsimple
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -268,40 +269,26 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
 		return result, nil
 	} else if len(t.Shape) == 2 && len(other.Shape) == 2 {
-		for i := 0; i < len(t.Shape)-2; i++ {
-			if t.Shape[i] != other.Shape[i] {
-				return nil, fmt.Errorf("batch dimensions incompatible for matrix multiplication: %v and %v", t.Shape, other.Shape)
-			}
+		// Correctly calculate output shape for 2D x 2D multiplication
+		M := t.Shape[0]
+		K := t.Shape[1]
+		N := other.Shape[1]
+		if K != other.Shape[0] {
+			return nil, fmt.Errorf("incompatible shapes for 2D matrix multiplication: %v and %v", t.Shape, other.Shape)
 		}
-
-		// Calculate output shape
-		outputShape := make([]int, max(len(t.Shape), len(other.Shape))-1)
-		// Copy batch dimensions
-		if len(t.Shape) > len(other.Shape) {
-			copy(outputShape, t.Shape[:len(t.Shape)-2])
-		} else {
-			copy(outputShape, other.Shape[:len(other.Shape)-2])
-		}
-		outputShape[len(outputShape)-2] = t.Shape[len(t.Shape)-2]         // M
-		outputShape[len(outputShape)-1] = other.Shape[len(other.Shape)-1] // N
+		outputShape := []int{M, N} // Correct output shape for 2D
 
 		// Create a placeholder output tensor
-		outputTensor := NewTensor(nil, outputShape, false) // Data will be filled in Forward
+		outputTensor := NewTensor(nil, outputShape, false) // Data will be filled by the operation
 
 		// Create the matMulOperation
-		operation := &matMulOperation{input1: t, input2: other, output: outputTensor}
-
-		// Set the creator of the output tensor
-		outputTensor.creator = operation
-
-		return outputTensor, nil
-		// Existing 2D x 2D logic
-		// result, err := t.MatMulFromScratch(other)
-		// if err != nil {
-		// 	return nil, fmt.Errorf("2D matrix multiplication failed: %w", err)
-		// }
-
-		// return result, nil
+		operation := &MatMulOperation{input1: t, input2: other, output: outputTensor}
+		result, err := operation.Forward(t, other) // Call the Forward method with inputs
+		if err != nil {
+			return nil, fmt.Errorf("error during 2D MatMulOperation forward: %w", err)
+		}
+		return result, nil
+		
 
 	}
 	elapsed := time.Since(start)
@@ -394,30 +381,250 @@ func MatMulRow4d(
 
 }
 
+// Forward performs the forward pass of the matrix multiplication operation.
+func (op *MatMulOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
+	if len(inputs) != 2 {
+		return nil, fmt.Errorf("matMulOperation requires exactly two input tensors, got %d", len(inputs))
+	}
+	op.input1 = inputs[0]
+	op.input2 = inputs[1]
+
+	shape1 := op.input1.Shape
+	shape2 := op.input2.Shape
+
+	if len(shape1) == 0 || len(shape2) == 0 {
+		return nil, errors.New("matrix multiplication requires at least one dimension")
+	}
+	if shape1[len(shape1)-1] != shape2[len(shape2)-2] {
+		return nil, fmt.Errorf("matrix multiplication incompatible shapes: %v and %v", shape1, shape2)
+	}
+
+	// Determine output shape (handle broadcasting of batch dimensions)
+	// This part needs to be robust to different numbers of batch dimensions and broadcasting.
+	// A more complete implementation would involve padding shapes with 1s to the left
+	// to match the longest shape, and then applying broadcasting rules.
+
+	// Simplified broadcasting for now: assuming compatible batch shapes or one is 1
+	maxBatchDims := max(len(shape1)-2, len(shape2)-2)
+	outputShape := make([]int, maxBatchDims+2)
+
+	// Copy and broadcast batch dimensions
+	for i := 0; i < maxBatchDims; i++ {
+		d1 := 1
+		if len(shape1)-2 > i {
+			d1 = shape1[i]
+		}
+		d2 := 1
+		if len(shape2)-2 > i {
+			d2 = shape2[i]
+		}
+
+		if d1 != d2 && d1 != 1 && d2 != 1 {
+			return nil, fmt.Errorf("batch dimensions incompatible for matrix multiplication with broadcasting: %v and %v", shape1[:len(shape1)-2], shape2[:len(shape2)-2])
+		}
+		outputShape[i] = max(d1, d2)
+	}
+
+	outputShape[maxBatchDims] = shape1[len(shape1)-2]
+	outputShape[maxBatchDims+1] = shape2[len(shape2)-1]
+
+	outputSize := 1
+	for _, dim := range outputShape {
+		outputSize *= dim
+	}
+
+	// Create the output tensor
+	op.output = NewTensor(make([]float64, outputSize), outputShape, op.input1.requiresGrad || op.input2.requiresGrad)
+
+	// Perform matrix multiplication based on shapes
+	switch {
+	case len(shape1) == 2 && len(shape2) == 2:
+		// 2D matrix multiplication
+		M := shape1[0]
+		K := shape1[1]
+		N := shape2[1]
+
+		if K != shape2[0] {
+			return nil, fmt.Errorf("internal error: shape mismatch in 2D matmul logic: K (%d) != shape2[0] (%d)", K, shape2[0])
+		}
+
+		// Calculate output size and create output tensor here
+		outputShape := []int{M, N}
+		outputSize := M * N
+		op.output = NewTensor(make([]float64, outputSize), outputShape, op.input1.requiresGrad || op.input2.requiresGrad)
+
+		for i := 0; i < M; i++ {
+			for j := 0; j < N; j++ {
+				sum := 0.0
+				for k := 0; k < K; k++ {
+					aIndex := i*K + k
+					bIndex := k*N + j
+
+					// Add print statements here to inspect indices and data lengths
+					fmt.Printf("2D MatMul (in MatMulOperation.Forward): i=%d, j=%d, k=%d, aIndex=%d, bIndex=%d\n", i, j, k, aIndex, bIndex)
+					fmt.Printf("  input1.Shape=%v, input1.Data length=%d\n", op.input1.Shape, len(op.input1.Data))
+					fmt.Printf("  input2.Shape=%v, input2.Data length=%d\n", op.input2.Shape, len(op.input2.Data))
+
+					if aIndex < 0 || aIndex >= len(op.input1.Data) {
+						return nil, fmt.Errorf("index out of bounds for op.input1.Data: aIndex=%d, len(op.input1.Data)=%d", aIndex, len(op.input1.Data)) // Return error
+					}
+					if bIndex < 0 || bIndex >= len(op.input2.Data) {
+						return nil, fmt.Errorf("index out of bounds for op.input2.Data: bIndex=%d, len(op.input2.Data)=%d", bIndex, len(op.input2.Data)) // Return error
+					}
+
+					sum += op.input1.Data[aIndex] * op.input2.Data[bIndex]
+				}
+				outputIndex := i*N + j
+				if outputIndex < 0 || outputIndex >= len(op.output.Data) {
+					return nil, fmt.Errorf("index out of bounds for op.output.Data: outputIndex=%d, len(op.output.Data)=%d", outputIndex, len(op.output.Data)) // Return error
+				}
+				op.output.Data[outputIndex] = sum
+			}
+		}
+
+	case len(shape1) == 3 && len(shape2) == 2:
+		// 3D x 2D batched matrix multiplication
+		// This requires iterating over batches and performing 2D MatMul for each batch.
+		// You can adapt your existing 3D x 2D logic from Tensor.MatMul here.
+		// Ensure you fill op.output.Data.
+		batchSize := shape1[0]
+		rowsA, colsA := shape1[1], shape1[2]
+		rowsB, colsB := shape2[0], shape2[1] // shape2 is 2D [K, N]
+
+		if colsA != rowsB { // This check should ideally be earlier with shape compatibility
+			return nil, fmt.Errorf("incompatible shapes for 3D x 2D matrix multiplication: %v and %v", shape1, shape2)
+		}
+
+		resultRows := rowsA
+		resultCols := colsB
+
+		// Iterate over batches
+		for b := 0; b < batchSize; b++ {
+			// Perform 2D MatMul for the current batch of input1 [rowsA, colsA] and input2 [rowsB, colsB]
+			// Access slices of data for current batch
+			input1BatchData := op.input1.Data[b*rowsA*colsA : (b+1)*rowsA*colsA]
+			input2Data := op.input2.Data // input2 is 2D, applied to all batches
+
+			// Calculate output data slice for current batch
+			outputBatchData := op.output.Data[b*resultRows*resultCols : (b+1)*resultRows*resultCols]
+
+			// Perform 2D MatMul: input1BatchData [rowsA, colsA] @ input2Data [rowsB, colsB] -> outputBatchData [resultRows, resultCols]
+			for i := 0; i < resultRows; i++ {
+				for j := 0; j < resultCols; j++ {
+					sum := 0.0
+					for k := 0; k < colsA; k++ {
+						// Access elements in slices
+						sum += input1BatchData[i*colsA+k] * input2Data[k*colsB+j]
+					}
+					outputBatchData[i*resultCols+j] = sum
+				}
+			}
+		}
+
+	case len(shape1) == 4 && len(shape2) == 4:
+		// 4D x 4D batched matrix multiplication (e.g., in multi-head attention)
+		// [batch, head, seq_len_A, dim_A] @ [batch, head, dim_A, seq_len_B] -> [batch, head, seq_len_A, seq_len_B]
+		// This requires iterating over batch and head dimensions and performing 2D MatMul for each.
+		// You can adapt your existing 4D x 4D logic from Tensor.MatMul here.
+		// Ensure you fill op.output.Data.
+
+		batchSize := shape1[0]
+		numHeads := shape1[1]
+		rowsA := shape1[2]
+		colsA := shape1[3] // Inner dimension
+		rowsB := shape2[2] // Inner dimension
+		colsB := shape2[3]
+
+		if colsA != rowsB {
+			return nil, fmt.Errorf("incompatible shapes for 4D x 4D matrix multiplication: %v and %v", shape1, shape2)
+		}
+
+		resultRows := rowsA
+		resultCols := colsB
+
+		// Iterate over batches and heads
+		for b := 0; b < batchSize; b++ {
+			for h := 0; h < numHeads; h++ {
+				// Access slices of data for current batch and head
+				input1Slice := op.input1.Data[b*numHeads*rowsA*colsA+h*rowsA*colsA : b*numHeads*rowsA*colsA+(h+1)*rowsA*colsA]
+				input2Slice := op.input2.Data[b*numHeads*rowsB*colsB+h*rowsB*colsB : b*numHeads*rowsB*colsB+(h+1)*rowsB*colsB]
+
+				// Calculate output data slice for current batch and head
+				outputSlice := op.output.Data[b*numHeads*resultRows*resultCols+h*resultRows*resultCols : b*numHeads*resultRows*resultCols+(h+1)*resultRows*resultCols]
+
+				// Perform 2D MatMul: input1Slice [rowsA, colsA] @ input2Slice [rowsB, colsB] -> outputSlice [resultRows, resultCols]
+				for i := 0; i < resultRows; i++ {
+					for j := 0; j < resultCols; j++ {
+						sum := 0.0
+						for k := 0; k < colsA; k++ {
+							// Access elements in slices
+							sum += input1Slice[i*colsA+k] * input2Slice[k*colsB+j]
+						}
+						outputSlice[i*resultCols+j] = sum
+					}
+				}
+			}
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported tensor shapes for matrix multiplication: %v and %v", shape1, shape2)
+	}
+
+	// Set the creator of the output tensor
+	if op.output.requiresGrad {
+		op.output.creator = op // Set the creator to the matMulOperation itself
+	}
+
+	return op.output, nil
+}
+
+// Backward performs the backward pass for the matrix multiplication operation.
+func (op *MatMulOperation) Backward(grad *Tensor) error {
+	// ... (Implement backward pass logic for 2D, 3D, 4D cases) ...
+	// This will involve matrix multiplications of the incoming gradient with the inputs or their transposes.
+	// Remember to accumulate gradients to op.input1.Grad and op.input2.Grad.
+	return errors.New("matmulOperation.Backward not yet fully implemented") // Placeholder
+}
+
+// Inputs returns the input tensors of the matrix multiplication operation.
+func (op *MatMulOperation) Inputs() []*Tensor {
+	// ... (Return input tensors) ...
+	return []*Tensor{op.input1, op.input2} // Assuming two inputs
+}
+
+type MatMulOperation struct {
+	input1 *Tensor // A
+	input2 *Tensor // B
+	output *Tensor // C = A @ B
+}
+
 // AutogradMatMul performs matrix multiplication with autograd support.
+// MOVED THIS FUNCTION TO HERE (matmul.go)
 func (t *Tensor) AutogradMatMul(other *Tensor) (*Tensor, error) {
 	fmt.Printf("AutogradMatMul: t.Shape = %v, other.Shape = %v\n", t.Shape, other.Shape)
-	// Create a MatMulOperation.
-	// Assuming MatMulOperation is defined elsewhere and accessible within the 'bart' package.
-	op := &MatMulOperation{Input1: t, Input2: other}
 	// Perform the forward pass using the MatMul function.
-	// The MatMul function should be defined elsewhere in the 'bart' package (e.g., in matmul.go).
-	result, err := t.MatMul(other) // Assuming MatMul method is defined for *Tensor in the 'bart' package
+	// The MatMul function should create and return the output of the MatMulOperation.
+	result, err := t.MatMul(other) // Tensor.MatMul should now create and run the operation
 	if err != nil {
 		return nil, fmt.Errorf("error during AutogradMatMul forward pass: %w", err)
 	}
-	// Set the creator of the result tensor to this operation if gradient is required.
-	if t.requiresGrad || other.requiresGrad {
-		result.requiresGrad = true
-		result.creator = op // Set the operation as the creator
-	}
+	// The MatMul function (which uses the MatMulOperation's Forward)
+	// should already set the creator if requiresGrad is true.
+	// This part might be redundant if MatMul's internal operation.Forward sets the creator.
+	// Double-check if result.creator is already set correctly by result, err := t.MatMul(other)
+	// if result != nil && (t.requiresGrad || other.requiresGrad) {
+	//     result.requiresGrad = true // Should be set by op.Forward
+	//     result.creator = op        // Should be set by op.Forward
+	// }
+
 	return result, nil
 }
 
 // MatMulFromScratch implements a basic 2D matrix multiplication from scratch.
 // It does not use external libraries and is intended for understanding the process
 // or for very small tensors where overhead might matter.
-// This function will be called during the Compute() phase of a MatMulOperation
+// This function will be called during the Compute() phase of a
+
 // or directly by the 2D MatMul case.
 func (t *Tensor) MatMulFromScratch(other *Tensor) (*Tensor, error) {
 	// Ensure input tensors have their data computed.

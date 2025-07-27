@@ -50,7 +50,8 @@ func NewBARTEncoderLayer(dimModel, numHeads int) (*BARTEncoderLayer, error) {
 // Forward performs the forward pass of the simplified encoder layer.
 func (l *BARTEncoderLayer) Forward(inputTensor *Tensor, mask *Tensor) (*Tensor, error) {
 	// Self-Attention
-	attentionOutput, err := l.SelfAttention.Forward(inputTensor, inputTensor, inputTensor, mask) // Q, K, V are the same for self-attention
+	inputTensor.Mask = mask
+	attentionOutput, err := l.SelfAttention.Forward(inputTensor) // Q, K, V are the same for self-attention
 	if err != nil {
 		return nil, fmt.Errorf("encoder self-attention failed: %w", err)
 	}
@@ -123,7 +124,8 @@ func NewBARTDecoderLayer(dimModel, numHeads int) (*BARTDecoderLayer, error) {
 // Forward performs the forward pass of the simplified decoder layer.
 func (l *BARTDecoderLayer) Forward(inputTensor *Tensor, encoderOutput *Tensor, selfAttentionMask *Tensor, crossAttentionMask *Tensor) (*Tensor, error) {
 	// Self-Attention
-	selfAttentionOutput, err := l.SelfAttention.Forward(inputTensor, inputTensor, inputTensor, selfAttentionMask) // Q, K, V are the same for self-attention
+	inputTensor.Mask = selfAttentionMask
+	selfAttentionOutput, err := l.SelfAttention.Forward(inputTensor) // Q, K, V are the same for self-attention
 	if err != nil {
 		return nil, fmt.Errorf("decoder self-attention failed: %w", err)
 	}
@@ -363,6 +365,7 @@ func LoadSimplifiedBARTModelFromGOB(filePath string) (*SimplifiedBARTModel, erro
 
 	return &loadedModel, nil
 }
+
 // ForwardForTraining performs the forward pass of the BART model for training.
 // It takes input and target tensors and returns the raw output logits.
 func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor *Tensor) (*Tensor, error) {
