@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,8 +11,19 @@ import (
 	"github.com/golangast/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
 	"github.com/golangast/nlptagger/neural/nnu/vocab"
 )
+var (
+	trainMode    = flag.Bool("train", false, "Enable training mode")
+	epochs       = flag.Int("epochs", 10, "Number of training epochs")
+	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
+	bartDataPath = flag.String("data", "trainingdata/bart_training_data.json", "Path to BART training data for the model")
+	dimModel     = flag.Int("dim", 128, "Dimension of the model")
+	numHeads     = flag.Int("heads", 8, "Number of attention heads")
+	maxSeqLength = flag.Int("maxlen", 512, "Maximum sequence length")
+)
 
 func main() {
+	flag.Parse()
+
 	modelPath := "gob_models/simplified_bart_model.gob"
 	jsonpath := "trainingdata/tagdata/nlp_training_data.json"
 	vocabPath := "gob_models/vocabulary.gob" // Path to your vocabulary file
@@ -67,10 +79,10 @@ func main() {
 		vocabulary.AddToken("[EOS]", len(vocabulary.TokenToWord))
 		vocabulary.AddToken("[PAD]", len(vocabulary.TokenToWord))
 		// Add unique words from training data in a consistent order (e.g., alphabetical)
-		sortedWords := []string{}
-		for word := range uniqueWords {
-			sortedWords = append(sortedWords, word)
-		}
+		//sortedWords := []string{}
+		// for word := range uniqueWords {
+		// 	sortedWords = append(sortedWords, word)
+		// }
 		vocabulary.UnknownTokenID = vocabulary.WordToToken["[UNK]"]
 		vocabulary.BeginningOfSentenceID = vocabulary.WordToToken["[BOS]"]
 		vocabulary.EndOfSentenceID = vocabulary.WordToToken["[EOS]"]
@@ -86,14 +98,14 @@ func main() {
 			vocabulary.UnknownTokenID = unkID
 		} else {
 			// This indicates an issue with the saved vocabulary file
-			log.Fatalf("Loaded vocabulary does not contain '[UNK]' token and UnknownTokenID is -1.")
+			fmt.Println("Loaded vocabulary does not contain '[UNK]' token and UnknownTokenID is -1.")
 		}
 	}
 	if vocabulary.BeginningOfSentenceID == -1 {
 		if bosID, ok := vocabulary.WordToToken["[BOS]"]; ok {
 			vocabulary.BeginningOfSentenceID = bosID
 		} else {
-			log.Println("Warning: '[BOS]' token not found in vocabulary after loading/creation.")
+			fmt.Println("Warning: '[BOS]' token not found in vocabulary after loading/creation.")
 		}
 	}
 
@@ -104,9 +116,6 @@ func main() {
 	if modelLoadErr != nil {
 		fmt.Printf("Attempting to load simplified BART model from %s\n", modelPath)
 		fmt.Printf("Error loading simplified BART model: %v. Creating a new one.\n", modelLoadErr)
-		var dummyDimModel = 128     // Replace with actual value
-		var dummyNumHeads = 8       // Replace with actual value
-		var dummyMaxSeqLength = 512 // Replace with actual value
 		log.Println("Model loading failed, skipping saving of a new model for now to avoid panic.")
 		var createErr error
 		tokenizer, err := bartsimple.NewTokenizer(vocabulary, 0, 0, 0, 0)
@@ -115,21 +124,13 @@ func main() {
 			return // Handle the error appropriately, perhaps exit
 		}
 		fmt.Printf("Vocabulary size being passed to NewSimplifiedBARTModel: %d\n", len(vocabulary.WordToToken))
-		model, createErr = bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, dummyDimModel, dummyNumHeads, dummyMaxSeqLength)
+		model, createErr = bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, *dimModel, *numHeads, *maxSeqLength)
 		if createErr != nil {
 			log.Fatalf("Failed to create a new simplified BART model: %v", createErr)
 		}
 
 		// If loading fails, create a new model, passing the tokenizer and vocabulary
-		if err := bartsimple.SaveSimplifiedBARTModelToGOB(model, modelPath); err != nil {
-			// Assuming model was potentially created here after failure
-			log.Printf("Error saving new simplified BART model: %v", err)
-		} else {
-			model.Vocabulary = vocabulary
-
-			// Assuming model was potentially created here after failure
-			log.Printf("New simplified BART model saved to %s", modelPath)
-		}
+		
 
 	} else {
 		// Check if the model object is nil EVEN IF modelLoadErr is nil
@@ -160,23 +161,45 @@ func main() {
 		model.Vocabulary = vocabulary // This vocabulary has UnknownTokenID = 103
 		model.Tokenizer = tokenizer   // This tokenizer was created with the vocabulary where UnknownTokenID = 103
 	} else {
-		log.Fatalf("Model is nil after loading or creation.")
+		fmt.Println("Model is nil after loading or creation.")
 	}
 	// Assign the newly created tokenizer to the model
 	model.Tokenizer = tokenizer
 
-	// Crucial check: Ensure model is not nil before proceeding
-	//answer := "generate a webserver named jim and handler named jill"
+	if *trainMode {
+		fmt.Println("--- Running in Training Mode ---")
 
-	answer := InputScanDirections("what do you want?")
-	// Process the command using BartProcessCommand
-	summary, err := model.BartProcessCommand(answer) // If BartProcessCommand needs the vocabulary, pass it here
-	if err != nil {
-		log.Fatalf("Error processing command with BART model: %v", err)
+		// 1. Load BART-specific training data
+		bartTrainingData, err := bartsimple.LoadBARTTrainingData(*bartDataPath)
+		if err != nil {
+			log.Fatalf("Error loading BART training data from %s: %v", *bartDataPath, err)
+		}
+		fmt.Printf("Loaded %d training sentences for BART model.\n", len(bartTrainingData.Sentences))
+
+		// 2. Train the model
+		err = bartsimple.TrainBARTModel(model, bartTrainingData, *epochs, *learningRate)
+		if err != nil {
+			log.Fatalf("BART model training failed: %v", err)
+		}
+
+		// 3. Save the trained model
+		fmt.Printf("Training complete. Saving trained model to %s...\n", modelPath)
+		if err := bartsimple.SaveSimplifiedBARTModelToGOB(model, modelPath); err != nil {
+			log.Fatalf("Error saving trained BART model: %v", err)
+		}
+		fmt.Println("Model saved successfully.")
+	} else {
+		fmt.Println("--- Running in Inference Mode ---")
+		//go run . -train -epochs 50 -lr 0.001 -data trainingdata/bart_training_data.json
+		//go run . -train -dim 256 -heads 8 -maxlen 256
+		answer := InputScanDirections("\n what do you want?")
+		// Process the command using BartProcessCommand
+		summary, err := model.BartProcessCommand(answer) // If BartProcessCommand needs the vocabulary, pass it here
+		if err != nil {
+			log.Fatalf("Error processing command with BART model: %v", err)
+		}
+		fmt.Printf("Generated Summary: %s\n", summary)
 	}
-
-	fmt.Printf("Generated Summary: %s\n", summary)
-
 }
 
 func InputScanDirections(directions string) string {

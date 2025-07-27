@@ -19,6 +19,36 @@ type BARTDecoder struct {
 	Layer *BARTDecoderLayer // Simplified: only one layer
 }
 
+// Parameters returns all learnable parameters of the layer.
+
+// Parameters returns all learnable parameters of the layer.
+func (l *BARTEncoderLayer) Parameters() []*Tensor {
+	params := l.SelfAttention.Parameters()
+	params = append(params, l.FeedForward.Parameters()...)
+	params = append(params, l.Norm1.Parameters()...)
+	params = append(params, l.Norm2.Parameters()...)
+	return params
+}
+
+// Parameters returns all learnable parameters of the entire model.
+func (m *SimplifiedBARTModel) Parameters() []*Tensor {
+	params := m.TokenEmbedding.Parameters()
+	params = append(params, m.PositionalEmbedding.Parameters()...)
+	params = append(params, m.Encoder.Layer.Parameters()...)
+	params = append(params, m.Decoder.Layer.Parameters()...)
+	params = append(params, m.OutputLinear.Parameters()...)
+	return params
+}
+// Parameters returns all learnable parameters of the layer.
+func (l *BARTDecoderLayer) Parameters() []*Tensor {
+	params := l.SelfAttention.Parameters()
+	params = append(params, l.CrossAttention.Parameters()...)
+	params = append(params, l.FeedForward.Parameters()...)
+	params = append(params, l.Norm1.Parameters()...)
+	params = append(params, l.Norm2.Parameters()...)
+	params = append(params, l.Norm3.Parameters()...)
+	return params
+}
 // BARTEncoderLayer represents a single simplified encoder layer.
 type BARTEncoderLayer struct {
 	SelfAttention *MultiHeadAttention

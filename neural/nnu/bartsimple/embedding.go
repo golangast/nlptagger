@@ -44,6 +44,11 @@ func NewEmbedding(vocabSize, dimModel int) *Embedding {
 	}
 }
 
+// Parameters returns all learnable parameters of the layer.
+func (e *Embedding) Parameters() []*Tensor {
+	return []*Tensor{e.Weights}
+}
+
 // Backward performs the backward pass for the token embedding layer.
 // grad is the gradient from the subsequent layer.
 func (e *Embedding) Backward(grad *Tensor) {
@@ -119,6 +124,16 @@ func (pe *PositionalEmbedding) Backward(grad *Tensor) {
 		// Implementation would go here if PositionEmbeddings.requiresGrad is true.
 	}
 
+}
+
+// Parameters returns all learnable parameters of the layer.
+// Positional embeddings are typically not learned, so this returns an empty slice
+// unless requiresGrad is explicitly set on them.
+func (pe *PositionalEmbedding) Parameters() []*Tensor {
+	if pe.PositionEmbeddings != nil && pe.PositionEmbeddings.requiresGrad {
+		return []*Tensor{pe.PositionEmbeddings}
+	}
+	return []*Tensor{}
 }
 
 // Inputs returns the input tensors of the Embedding operation.

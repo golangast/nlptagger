@@ -29,6 +29,15 @@ func NewLinear(inputDim, outputDim int) (*Linear, error) {
 	return &Linear{Weights: weights, Biases: biases}, nil
 }
 
+// Parameters returns all learnable parameters of the layer.
+func (l *Linear) Parameters() []*Tensor {
+	params := []*Tensor{l.Weights}
+	if l.Biases != nil {
+		params = append(params, l.Biases)
+	}
+	return params
+}
+
 // Forward performs the forward pass of the Linear layer.
 func (l *Linear) Forward(input *Tensor) (*Tensor, error) {
 	// Store input tensor for backward pass
@@ -308,6 +317,11 @@ func NewLayerNormalization(dimModel int) *LayerNormalization {
 	}
 }
 
+// Parameters returns all learnable parameters of the layer.
+func (l *LayerNormalization) Parameters() []*Tensor {
+	return []*Tensor{l.Gamma, l.Beta}
+}
+
 // Backward performs the backward pass for layer normalization.
 // grad is the gradient from the output (dLoss/dOutput).
 func (l *LayerNormalization) Backward(grad *Tensor) error {
@@ -585,6 +599,15 @@ func NewMultiHeadAttention(dimModel, numHeads, numKVHeads int) (*MultiHeadAttent
 		ValueLinear:  valueLinear,
 		OutputLinear: outputLinear,
 	}, nil
+}
+
+// Parameters returns all learnable parameters of the layer.
+func (mha *MultiHeadAttention) Parameters() []*Tensor {
+	params := mha.QueryLinear.Parameters()
+	params = append(params, mha.KeyLinear.Parameters()...)
+	params = append(params, mha.ValueLinear.Parameters()...)
+	params = append(params, mha.OutputLinear.Parameters()...)
+	return params
 }
 
 // Backward performs the backward pass for multi-head self-attention.
@@ -1177,6 +1200,13 @@ func NewFeedForward(dimModel int) (*FeedForward, error) {
 	}, nil
 }
 
+// Parameters returns all learnable parameters of the layer.
+func (ff *FeedForward) Parameters() []*Tensor {
+	params := ff.Linear1.Parameters()
+	params = append(params, ff.Linear2.Parameters()...)
+	return params
+}
+
 // Forward performs the forward pass of the FeedForward layer.
 func (ff *FeedForward) Forward(inputs ...*Tensor) (*Tensor, error) { // Changed to accept variadic inputs
 	if len(inputs) != 1 {
@@ -1359,6 +1389,15 @@ func NewMultiHeadCrossAttention(dimModel, numQHeads, numKVHeads int) (*MultiHead
 		ValueLinear:  valueLinear,
 		OutputLinear: outputLinear,
 	}, nil
+}
+
+// Parameters returns all learnable parameters of the layer.
+func (mha *MultiHeadCrossAttention) Parameters() []*Tensor {
+	params := mha.QueryLinear.Parameters()
+	params = append(params, mha.KeyLinear.Parameters()...)
+	params = append(params, mha.ValueLinear.Parameters()...)
+	params = append(params, mha.OutputLinear.Parameters()...)
+	return params
 }
 
 // Inputs returns the input tensors of the MultiHeadCrossAttention operation.
