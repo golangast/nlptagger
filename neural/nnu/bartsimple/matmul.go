@@ -269,27 +269,10 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
 		return result, nil
 	} else if len(t.Shape) == 2 && len(other.Shape) == 2 {
-		// Correctly calculate output shape for 2D x 2D multiplication
-		M := t.Shape[0]
-		K := t.Shape[1]
-		N := other.Shape[1]
-		if K != other.Shape[0] {
-			return nil, fmt.Errorf("incompatible shapes for 2D matrix multiplication: %v and %v", t.Shape, other.Shape)
-		}
-		outputShape := []int{M, N} // Correct output shape for 2D
-
-		// Create a placeholder output tensor
-		outputTensor := NewTensor(nil, outputShape, false) // Data will be filled by the operation
-
-		// Create the matMulOperation
-		operation := &MatMulOperation{input1: t, input2: other, output: outputTensor}
-		result, err := operation.Forward(t, other) // Call the Forward method with inputs
-		if err != nil {
-			return nil, fmt.Errorf("error during 2D MatMulOperation forward: %w", err)
-		}
-		return result, nil
-		
-
+		// The original implementation for 2D x 2D multiplication was designed for
+		// lazy execution, which doesn't work for the current inference path.
+		// We'll call MatMulFromScratch to perform the calculation immediately.
+		return t.MatMulFromScratch(other)
 	}
 	elapsed := time.Since(start)
 	fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
@@ -439,49 +422,34 @@ func (op *MatMulOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
 	// Perform matrix multiplication based on shapes
 	switch {
 	case len(shape1) == 2 && len(shape2) == 2:
-		// 2D matrix multiplication
+		// 2D matrix multiplication computation
 		M := shape1[0]
 		K := shape1[1]
 		N := shape2[1]
 
 		if K != shape2[0] {
-			return nil, fmt.Errorf("internal error: shape mismatch in 2D matmul logic: K (%d) != shape2[0] (%d)", K, shape2[0])
+			return nil, fmt.Errorf("internal error: shape mismatch in 2D matmul logic during Forward: K (%d) != shape2[0] (%d)", K, shape2[0])
 		}
 
-		// Calculate output size and create output tensor here
-		outputShape := []int{M, N}
-		outputSize := M * N
-		op.output = NewTensor(make([]float64, outputSize), outputShape, op.input1.requiresGrad || op.input2.requiresGrad)
+		// Ensure output tensor data slice is allocated
+		if op.output.Data == nil || len(op.output.Data) != M*N {
+			op.output.Data = make([]float64, M*N)
+		}
 
-		for i := 0; i < M; i++ {
-			for j := 0; j < N; j++ {
-				sum := 0.0
-				for k := 0; k < K; k++ {
-					aIndex := i*K + k
-					bIndex := k*N + j
+		// Use the iterator pattern for computation
+		it := NewMatMulIterator(M, N)
 
-					// Add print statements here to inspect indices and data lengths
-					fmt.Printf("2D MatMul (in MatMulOperation.Forward): i=%d, j=%d, k=%d, aIndex=%d, bIndex=%d\n", i, j, k, aIndex, bIndex)
-					fmt.Printf("  input1.Shape=%v, input1.Data length=%d\n", op.input1.Shape, len(op.input1.Data))
-					fmt.Printf("  input2.Shape=%v, input2.Data length=%d\n", op.input2.Shape, len(op.input2.Data))
-
-					if aIndex < 0 || aIndex >= len(op.input1.Data) {
-						return nil, fmt.Errorf("index out of bounds for op.input1.Data: aIndex=%d, len(op.input1.Data)=%d", aIndex, len(op.input1.Data)) // Return error
-					}
-					if bIndex < 0 || bIndex >= len(op.input2.Data) {
-						return nil, fmt.Errorf("index out of bounds for op.input2.Data: bIndex=%d, len(op.input2.Data)=%d", bIndex, len(op.input2.Data)) // Return error
-					}
-
-					sum += op.input1.Data[aIndex] * op.input2.Data[bIndex]
-				}
-				outputIndex := i*N + j
-				if outputIndex < 0 || outputIndex >= len(op.output.Data) {
-					return nil, fmt.Errorf("index out of bounds for op.output.Data: outputIndex=%d, len(op.output.Data)=%d", outputIndex, len(op.output.Data)) // Return error
-				}
-				op.output.Data[outputIndex] = sum
+		for it.Next() {
+			flatIndex, i, j := it.Current()
+			sum := 0.0
+			for k := 0; k < K; k++ {
+				aIndex := i*K + k
+				bIndex := k*N + j
+				sum += op.input1.Data[aIndex] * op.input2.Data[bIndex]
+				op.output.Data[flatIndex] = sum
 			}
 		}
-
+		return op.output, nil
 	case len(shape1) == 3 && len(shape2) == 2:
 		// 3D x 2D batched matrix multiplication
 		// This requires iterating over batches and performing 2D MatMul for each batch.

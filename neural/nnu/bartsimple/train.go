@@ -90,66 +90,62 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 // It returns the average loss per token.
 // trainBARTStep performs a single training step (forward pass, loss calculation, placeholder for backprop).
 func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence string) (float64, error) {
-	// 1. Prepare Input and Target
-	inputTokenIDs, err := model.Tokenizer.Encode(inputSentence)
+	// 1. Prepare Input and Target Tensors
+	// Use TokenizeAndConvertToIDs to handle tokenization, special tokens, and padding/truncation.
+	inputTokenIDs, err := TokenizeAndConvertToIDs(inputSentence, model.Vocabulary, model.MaxSequenceLength)
 	if err != nil {
 		return 0, fmt.Errorf("input tokenization failed: %w", err)
 	}
-	targetTokenIDs, err := model.Tokenizer.Encode(targetSentence)
+	targetTokenIDs, err := TokenizeAndConvertToIDs(targetSentence, model.Vocabulary, model.MaxSequenceLength)
 	if err != nil {
 		return 0, fmt.Errorf("target tokenization failed: %w", err)
 	}
 
-	// Convert token IDs to tensors
-	// TODO: Add padding to input and target token IDs if necessary, up to model.MaxSequenceLength
-	// For now, assuming they are already of the correct length or padding is handled elsewhere.
-	inputTensor := NewTensor(nil, []int{len(inputTokenIDs)}, false) // Assuming 1D tensor of token IDs
+	// Convert token ID slices to 2D tensors [batch_size, sequence_length]
+	inputData := make([]float64, len(inputTokenIDs))
 	for i, id := range inputTokenIDs {
-		inputTensor.Data[i] = float64(id)
+		inputData[i] = float64(id)
 	}
+	inputTensor := NewTensor(inputData, []int{1, len(inputTokenIDs)}, true)
 
-	targetTensor := NewTensor(nil, []int{len(targetTokenIDs)}, false) // Assuming 1D tensor of token IDs
+	targetData := make([]float64, len(targetTokenIDs))
 	for i, id := range targetTokenIDs {
-		targetTensor.Data[i] = float64(id) // Target token IDs as float64
+		targetData[i] = float64(id)
+	}
+	// The target tensor is used as input to the decoder during teacher forcing.
+	targetTensor := NewTensor(targetData, []int{1, len(targetTokenIDs)}, true)
+
+	// 2. Forward Pass
+	// Pass both input and target tensors to the model for a full encoder-decoder pass.
+	outputLogits, err := model.ForwardForTraining(inputTensor, targetTensor)
+	if err != nil {
+		return 0, fmt.Errorf("model forward pass for training failed: %w", err)
 	}
 
-	// 3. Calculate Loss (e.g., Cross-Entropy Loss)
-	// This requires the actual output logits from the model and the target token IDs.
+	// 3. Calculate Loss
+	// Compare the model's output logits with the target token IDs.
+	loss, err := CalculateCrossEntropyLoss(outputLogits, targetTokenIDs)
+	if err != nil {
+		return 0, fmt.Errorf("loss calculation failed: %w", err)
+	}
 
-	// TODO: Implement actual Cross-Entropy Loss calculation.
-	// loss := CalculateCrossEntropyLoss(outputLogits, targetTokenIDs) // You need to implement this
-	// For now, use a placeholder loss value.
-	loss := 1.0 // Placeholder loss
+	// 4. Backpropagation
+	// Calculate the initial gradient of the loss with respect to the model's output logits.
+	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, targetTokenIDs)
+	if err != nil {
+		return 0, fmt.Errorf("loss gradient calculation failed: %w", err)
+	}
 
-	// 4. Backpropagation and Optimizer Step (Placeholders)
+	// Start the backward pass from the output tensor. This will propagate gradients
+	// through the entire computation graph.
+	outputLogits.Backward(outputGradient)
 
-	// TODO: Calculate the initial gradient of the loss with respect to the model's output logits.
-	// For Cross-Entropy Loss, this gradient is often softmax(outputLogits) - one_hot(targetTokenIDs).
+	// 5. Optimizer Step (Placeholder)
+	// In a full implementation, you would have an optimizer instance that updates
+	// all learnable parameters (weights and biases) in the model.
+	// e.g., optimizer.Step()
 
-	// TODO: Calculate the initial gradient of the loss with respect to the model's output.
-	// This initial gradient will be used to start the backpropagation process.
-	// For example, if using Cross-Entropy loss, the gradient with respect to the logits
-	// is often (softmax(logits) - one_hot(target_token_ids)).
-	// outputGradient := CalculateLossGradient(outputLogits, targetTokenIDs) // You need to implement this
-
-	// For now, create a placeholder output gradient tensor.
-	// The shape and values need to match the actual gradient of the loss w.r.t. outputLogits.
-	// TODO: Start backpropagation by calling the Backward method of the output logits tensor.
-	// Each layer (Linear, Embedding, MultiHeadAttention, FeedForward, LayerNormalization)
-	// and tensor operation (Add, MatMul, etc.) needs a Backward method
-	// that computes gradients with respect to its inputs and parameters,
-	// and propagates the gradient to the previous layer.
-	// For example, you would start the backpropagation from the output layer's
-	// output tensor, calling its Backward method with the calculated outputGradient.
-	// outputLogits.Backward(outputGradient) // Assuming Tensor has a Backward method
-
-	// TODO: Implement an optimizer (e.g., SGD, Adam) to update model weights using gradients and learningRate.
-	// After backpropagation, the gradients for each learnable parameter (weights and biases)
-	// will be stored in the respective parameter tensors (if your Tensor supports gradients).
-	// You would then iterate through all model parameters and update them using the optimizer's logic.
-	// optimizer.Step(model.Parameters(), learningRate) // Assuming you have an optimizer and a way to get all model parameters
-
-	return loss, nil // Return calculated loss
+	return loss, nil
 }
 
 // CalculateCrossEntropyLoss calculates the average cross-entropy loss between logits and target token IDs.

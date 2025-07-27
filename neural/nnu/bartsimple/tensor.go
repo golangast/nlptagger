@@ -687,77 +687,43 @@ func (t *Tensor) Backward(grad *Tensor) {
 	// The 'Inputs()' method of the Operation interface gives the input tensors to that operation.
 	// We need to process operations in the reverse order of execution in the forward pass.
 
-	var visited map[*Tensor]bool = make(map[*Tensor]bool)
-	var backwardOrder []*Tensor // Tensors in the order their backward methods should be called
+	// To perform backpropagation, we need to traverse the computation graph
+	// in reverse topological order. Each node in our traversal will be a tensor.
+	var topologicalOrder []*Tensor
+	visited := make(map[*Tensor]bool)
 
-	var buildBackwardOrder func(tensor *Tensor)
-	buildBackwardOrder = func(tensor *Tensor) {
-		if !visited[tensor] {
-			visited[tensor] = true
-			// Traverse to the inputs of the creator operation
-			if tensor.creator != nil {
-				inputs := tensor.creator.Inputs()
-				for _, inputTensor := range inputs {
-					buildBackwardOrder(inputTensor)
-				}
-				// Add the tensor itself to the order *after* processing its inputs
-				backwardOrder = append(backwardOrder, tensor)
-			}
+	var buildTopologicalOrder func(t *Tensor)
+	buildTopologicalOrder = func(t *Tensor) {
+		if visited[t] {
+			return
 		}
-	}
+		visited[t] = true
 
-	// Start building the backward order from the current tensor.
-	buildBackwardOrder(t)
-
-	// The backwardOrder is now from inputs to the current tensor.
-	// We need to iterate in reverse to process from the current tensor back to the inputs.
-	// However, for backpropagation, we need to call the Backward methods of the *operations*.
-	// So, let's build a topological order of operations instead.
-
-	var visitedOps map[Operation]bool = make(map[Operation]bool)
-	var topologicalOps []Operation // Operations in the order their backward methods should be called
-
-	var buildOperationOrder func(tensor *Tensor)
-	buildOperationOrder = func(tensor *Tensor) {
-		if tensor.creator != nil && !visitedOps[tensor.creator] {
-			visitedOps[tensor.creator] = true
+		if t.creator != nil {
 			// Recursively visit the inputs of the creator operation
-			inputs := tensor.creator.Inputs()
+			inputs := t.creator.Inputs()
 			for _, inputTensor := range inputs {
-				buildOperationOrder(inputTensor)
+				buildTopologicalOrder(inputTensor)
 			}
-			// Add the creator operation after visiting its inputs
-			topologicalOps = append(topologicalOps, tensor.creator)
 		}
+		// Add the tensor to the order after visiting all its dependencies.
+		topologicalOrder = append(topologicalOrder, t)
 	}
 
-	// Start building the operation order from the current tensor.
-	buildOperationOrder(t)
+	// Start building the topological order from the current tensor 't'.
+	buildTopologicalOrder(t)
 
-	// The topologicalOps are ordered from input-side operations to the current tensor's creator.
-	// We need to call Backward methods in the reverse order.
+	// Iterate through the topologically sorted tensors in reverse order and call Backward.
+	for i := len(topologicalOrder) - 1; i >= 0; i-- {
+		tensor := topologicalOrder[i]
 
-	// Iterate through the topologically sorted operations in reverse order and call Backward.
-	// Iterate through the topologically sorted operations in reverse order and call Backward.
-	for i := len(topologicalOps) - 1; i >= 0; i-- {
-		op := topologicalOps[i]
-
-		// Call Forward once and handle the potential error
-		outputTensor, err := op.Forward()
-		if err != nil {
-			// Handle the error appropriately, e.g., log it or skip this operation
-			fmt.Printf("Error during forward pass for operation in backward pass: %v\n", err)
-			continue // Skip to the next operation
-		}
-
-		// Check if the output tensor and its gradient are not nil
-		if outputTensor != nil && outputTensor.Grad != nil {
-			// Call Backward with the gradient of the output tensor
-			backwardErr := op.Backward(outputTensor.Grad)
-			if backwardErr != nil {
+		if tensor.creator != nil {
+			// The gradient for the inputs of this operation is calculated
+			// by calling the creator's Backward method with the gradient of the output (this tensor).
+			err := tensor.creator.Backward(tensor.Grad)
+			if err != nil {
 				// Handle the error during backward pass
-				fmt.Printf("Error during backward pass for operation: %v\n", backwardErr)
-				// Decide whether to continue or stop based on your error handling strategy
+				fmt.Printf("Error during backward pass for operation: %v\n", err)
 			}
 		}
 	}

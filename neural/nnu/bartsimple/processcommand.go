@@ -3,25 +3,18 @@ package bartsimple
 import (
 	"errors"
 	"fmt"
-	"log"     // Added log import for error reporting
-	"strings" // Added strings import for joining words
-	// You might need to import "math" if your Softmax implementation is here
+	"log"
+	"strings"
 )
 
-// BartProcessCommand performs a simplified forward pass for inference and generates a summary.
+// BartProcessCommand performs an autoregressive forward pass for inference to generate a summary.
 func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error) {
-	// Simplified: Tokenize input and perform a single forward pass through the encoder and decoder.
-	// No caching or autoregressive loop for simplicity in this version.
-
 	// Check if tokenizer and vocabulary are loaded
 	if m.Tokenizer == nil {
 		return "", errors.New("tokenizer is not loaded in the model")
 	}
 	if m.Vocabulary == nil {
 		return "", errors.New("vocabulary is not loaded in the model")
-	}
-	if m.Tokenizer == nil {
-		return "", errors.New("tokenizer is not loaded in the model")
 	}
 	if m.Encoder == nil {
 		return "", errors.New("encoder is not loaded in the model")
@@ -81,108 +74,71 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 		return "", fmt.Errorf("simplified encoder layer forward pass failed: %w", err)
 	}
 
-	// Assuming m.Tokenizer.BosID exists and returns int
-	bosTokenID := m.Tokenizer.BosID
-	// Let's assume the target sequence length is the same as the input sequence length for this simplification
-	targetSeqLength := len(inputTokenIDs) // Simplified assumption
-	decoderInputIDs := make([]float64, targetSeqLength)
-	for i := range decoderInputIDs {
-		decoderInputIDs[i] = float64(bosTokenID)
-	}
-	// Assuming NewTensor function is available
-	decoderInputTensor := NewTensor(decoderInputIDs, []int{1, targetSeqLength}, true) // Batch size 1
-
-	// Embed the decoder input
-	// Assuming TokenEmbedding.Forward exists and returns *Tensor
-	decoderInputEmbeddings, err := m.TokenEmbedding.Forward(decoderInputTensor)
-	if err != nil {
-		return "", fmt.Errorf("decoder token embedding failed: %w", err)
-	}
-
-	// Add positional embeddings to decoder input
-	// Assuming PositionalEmbedding.Forward exists and returns *Tensor
-	decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
-	if err != nil {
-		return "", fmt.Errorf("decoder positional embedding failed: %w", err)
-	}
-
-	// Create dummy masks for the decoder (simplified)
-	var selfAttentionMask *Tensor = nil  // Causal mask would be needed in a real autoregressive decoder
-	var crossAttentionMask *Tensor = nil // Cross-attention mask based on encoder padding
-
-	// Pass through the simplified decoder layer
-	// Assuming Decoder.Layer.Forward exists and returns *Tensor
-	decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
-	if err != nil {
-		return "", fmt.Errorf("simplified decoder layer forward pass failed: %w", err)
-	}
-
-	// Before the final linear layer
-	// fmt.Printf("Before Final OutputLinear Layer: Shape: %v, First 10: %v\n", decoderOutput.Shape, decoderOutput.Data[:min(10, len(decoderOutput.Data))])
-
-	// Pass decoder output through the final linear layer to get logits
-	// Assuming OutputLinear.Forward exists and returns *Tensor
-	outputLogits, err := m.OutputLinear.Forward(decoderOutput)
-	if err != nil {
-		return "", fmt.Errorf("output linear layer failed: %w", err)
-	}
-
-	// --- Decoding and Summary Generation Logic ---
-
-	// Assuming outputLogits shape is [batch_size, sequence_length, vocab_size]
-	if len(outputLogits.Shape) != 3 {
-		return "", fmt.Errorf("expected output logits shape [batch_size, sequence_length, vocab_size], but got %v", outputLogits.Shape)
-	}
-
-	batchSize := outputLogits.Shape[0]
-	seqLength := outputLogits.Shape[1]
-	vocabSize := outputLogits.Shape[2]
-
-	// For simplicity, process the first item in the batch
-	if batchSize == 0 {
-		return "", errors.New("empty batch in output logits")
-	}
-
+	// --- Autoregressive Decoding Loop ---
 	summaryTokens := []int{}
-	// Implement greedy decoding
-	for s := 0; s < seqLength; s++ { // Iterate through sequence length
+	// Start with the beginning-of-sentence token
+	decoderInputIDs := []float64{float64(m.Tokenizer.BosID)}
 
-		// Get the logits for the current token position across the vocabulary
-		tokenLogitsData := make([]float64, vocabSize)
-		// Calculate the start index for the current token's logits in the flattened Data slice
-		// Assuming outputLogits.Data is flattened in row-major order: batch, sequence, vocab
-		startIndex := s * vocabSize // For the first item in the batch (b=0)
-		if startIndex+vocabSize > len(outputLogits.Data) {
-			log.Printf("Warning: Accessing out of bounds logits data at index %d\n", startIndex)
-			break // Prevent panic
+	// Generate tokens one by one up to the max sequence length
+	for i := 0; i < m.MaxSequenceLength; i++ {
+		// Convert current decoder input IDs to a tensor
+		decoderInputTensor := NewTensor(decoderInputIDs, []int{1, len(decoderInputIDs)}, true)
+
+		// Embed the decoder input
+		decoderInputEmbeddings, err := m.TokenEmbedding.Forward(decoderInputTensor)
+		if err != nil {
+			return "", fmt.Errorf("decoder token embedding failed: %w", err)
 		}
-		copy(tokenLogitsData, outputLogits.Data[startIndex:startIndex+vocabSize])
 
-		// Apply Softmax to get probabilities (assuming Softmax function is available in bartsimple package)
-		// This is the function you need to ensure is defined and exported in your bartsimple package
-		probabilities := Softmax(tokenLogitsData) // Assuming Softmax is accessible in this package
+		// Add positional embeddings
+		decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
+		if err != nil {
+			return "", fmt.Errorf("decoder positional embedding failed: %w", err)
+		}
+
+		// Create a causal mask for the decoder's self-attention
+		// This prevents the model from looking at future tokens during generation.
+		selfAttentionMask := createCausalMask(1, len(decoderInputIDs))
+		var crossAttentionMask *Tensor = nil // No cross-attention mask for simplicity
+
+		// Pass through the decoder
+		decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
+		if err != nil {
+			return "", fmt.Errorf("decoder layer forward pass failed: %w", err)
+		}
+
+		// Pass through the final linear layer to get logits
+		outputLogits, err := m.OutputLinear.Forward(decoderOutput)
+		if err != nil {
+			return "", fmt.Errorf("output linear layer failed: %w", err)
+		}
+
+		// --- Greedy Decoding for the *last* token ---
+		// Get the logits for the last token in the sequence
+		lastTokenLogitsIndex := (outputLogits.Shape[1] - 1) * outputLogits.Shape[2]
+		lastTokenLogits := outputLogits.Data[lastTokenLogitsIndex:]
+
+		// Apply Softmax to get probabilities
+		probabilities := Softmax(lastTokenLogits)
 
 		// Greedy decoding: select the token with the highest probability
 		maxProb := -1.0
 		predictedTokenID := -1
-		for i, prob := range probabilities {
+		for j, prob := range probabilities {
 			if prob > maxProb {
 				maxProb = prob
-				predictedTokenID = i
+				predictedTokenID = j
 			}
 		}
 
-		// Append the predicted token ID
-		if predictedTokenID != -1 {
-			summaryTokens = append(summaryTokens, predictedTokenID)
-			// Optional: Stop decoding if an end-of-sequence token is predicted
-			// Assuming m.Vocabulary.EndOfSequenceTokenID exists
-			// if m.Vocabulary != nil && predictedTokenID == m.Vocabulary.EndOfSequenceTokenID {
-			//     break // Stop decoding at EOS
-			// }
-		} else {
-			log.Println("Warning: Predicted token ID is -1, skipping token.")
+		// Stop if we predict the end-of-sequence token
+		if predictedTokenID == m.Tokenizer.EosID {
+			break
 		}
+
+		// Add the predicted token to our summary and to the next decoder input
+		summaryTokens = append(summaryTokens, predictedTokenID)
+		decoderInputIDs = append(decoderInputIDs, float64(predictedTokenID))
 	}
 
 	// Convert token IDs to words and join into a string using the model's vocabulary
@@ -213,4 +169,27 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 
 	// Print or return the generated summary
 	return generatedSummary, nil
+}
+
+// createCausalMask creates a causal mask for self-attention.
+// The mask is a tensor where future positions are masked out with a large negative number.
+func createCausalMask(batchSize, seqLength int) *Tensor {
+	maskShape := []int{batchSize, 1, seqLength, seqLength} // Shape for broadcasting
+	maskData := make([]float64, batchSize*seqLength*seqLength)
+	for b := 0; b < batchSize; b++ {
+		for i := 0; i < seqLength; i++ {
+			for j := 0; j < seqLength; j++ {
+				idx := b*seqLength*seqLength + i*seqLength + j
+				if j > i {
+					// Mask out future positions
+					maskData[idx] = -1e9 // A large negative number
+				} else {
+					// Allow attention to current and past positions
+					maskData[idx] = 0.0
+				}
+			}
+		}
+	}
+	// The mask itself does not require gradients
+	return NewTensor(maskData, maskShape, false)
 }
