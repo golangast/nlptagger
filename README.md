@@ -16,23 +16,22 @@ When you need a program to understand context of commands.
 
 
 
-  - [nlptagger](#nlptagger)
-  - [General info](#general-info)
-  - [Why build this?](#why-build-this)
-  - [What does it do?](#what-does-it-do)
-  - [Technologies](#technologies)
-  - [Requirements](#requirements)
-  - [Repository overview](#repository-overview)
-  - [Overview of the code.](#Overview-of-the-code.)
-  - [Things to remember](#things-to-remember)
-  - [Reference Commands](#reference-commands)
-  - [Special thanks](#special-thanks)
-  - [Why Go?](#why-go)
-  - [Just added](#just-added)
+- [nlptagger](#nlptagger)
+	- [General info](#general-info)
+	- [Why build this?](#why-build-this)
+	- [What does it do?](#what-does-it-do)
+	- [Technologies](#technologies)
+	- [Requirements](#requirements)
+	- [How to run as is?](#how-to-run-as-is)
+	- [Repository overview](#repository-overview)
+	- [Overview of the code.](#overview-of-the-code)
+	- [Just added](#just-added)
+	- [Special thanks](#special-thanks)
+	- [Why Go?](#why-go)
 
 
 ## General info
-*This project is used for tagging cli commands.  It is not a LLM or trying to be.  I am using it to generate go code but I made this completely separate so others can enjoy it.
+*This project is used for tagging cli commands.  I am using it to generate go code but I made this completely separate so others can enjoy it.
 *I will keep working on it and hopefully improving the guessing of intent.
 
 -Background
@@ -56,6 +55,8 @@ When you need a program to understand context of commands.
 
 POS tags are commonly used to define rules for identifying phrases (e.g., a noun phrase might be defined as a sequence of words starting with a determiner followed by one or more adjectives and a noun).
 NER can be used to identify specific types of phrases (e.g., a phrase tagged as "PERSON" might indicate a person's name).
+
+
 
 
 ## Why build this?
@@ -85,210 +86,369 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/golangast/nlptagger/neural/nn/g"
-	"github.com/golangast/nlptagger/neural/nn/semanticrole"
-	"github.com/golangast/nlptagger/neural/nnu"
-	"github.com/golangast/nlptagger/neural/nnu/intent"
-	"github.com/golangast/nlptagger/neural/nnu/rag"
-	"github.com/golangast/nlptagger/neural/nnu/train"
-	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"golang.org/x/net/html"
+
+	"github.com/golangast/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
+	"github.com/golangast/nlptagger/neural/nnu/vocab"
 )
 
-var model = "true"
-var hiddensize = 100
-var vectorsize = 100
-var window = 10
-var epochs = 1
-var learningrate = 0.01
-var maxgrad = 20.0
-var similaritythreshold = .6
-var logfile = "train.log"
+var (
+	trainMode    = flag.Bool("train", false, "Enable training mode")
+	epochs       = flag.Int("epochs", 10, "Number of training epochs")
+	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
+	bartDataPath = flag.String("data", "trainingdata/bartdata/bartdata.json", "Path to BART training data for the model")
+	dimModel     = flag.Int("dim", 64, "Dimension of the model")
+	numHeads     = flag.Int("heads", 4, "Number of attention heads")
+	maxSeqLength = flag.Int("maxlen", 64, "Maximum sequence length")
+	batchSize    = flag.Int("batchsize", 4, "Batch size for training")
+)
 
-func init() {
-	flag.StringVar(&model, "model", "true", "whether or not to use model or manual")
-	flag.IntVar(&hiddensize, "hiddensize", 100, "hiddensize determines the number of neurons in the hidden layer")
-	flag.IntVar(&vectorsize, "vectorsize", 100, "VectorSize can allow for a more nuanced representation of words")
-	flag.IntVar(&window, "window", 10, "Context window size")
-	flag.IntVar(&epochs, "epochs", 1, "Number of training epochs")
-	flag.Float64Var(&learningrate, "learningrate", 0.01, "Learning rate")
-	flag.Float64Var(&maxgrad, "maxgrad", 20, "updates to the model's weights are kept within a reasonable range")
-	flag.Float64Var(&similaritythreshold, "similaritythreshold", .6, "Its purpose is to refine the similarity calculations, ensuring a tighter definition of similarity and controlling the results")
-	flag.StringVar(&logfile, "logFile", "train.log", "Path to the log file")
-	flag.Parse()
-	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-	defer f.Close()
-	log.SetOutput(f)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("Starting training with model=%s, epochs=%d, learningRate=%f, vectorSize=%d, hiddenSize=%d, maxGrad=%f, window=%d", model, epochs, learningrate, vectorsize, hiddensize, maxgrad, window) // Log hyperparameters
-}
-
-/*
-check if you are running it manually or not.
-
-	manuallly..
-	go run . -model true  -epochs 100 -learningrate 0.1 -hiddensize 100 -vectorsize 100 -window 10 -maxgrad 20 -similaritythreshold .6
-	automatically...
-	 go run .
-*/
 func main() {
-	trainWord2VecModel()
+	flag.Parse()
+
+	// Define paths, consider making these flags as well for more flexibility
+	const modelPath = "gob_models/simplified_bart_model.gob"
+	const trainingDataPath = "trainingdata/tagdata/nlp_training_data.json"
+	const vocabPath = "gob_models/vocabulary.gob"
+
+	vocabulary, err := setupVocabulary(vocabPath, trainingDataPath)
+	if err != nil {
+		log.Fatalf("Failed to set up vocabulary: %v", err)
+	}
+
+	model, err := setupModel(modelPath, vocabulary, *dimModel, *numHeads, *maxSeqLength)
+	if err != nil {
+		log.Fatalf("Failed to set up model: %v", err)
+	}
+
+	if *trainMode {
+		runTraining(model, *bartDataPath, modelPath)
+	} else {
+		runInference(model)
+	}
 }
 
-func trainWord2VecModel() {
+// setupVocabulary loads a vocabulary from vocabPath or builds a new one if loading fails.
+func setupVocabulary(vocabPath, trainingDataPath string) (*bartsimple.Vocabulary, error) {
+	// Attempt to load the vocabulary first
+	vocabulary, err := bartsimple.LoadVocabulary(vocabPath)
+	if err == nil && vocabulary != nil && vocabulary.WordToToken != nil {
+		fmt.Printf("Successfully loaded vocabulary from %s\n", vocabPath)
+		// Validate that the loaded vocabulary contains the essential special tokens.
+		// If not, we'll treat it as an invalid vocabulary and rebuild it.
+		_, unkExists := vocabulary.WordToToken["[UNK]"]
+		_, padExists := vocabulary.WordToToken["[PAD]"]
+		_, bosExists := vocabulary.WordToToken["[BOS]"]
+		_, eosExists := vocabulary.WordToToken["[EOS]"]
 
-	var sw2v *word2vec.SimpleWord2Vec
-	var err error
+		if unkExists && padExists && bosExists && eosExists {
+			// All essential tokens exist, set the IDs and return.
+			vocabulary.UnknownTokenID = vocabulary.WordToToken["[UNK]"]
+			vocabulary.PaddingTokenID = vocabulary.WordToToken["[PAD]"]
+			vocabulary.BeginningOfSentenceID = vocabulary.WordToToken["[BOS]"]
+			vocabulary.EndOfSentenceID = vocabulary.WordToToken["[EOS]"]
+			return vocabulary, nil
+		}
+		fmt.Println("Loaded vocabulary is missing one or more special tokens. Rebuilding.")
+	} else if err != nil {
+		// If there was an error loading (e.g., file not found), print it and proceed to build.
+		fmt.Printf("Error loading vocabulary: %v. Building a new one from training data.\n", err)
+	}
 
-	if model == "true" {
-		var err error
-		sw2v, err = word2vec.LoadModel("trained_model.gob")
+	// If loading fails, build a new one
+
+	trainingData, loadErr := vocab.LoadTrainingDataJSON(trainingDataPath)
+	if loadErr != nil {
+		return nil, fmt.Errorf("error loading training data to build new vocabulary: %w", loadErr)
+	}
+
+	fmt.Println("Building new vocabulary...")
+	allWords := make(map[string]bool)
+
+	// Gather words from all sources.
+	addWordsFromJSONTrainingData(trainingData, allWords)
+	addWordsFromRAGDocs("trainingdata/ragdata/ragdocs.txt", allWords)
+	addWordsFromRAGJSON("trainingdata/ragdata/rag_data.json", allWords)
+	addWordsFromHTML("docs/index.html", allWords)
+
+	// 5. Expand vocabulary with words from WikiQA data
+	addWordsFromWikiQA("trainingdata/WikiQA-train.txt", allWords)
+
+
+	newVocab := bartsimple.NewVocabulary()
+
+	// Add special tokens first to ensure they have consistent IDs
+	newVocab.AddToken("[PAD]", 0)
+	newVocab.AddToken("[UNK]", 1)
+	newVocab.AddToken("[BOS]", 2)
+	newVocab.AddToken("[EOS]", 3)
+
+	for word := range allWords {
+		// Avoid re-adding special tokens
+		if _, exists := newVocab.WordToToken[word]; !exists {
+			newVocab.AddToken(word, len(newVocab.TokenToWord))
+		}
+	}
+
+	newVocab.PaddingTokenID = newVocab.WordToToken["[PAD]"]
+	newVocab.UnknownTokenID = newVocab.WordToToken["[UNK]"]
+	newVocab.BeginningOfSentenceID = newVocab.WordToToken["[BOS]"]
+	newVocab.EndOfSentenceID = newVocab.WordToToken["[EOS]"]
+
+	// Save the new vocabulary
+	if err := newVocab.Save(vocabPath); err != nil {
+		// Log the error but continue, as we have a functional vocabulary in memory
+		fmt.Printf("Warning: Error saving newly built vocabulary: %v\n", err)
+	} else {
+		fmt.Printf("Saved new vocabulary to %s\n", vocabPath)
+	}
+
+	return newVocab, nil
+}
+
+// addWordsFromJSONTrainingData extracts words from the primary annotated training data.
+func addWordsFromJSONTrainingData(trainingData *vocab.TrainingDataJSON, wordSet map[string]bool) {
+	fmt.Println("Expanding vocabulary with words from JSON training data...")
+	tokenVocab := vocab.CreateTokenVocab(trainingData.Sentences)
+	for word := range tokenVocab {
+		wordSet[word] = true
+	}
+}
+
+// addWordsFromRAGDocs extracts words from the plain text RAG documents
+func addWordsFromRAGDocs(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open RAG docs to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		words := strings.Fields(scanner.Text())
+		for _, word := range words {
+			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+			if cleanedWord != "" {
+				wordSet[cleanedWord] = true
+			}
+		}
+	}
+}
+
+// addWordsFromWikiQA extracts words from the WikiQA training data.
+func addWordsFromWikiQA(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open WikiQA data to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, "\t", 4) // Split into max 4 parts
+		if len(parts) > 1 {                   // Ensure there's at least a question and answer
+			question := parts[0]             // The question
+			words := strings.Fields(question) // Then process the question
+			for _, word := range words {
+				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+				if cleanedWord != "" {
+					wordSet[cleanedWord] = true
+				}
+			}
+		}
+	}
+}
+
+// addWordsFromRAGJSON extracts words from the structured RAG JSON data.
+func addWordsFromRAGJSON(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open RAG JSON data to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	var ragData []struct {
+		Content string `json:"Content"`
+	}
+	if err := json.NewDecoder(file).Decode(&ragData); err != nil {
+		fmt.Printf("Warning: could not decode RAG JSON data from %s: %v\n", path, err)
+		return
+	}
+
+	for _, entry := range ragData {
+		words := strings.Fields(entry.Content)
+		for _, word := range words {
+			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+			if cleanedWord != "" {
+				wordSet[cleanedWord] = true
+			}
+		}
+	}
+}
+
+// addWordsFromHTML extracts text content from an HTML file to expand the vocabulary.
+func addWordsFromHTML(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open docs file to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	tokenizer := html.NewTokenizer(file)
+htmlLoop:
+	for {
+		tt := tokenizer.Next()
+		switch tt {
+		case html.ErrorToken:
+			if tokenizer.Err() != io.EOF {
+				fmt.Printf("Warning: error parsing HTML from %s: %v\n", path, tokenizer.Err())
+			}
+			break htmlLoop // End of the document
+		case html.TextToken:
+			words := strings.Fields(string(tokenizer.Text()))
+			for _, word := range words {
+				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+				if cleanedWord != "" {
+					wordSet[cleanedWord] = true
+				}
+			}
+		}
+	}
+}
+
+// setupModel loads a model from modelPath or creates a new one if loading fails.
+func setupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads, maxLen int) (*bartsimple.SimplifiedBARTModel, error) {
+	// Attempt to load the model
+	model, err := bartsimple.LoadSimplifiedBARTModelFromGOB(modelPath)
+	if err == nil && model != nil {
+		// Check if the loaded model's vocabulary size matches the current vocabulary.
+		// This is a critical check to prevent panics from using an old model with a new, larger vocabulary.
+		if model.VocabSize == len(vocabulary.WordToToken) {
+			fmt.Printf("Successfully loaded simplified BART model from %s\n", modelPath)
+			// Ensure the loaded model uses the up-to-date vocabulary and tokenizer
+			model.Vocabulary = vocabulary
+			if model.TokenEmbedding != nil {
+				model.TokenEmbedding.VocabSize = model.VocabSize
+			}
+			tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
+			if tknErr != nil {
+				return nil, fmt.Errorf("failed to create tokenizer for loaded model: %w", tknErr)
+			}
+			model.Tokenizer = tokenizer
+			return model, nil
+		}
+		// If vocabulary sizes do not match, the model is incompatible.
+		fmt.Printf("Loaded model has a vocabulary size of %d, but the current vocabulary has size %d. Rebuilding model.\n", model.VocabSize, len(vocabulary.WordToToken))
+		// Fall through to create a new model.
+	}
+
+	// If loading fails, create a new one
+	if err != nil {
+		fmt.Printf("Error loading simplified BART model: %v. Creating a new one.\n", err)
+	} else if model == nil {
+		fmt.Println("Model file loaded without error, but model is nil. Creating a new one.")
+	}
+
+	tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
+	if tknErr != nil {
+		return nil, fmt.Errorf("failed to create tokenizer for new model: %w", tknErr)
+	}
+
+	fmt.Printf("Creating new simplified BART model with vocab size: %d\n", len(vocabulary.WordToToken))
+	newModel, createErr := bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, dim, heads, maxLen)
+	if createErr != nil {
+		return nil, fmt.Errorf("failed to create a new simplified BART model: %w", createErr)
+	}
+
+	// Save the newly created model so it can be used next time.
+	fmt.Printf("Saving newly created model to %s...\n", modelPath)
+	if err := bartsimple.SaveSimplifiedBARTModelToGOB(newModel, modelPath); err != nil {
+		// Log as a warning because the model is still usable in memory for this run
+		fmt.Printf("Warning: Error saving newly created BART model: %v\n", err)
+	} else {
+		fmt.Println("New model saved successfully.")
+	}
+
+	return newModel, nil
+}
+
+func runTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath string) {
+	fmt.Println("--- Running in Training Mode ---")
+
+	// 1. Load BART-specific training data
+	bartTrainingData, err := bartsimple.LoadBARTTrainingData(bartDataPath)
+	if err != nil {
+		log.Fatalf("Error loading BART training data from %s: %v", bartDataPath, err)
+	}
+	fmt.Printf("Loaded %d training sentences for BART model.\n", len(bartTrainingData.Sentences))
+	// 2. Train the model
+	err = bartsimple.TrainBARTModel(model, bartTrainingData, *epochs, *learningRate, *batchSize)
+	if err != nil {
+		log.Fatalf("BART model training failed: %v", err)
+	}
+
+	// 3. Save the trained model
+	fmt.Printf("Training complete. Saving trained model to %s...\n", modelPath)
+	if err := bartsimple.SaveSimplifiedBARTModelToGOB(model, modelPath); err != nil {
+		log.Fatalf("Error saving trained BART model: %v", err)
+	}
+	fmt.Println("Model saved successfully.")
+}
+
+func runInference(model *bartsimple.SimplifiedBARTModel) {
+	fmt.Println("--- Running in Inference Mode ---")
+	for {
+		command := InputScanDirections("\nEnter a command (or 'quit' to exit):")
+		if strings.ToLower(command) == "quit" {
+			fmt.Println("Exiting.")
+			break
+		}
+		if command == "" {
+			continue
+		}
+
+		// Process the command using BartProcessCommand
+		summary, err := model.BartProcessCommand(command)
 		if err != nil {
-			fmt.Println("Error loading the model in loadmodel:", err)
+			log.Printf("Error processing command with BART model: %v", err)
+			continue // Continue to next loop iteration
 		}
+		fmt.Printf("Generated Summary: %s\n", summary)
 	}
-
-	sw2v = &word2vec.SimpleWord2Vec{
-		Vocabulary:          make(map[string]int),
-		WordVectors:         make(map[int][]float64),
-		VectorSize:          vectorsize, // each word in the vocabulary is represented by a vector of VectorSize numbers. A larger VectorSize can allow for a more nuanced representation of words, but it also increases the computational cost of training and storage.
-		ContextEmbeddings:   make(map[string][]float64),
-		Window:              window, // Example context window size
-		Epochs:              epochs,
-		ContextLabels:       make(map[string]string),
-		UNKToken:            "<UNK>",
-		HiddenSize:          hiddensize, // This means hiddensize determines the number of neurons in the hidden layer. A larger hidden size usually allows the network to learn more complex patterns, but also increases the computational resources required.
-		LearningRate:        learningrate,
-		MaxGrad:             maxgrad,             //Exploding gradients occur when the gradients during training become excessively large, causing instability and hindering the learning process. By limiting the norm of the gradients to maxGrad, the updates to the model's weights are kept within a reasonable range, promoting more stable and effective training.
-		SimilarityThreshold: similaritythreshold, //Its purpose is to refine the similarity calculations, ensuring a tighter definition of similarity and controlling the results
-	}
-	sw2v.Ann, err = g.NewANN(sw2v.VectorSize, "euclidean")
-	if err != nil {
-		fmt.Println("Error creating ANN:", err) // Handle the error properly
-		return                                  // Exit if ANN creation fails
-	}
-
-	nn := nnu.NewSimpleNN("datas/tagdata/training_data.json")
-	// Train the model
-	c, err := train.JsonModelTrain(sw2v, nn)
-	if err != nil {
-		fmt.Println("Error in JsonModelTrain:", err)
-	}
-
-	// Save the trained model
-	err = sw2v.SaveModel("./gob_models/trained_model.gob")
-	if err != nil {
-		fmt.Println("Error saving the model:", err)
-	}
-
-	i := intent.IntentClassifier{}
-	//com := InputScanDirections("what would you like to do?")
-
-	intents, err := i.ProcessCommand("generate a webserver named jim and handler named jill", sw2v.Ann.Index, c)
-	if err != nil {
-		fmt.Println("Error with ProcessCommand", err)
-	}
-
-	// Embed the command (user input) using the Word2Vec model.
-	commandVector, err := embedCommand("generate a webserver named jim and handler named jill", sw2v)
-	if err != nil {
-		fmt.Println("Error embedding command:", err)
-		return
-	}
-	//./gob_models/word2vec_model.gob
-	myModel, err := semanticrole.NewSemanticRoleModel("./gob_models/trained_model.gob", "./gob_models/bilstm_model.gob", "./gob_models/role_map.gob")
-	if err != nil {
-		fmt.Println("Error creating SemanticRoleModel:", err)
-	} else {
-		fmt.Println("Semantic Role Model:", myModel)
-	}
-	// Load RAG documents.
-
-	ragDocs, err := rag.ReadPlainTextDocuments("datas/ragdata/ragdocs.txt", sw2v) // Use the new function
-	if err != nil {
-		fmt.Println("Error reading document:", err)
-		return
-	}
-
-	// fmt.Println("ragdocs before read:", ragDocs)
-	if ragDocs.Documents == nil {
-		fmt.Println("ragDocs is nil after reading the file")
-		return
-	}
-
-	ragDocs.CalculateIDF() // Corrected the call to CalculateIDF
-
-	relevantDocs := ragDocs.Search(commandVector, "generate a webserver named jim and handler named jill", similaritythreshold)
-
-	// Incorporate relevant documents into the response.
-	fmt.Println("~~~ this is the intent: ", intents+"\n")
-	fmt.Println(" ")
-	// add the docs information here
-	if len(relevantDocs) > 0 {
-		for i, doc := range relevantDocs {
-			fmt.Println("Relevant Doc:", i, "--", doc.Content)
-		}
-		fmt.Println("Number of relevant documents found:", len(relevantDocs))
-	} else {
-		fmt.Println("No relevant documents found.")
-	}
-
-	relevantDocs = ragDocs.Search(commandVector, "generate a webserver named jim and handler named jill", similaritythreshold)
-
 }
 
+// InputScanDirections prompts the user for input and returns the cleaned string.
 func InputScanDirections(directions string) string {
 	fmt.Println(directions)
 
 	scannerdesc := bufio.NewScanner(os.Stdin)
-	tr := scannerdesc.Scan()
-	if tr {
+	if scannerdesc.Scan() {
 		dir := scannerdesc.Text()
-		stripdir := strings.TrimSpace(dir)
-		return stripdir
-	} else {
-		return ""
+		return strings.TrimSpace(dir)
 	}
+	if err := scannerdesc.Err(); err != nil {
+		log.Printf("Error reading input: %v", err)
+	}
+	return ""
 }
 
-// embedCommand embeds the command using the Word2Vec model.
-func embedCommand(command string, sw2v *word2vec.SimpleWord2Vec) ([]float64, error) {
-	words := strings.Split(command, " ")
-	var embeddings [][]float64
-	for _, word := range words {
-		if vector, ok := sw2v.WordVectors[sw2v.Vocabulary[word]]; ok {
-			embeddings = append(embeddings, vector)
-		} else {
-			embeddings = append(embeddings, sw2v.WordVectors[sw2v.Vocabulary[sw2v.UNKToken]]) // Use UNK token embedding if word not found
-		}
-
-	}
-
-	if len(embeddings) == 0 {
-		return nil, fmt.Errorf("no embeddings found for command")
-	}
-
-	// Average the embeddings to get a command vector
-	commandVector := make([]float64, len(embeddings[0]))
-	for _, embedding := range embeddings {
-		for i, val := range embedding {
-			commandVector[i] += val
-		}
-	}
-	for i := range commandVector {
-		commandVector[i] /= float64(len(embeddings))
-	}
-
-	return commandVector, nil
-}
 ```
 
 *- clone it
@@ -360,7 +520,6 @@ go run . -model true  -epochs 100 -learningrate 0.1 -hiddensize 100 -vectorsize 
 *Tries to guess intent of the program.
 ```
 ## Things to remember
-* it is not a LLM or trying to be
 * it is only for cli commands
 
  ```
@@ -368,7 +527,7 @@ go run . -model true  -epochs 100 -learningrate 0.1 -hiddensize 100 -vectorsize 
 
 
 ## Just added
-RAG
+Bart model
 
 
 ## Special thanks
