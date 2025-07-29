@@ -2,6 +2,7 @@ package bartsimple
 
 import (
 	"fmt"
+	"log"
 	"math"
 )
 
@@ -240,15 +241,30 @@ func (it *TransposeIndexIterator) Current() (int, int) {
 	return it.currentNewFlatIndex, it.currentOldFlatIndex
 }
 
+// NewOptimizer creates a new optimizer for the given parameters and learning rate.
+func NewOptimizer(params []*Tensor, lr float64) *Optimizer {
+	return &Optimizer{Parameters: params, LearningRate: lr}
+}
+
 // Step updates the model parameters based on their gradients and the learning rate.
 func (o *Optimizer) Step() {
-	for _, parameter := range o.Parameters {
-		// Only update parameters that have computed gradients
-		if parameter.Grad != nil && len(parameter.Data) == len(parameter.Grad.Data) {
+	for _, p := range o.Parameters {
+		if p.requiresGrad && p.Grad != nil {
+			if len(p.Data) != len(p.Grad.Data) {
+				log.Printf("Warning: Optimizer skipping parameter update due to mismatched data/grad length. Data: %d, Grad: %d", len(p.Data), len(p.Grad.Data))
+				continue
+			}
 			// Simple SGD update: parameter = parameter - learning_rate * gradient
-			for i := range parameter.Data {
-				parameter.Data[i] -= o.LearningRate * parameter.Grad.Data[i]
+			for i := range p.Data {
+				p.Data[i] -= o.LearningRate * p.Grad.Data[i]
 			}
 		}
+	}
+}
+
+// ZeroGrad clears the gradients of all parameters before a new training step.
+func (o *Optimizer) ZeroGrad() {
+	for _, p := range o.Parameters {
+		p.ZeroGrad() // Assumes Tensor has a ZeroGrad method to reset gradients.
 	}
 }

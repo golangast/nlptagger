@@ -41,7 +41,7 @@ func LoadBARTTrainingData(filePath string) (*BARTTrainingData, error) {
 }
 
 // TrainBARTModel trains the SimplifiedBARTModel.
-func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs int, learningRate float64) error {
+func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs int, learningRate float64, batchSize int) error {
 	if model == nil {
 		return errors.New("cannot train a nil model")
 	}
@@ -66,17 +66,29 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 
 	log.Printf("Starting BART model training for %d epochs with learning rate %f\n", epochs, learningRate)
 
+	// Create an optimizer for the model's parameters. This relies on the Parameters() methods you added.
+	optimizer := NewOptimizer(model.Parameters(), learningRate)
+
 	for epoch := 0; epoch < epochs; epoch++ {
 		totalLoss := 0.0
-		for i, sentencePair := range data.Sentences {
-			loss, err := trainBARTStep(model, sentencePair.Input, sentencePair.Output)
+		numBatches := 0
+		// Create batches for training
+		for i := 0; i < len(data.Sentences); i += batchSize {
+			end := i + batchSize
+			if end > len(data.Sentences) {
+				end = len(data.Sentences)
+			}
+			batch := data.Sentences[i:end]
+
+			loss, err := trainBARTBatch(model, optimizer, batch)
 			if err != nil {
-				log.Printf("Error during training step %d in epoch %d: %v\n", i, epoch, err)
+				log.Printf("Error during training batch starting at index %d in epoch %d: %v\n", i, epoch, err)
 				continue // Or handle error more strictly
 			}
 			totalLoss += loss
+			numBatches++
 		}
-		avgLoss := totalLoss / float64(len(data.Sentences))
+		avgLoss := totalLoss / float64(numBatches)
 		log.Printf("Epoch %d/%d, Average Loss: %f\n", epoch+1, epochs, avgLoss)
 	}
 
@@ -84,36 +96,46 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 	return nil
 }
 
-// CalculateCrossEntropyLoss calculates the cross-entropy loss between logits and target token IDs.
-// This is a basic implementation and assumes the logits are flat [batch*seq_len, vocab_size]
-// and targetIDs are flat [batch*seq_len].
-// It returns the average loss per token.
-// trainBARTStep performs a single training step (forward pass, loss calculation, placeholder for backprop).
-func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence string) (float64, error) {
+// trainBARTBatch performs a single training step on a batch of data.
+func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []struct {
+	Input  string `json:"input"`
+	Output string `json:"output"`
+}) (float64, error) {
+	// Zero out gradients from the previous step before starting a new one.
+	optimizer.ZeroGrad()
+
 	// 1. Prepare Input and Target Tensors
-	// Use TokenizeAndConvertToIDs to handle tokenization, special tokens, and padding/truncation.
-	inputTokenIDs, err := TokenizeAndConvertToIDs(inputSentence, model.Vocabulary, model.MaxSequenceLength)
-	if err != nil {
-		return 0, fmt.Errorf("input tokenization failed: %w", err)
-	}
-	targetTokenIDs, err := TokenizeAndConvertToIDs(targetSentence, model.Vocabulary, model.MaxSequenceLength)
-	if err != nil {
-		return 0, fmt.Errorf("target tokenization failed: %w", err)
+	batchSize := len(batch)
+	seqLen := model.MaxSequenceLength
+
+	flatInputData := make([]float64, batchSize*seqLen)
+	flatTargetData := make([]float64, batchSize*seqLen)
+	flatTargetIDsForLoss := make([]int, batchSize*seqLen)
+
+	for i, pair := range batch {
+		inputIDs, err := TokenizeAndConvertToIDs(pair.Input, model.Vocabulary, seqLen)
+		if err != nil {
+			return 0, fmt.Errorf("batch input tokenization failed for item %d: %w", i, err)
+		}
+		targetIDs, err := TokenizeAndConvertToIDs(pair.Output, model.Vocabulary, seqLen)
+		if err != nil {
+			return 0, fmt.Errorf("batch target tokenization failed for item %d: %w", i, err)
+		}
+
+		// Copy the tokenized data into the flat batch slices
+		for j := 0; j < seqLen; j++ {
+			flatIndex := i*seqLen + j
+			flatInputData[flatIndex] = float64(inputIDs[j])
+			// For teacher forcing, the decoder input is the target sequence
+			flatTargetData[flatIndex] = float64(targetIDs[j])
+			// For loss calculation, we need the integer IDs
+			flatTargetIDsForLoss[flatIndex] = targetIDs[j]
+		}
 	}
 
-	// Convert token ID slices to 2D tensors [batch_size, sequence_length]
-	inputData := make([]float64, len(inputTokenIDs))
-	for i, id := range inputTokenIDs {
-		inputData[i] = float64(id)
-	}
-	inputTensor := NewTensor(inputData, []int{1, len(inputTokenIDs)}, true)
-
-	targetData := make([]float64, len(targetTokenIDs))
-	for i, id := range targetTokenIDs {
-		targetData[i] = float64(id)
-	}
-	// The target tensor is used as input to the decoder during teacher forcing.
-	targetTensor := NewTensor(targetData, []int{1, len(targetTokenIDs)}, true)
+	// Create the final 2D tensors for the batch
+	inputTensor := NewTensor(flatInputData, []int{batchSize, seqLen}, true)
+	targetTensor := NewTensor(flatTargetData, []int{batchSize, seqLen}, true)
 
 	// 2. Forward Pass
 	// Pass both input and target tensors to the model for a full encoder-decoder pass.
@@ -124,14 +146,14 @@ func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence str
 
 	// 3. Calculate Loss
 	// Compare the model's output logits with the target token IDs.
-	loss, err := CalculateCrossEntropyLoss(outputLogits, targetTokenIDs)
+	loss, err := CalculateCrossEntropyLoss(outputLogits, flatTargetIDsForLoss)
 	if err != nil {
 		return 0, fmt.Errorf("loss calculation failed: %w", err)
 	}
 
 	// 4. Backpropagation
 	// Calculate the initial gradient of the loss with respect to the model's output logits.
-	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, targetTokenIDs)
+	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, flatTargetIDsForLoss)
 	if err != nil {
 		return 0, fmt.Errorf("loss gradient calculation failed: %w", err)
 	}
@@ -140,11 +162,8 @@ func trainBARTStep(model *SimplifiedBARTModel, inputSentence, targetSentence str
 	// through the entire computation graph.
 	outputLogits.Backward(outputGradient)
 
-	// 5. Optimizer Step (Placeholder)
-	// In a full implementation, you would have an optimizer instance that updates
-	// all learnable parameters (weights and biases) in the model.
-	// e.g., optimizer.Step()
-
+	// 5. Optimizer Step
+	optimizer.Step()
 	return loss, nil
 }
 
@@ -161,56 +180,54 @@ func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int) (float64, error)
 	seqLength := logits.Shape[1]
 	vocabSize := logits.Shape[2]
 
-	if batchSize != 1 {
-		// This simplified implementation assumes a batch size of 1.
-		// You'll need to extend this for batching.
-		return 0, errors.New("CalculateCrossEntropyLoss currently only supports batch size 1")
-	}
-
-	if seqLength != len(targetIDs) {
-		return 0, errors.New("logits sequence length (%d) does not match target IDs length (%d)")
+	if batchSize*seqLength != len(targetIDs) {
+		return 0, fmt.Errorf("total number of logits (%d) does not match total number of target IDs (%d)", batchSize*seqLength, len(targetIDs))
 	}
 
 	// Apply Softmax to get probabilities
-	// Assuming Softmax operates on the last dimension (vocab_size)
-	probabilities, err := logits.Softmax(2) // Assuming Softmax method exists and takes axis
+	probabilities, err := logits.Softmax(2) // Softmax along the vocab_size dimension
 	if err != nil {
 		return 0, fmt.Errorf("failed to apply softmax in loss calculation: %w", err)
 	}
 
 	totalLoss := 0.0
-	// Iterate through the sequence length
-	for s := 0; s < seqLength; s++ {
-		targetID := targetIDs[s]
-		if targetID < 0 || targetID >= vocabSize {
-			// Handle invalid target IDs (e.g., unknown tokens) - might skip or use a special token
-			log.Printf("Warning: Invalid target token ID %d at position %d. Skipping for loss calculation.\n", targetID, s)
-			continue // Skip invalid target IDs
+	numTokens := 0
+
+	for b := 0; b < batchSize; b++ {
+		for s := 0; s < seqLength; s++ {
+			flatTargetIndex := b*seqLength + s
+			targetID := targetIDs[flatTargetIndex]
+
+			// Optional: Skip padding tokens in loss calculation if you have a PadID
+			// if targetID == model.Tokenizer.PadID { continue }
+
+			if targetID < 0 || targetID >= vocabSize {
+				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d. Skipping for loss calculation.\n", targetID, b, s)
+				continue
+			}
+
+			// Calculate the flat index for the probability of the target token
+			probFlatIndex := b*seqLength*vocabSize + s*vocabSize + targetID
+
+			if probFlatIndex >= len(probabilities.Data) {
+				return 0, fmt.Errorf("probability index out of bounds: %d for data length %d", probFlatIndex, len(probabilities.Data))
+			}
+
+			probability := probabilities.Data[probFlatIndex]
+
+			// Calculate negative log likelihood. Add a small epsilon for numerical stability.
+			if probability <= 0 {
+				probability = 1e-9 // Add a small epsilon to prevent log(0)
+			}
+			totalLoss += -math.Log(probability)
+			numTokens++
 		}
-
-		// Calculate the flat index for the probability of the target token
-		// in the flattened probabilities data slice (assuming batch size 1)
-		probFlatIndex := s*vocabSize + targetID
-
-		if probFlatIndex >= len(probabilities.Data) {
-			return 0, fmt.Errorf("probability index out of bounds: %d for data length %d", probFlatIndex, len(probabilities.Data))
-		}
-
-		probability := probabilities.Data[probFlatIndex]
-
-		// Calculate negative log likelihood. Add a small epsilon for numerical stability if needed.
-		if probability <= 0 {
-			// Handle cases where probability is zero or negative (due to numerical issues)
-			log.Printf("Warning: Probability is non-positive (%f) for target ID %d at position %d. Adding small value for log.", probability, targetID, s)
-			probability = 1e-9 // Add a small epsilon
-		}
-		negativeLogLikelihood := -math.Log(probability)
-		totalLoss += negativeLogLikelihood
 	}
 
-	// Calculate average loss over the sequence
-	averageLoss := totalLoss / float64(seqLength)
-
+	if numTokens == 0 {
+		return 0.0, nil // Avoid division by zero if no valid tokens were found
+	}
+	averageLoss := totalLoss / float64(numTokens)
 	return averageLoss, nil
 }
 
@@ -228,58 +245,43 @@ func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int) (*Tensor
 	seqLength := logits.Shape[1]
 	vocabSize := logits.Shape[2]
 
-	if batchSize != 1 {
-		// This simplified implementation assumes a batch size of 1.
-		// You'll need to extend this for batching.
-		return nil, errors.New("CalculateCrossEntropyLossGradient currently only supports batch size 1")
-	}
-
-	if seqLength != len(targetIDs) {
-		// For this simplified gradient calculation, assuming sequence lengths match.
-		// You might need to handle padding and different sequence lengths.
-		return nil, errors.New("logits sequence length (%d) does not match target IDs length (%d)")
+	if batchSize*seqLength != len(targetIDs) {
+		return nil, fmt.Errorf("total number of logits (%d) does not match total number of target IDs (%d)", batchSize*seqLength, len(targetIDs))
 	}
 
 	// Apply Softmax to get probabilities
-	// Assuming Softmax operates on the last dimension (vocab_size)
-	probabilities, err := logits.Softmax(2) // Assuming Softmax method exists and takes axis
+	probabilities, err := logits.Softmax(2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply softmax in gradient calculation: %w", err)
 	}
 
-	// Create a one-hot encoded tensor from target IDs
-	// This tensor will have the same shape as the logits.
-	// TODO: Implement CreateOneHotTensor function or similar logic
-	// This requires creating a new tensor of shape [batch_size, sequence_length, vocab_size]
-	// and setting the element to 1.0 at the target token ID position for each step in the sequence.
-	// Example placeholder for one-hot tensor:
-	oneHotTarget := NewTensor(make([]float64, len(logits.Data)), logits.Shape, false) // Gradients of target are not needed
+	// The gradient of cross-entropy loss with softmax is `probabilities - one_hot_target`.
+	// We can compute this directly without creating a large one-hot tensor.
+	// The gradient is equal to the probabilities for all incorrect classes,
+	// and `probability - 1` for the correct class.
 
-	// Fill the one-hot tensor (manual for batch size 1)
-	for s := 0; s < seqLength; s++ {
-		targetID := targetIDs[s]
-		if targetID < 0 || targetID >= vocabSize {
-			// Handle invalid target IDs - might skip or use a special token
-			log.Printf("Warning: Invalid target token ID %d at position %d for one-hot encoding.\n", targetID, s)
-			continue // Skip invalid target IDs
-		}
-		// Set the element to 1.0 at the target ID position
-		oneHotFlatIndex := s*vocabSize + targetID
-		if oneHotFlatIndex >= len(oneHotTarget.Data) {
-			return nil, fmt.Errorf("one-hot index out of bounds: %d for data length %d", oneHotFlatIndex, len(oneHotTarget.Data))
-		}
-		oneHotTarget.Data[oneHotFlatIndex] = 1.0
-	}
-
-	// Subtract the one-hot tensor from the softmax output element-wise
-	// Assuming you have an element-wise subtraction operation for tensors.
-	// If not, you'll need to implement one or perform subtraction manually.
-	// Placeholder for subtraction:
 	gradientData := make([]float64, len(logits.Data))
-	for i := range gradientData {
-		gradientData[i] = probabilities.Data[i] - oneHotTarget.Data[i]
+	copy(gradientData, probabilities.Data) // Start with gradient = probabilities
+
+	// Now, subtract 1 from the positions corresponding to the target IDs.
+	for b := 0; b < batchSize; b++ {
+		for s := 0; s < seqLength; s++ {
+			targetIndexInBatch := b*seqLength + s
+			targetID := targetIDs[targetIndexInBatch]
+
+			if targetID < 0 || targetID >= vocabSize {
+				// This warning is helpful for debugging vocabulary or tokenization issues.
+				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d for gradient calculation. Skipping.\n", targetID, b, s)
+				continue
+			}
+
+			// Calculate the flat index in the gradient tensor for the target ID.
+			gradFlatIndex := b*seqLength*vocabSize + s*vocabSize + targetID
+			gradientData[gradFlatIndex] -= 1.0
+		}
 	}
-	outputGradient := NewTensor(gradientData, logits.Shape, false) // Gradient tensor itself does not require gradients
+
+	outputGradient := NewTensor(gradientData, logits.Shape, false)
 
 	return outputGradient, nil
 }

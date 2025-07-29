@@ -41,6 +41,7 @@ func NewEmbedding(vocabSize, dimModel int) *Embedding {
 	return &Embedding{
 		Weights:  weights,
 		DimModel: dimModel, // Initialize the DimModel field
+		VocabSize: vocabSize, // Initialize the VocabSize field
 	}
 }
 
@@ -157,30 +158,34 @@ func (e *Embedding) Forward(inputIDs *Tensor) (*Tensor, error) {
 		return nil, fmt.Errorf("embedding input must be 2D, got %v", inputIDs.Shape)
 	}
 
+	// Store input shape and token IDs for the backward pass
+	e.inputShape = inputIDs.Shape
+	if e.inputTokenIDs == nil || len(e.inputTokenIDs) != len(inputIDs.Data) {
+		e.inputTokenIDs = make([]int, len(inputIDs.Data))
+	}
+
 	// Extract dimensions from the input tensor shape.
 	// inputIDs.Shape[0] is the batch size.
 	batchSize := inputIDs.Shape[0]
 	seqLength := inputIDs.Shape[1]
 
-	// Perform embedding lookup
 	outputShape := []int{batchSize, seqLength, e.DimModel}
 	outputData := make([]float64, batchSize*seqLength*e.DimModel)
 
-	// Iterate through each item in the batch.
-	for b := 0; b < batchSize; b++ {
-		// Iterate through each token in the sequence for the current batch item.
-		for s := 0; s < seqLength; s++ {
-			// Get the token ID. Assuming the data is float64, cast to int.
-			tokenID := int(inputIDs.Data[b*seqLength+s])
-			// Validate the token ID is within the vocabulary range.
-			if tokenID < 0 || tokenID >= e.VocabSize {
-				return nil, fmt.Errorf("token ID %d is out of vocabulary range [0, %d)", tokenID, e.VocabSize)
-			}
-			// Copy the embedding vector for the current token ID from the weights tensor.
-			startIndex := tokenID * e.DimModel
-			endIndex := (tokenID + 1) * e.DimModel
-			copy(outputData[(b*seqLength+s)*e.DimModel:(b*seqLength+s+1)*e.DimModel], e.Weights.Data[startIndex:endIndex])
+	// Iterate over the flattened input IDs for efficiency and clarity.
+	for i, idAsFloat := range inputIDs.Data {
+		tokenID := int(idAsFloat)
+		e.inputTokenIDs[i] = tokenID // Store for backward pass
+
+		// Validate the token ID is within the vocabulary range.
+		if tokenID < 0 || tokenID >= e.VocabSize {
+			return nil, fmt.Errorf("token ID %d is out of vocabulary range [0, %d)", tokenID, e.VocabSize)
 		}
+
+		// Copy the embedding vector for the current token ID from the weights tensor.
+		weightsOffset := tokenID * e.DimModel
+		outputOffset := i * e.DimModel
+		copy(outputData[outputOffset:outputOffset+e.DimModel], e.Weights.Data[weightsOffset:weightsOffset+e.DimModel])
 	}
 	return NewTensor(outputData, outputShape, true), nil
 }
@@ -229,13 +234,22 @@ func (pe *PositionalEmbedding) Forward(inputTensor *Tensor) (*Tensor, error) {
 	outputData := make([]float64, len(inputTensor.Data))
 	copy(outputData, inputTensor.Data) // Start with the input tensor data
 
-	// Iterate through each item in the batch.
 	for b := 0; b < batchSize; b++ {
-		// Iterate through each position in the sequence for the current batch item.
 		for s := 0; s < seqLength; s++ {
+			// Add a check to prevent out-of-bounds access on positional embeddings
+			if s >= pe.MaxSequenceLength {
+				// Depending on the model's design, you might want to log a warning,
+				// return an error, or simply stop applying positional embeddings.
+				// Here, we'll just continue, effectively not adding embeddings for long sequences.
+				continue
+			}
+
+			outputOffset := (b*seqLength + s) * dimModel
+			posEmbOffset := s * dimModel
+
 			// Add positional embedding for position 's'
 			for d := 0; d < dimModel; d++ {
-				outputData[(b*seqLength+s)*dimModel+d] += pe.PositionEmbeddings.Data[s*dimModel+d]
+				outputData[outputOffset+d] += pe.PositionEmbeddings.Data[posEmbOffset+d]
 			}
 		}
 	}

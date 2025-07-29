@@ -251,11 +251,13 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 	return &SimplifiedBARTModel{
 		Encoder:             encoder,
 		Decoder:             decoder,
+		Tokenizer:           tokenizer,
 		TokenEmbedding:      tokenEmbedding,
 		PositionalEmbedding: positionalEmbedding,
 		OutputLinear:        outputLinear,
 		VocabSize:           vocabSize,
 		MaxSequenceLength:   maxSequenceLength,
+		Vocabulary:          vocabulary,
 	}, nil
 }
 func Reshape(tensor []float64, originalShape, newShape []int) ([]float64, error) {

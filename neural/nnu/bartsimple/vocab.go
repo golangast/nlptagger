@@ -86,7 +86,7 @@ func (v *Vocabulary) GetTokenID(word string) int {
 	if id, ok := v.WordToToken[word]; ok {
 		return id // Return the token ID if found
 	}
-	return 102 // <--- Change this to a valid index (0-102)
+	return v.UnknownTokenID
 
 }
 

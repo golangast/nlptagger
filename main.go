@@ -2,217 +2,365 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 
+	"golang.org/x/net/html"
+
 	"github.com/golangast/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
 	"github.com/golangast/nlptagger/neural/nnu/vocab"
 )
+
 var (
 	trainMode    = flag.Bool("train", false, "Enable training mode")
 	epochs       = flag.Int("epochs", 10, "Number of training epochs")
 	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
-	bartDataPath = flag.String("data", "trainingdata/bart_training_data.json", "Path to BART training data for the model")
-	dimModel     = flag.Int("dim", 128, "Dimension of the model")
-	numHeads     = flag.Int("heads", 8, "Number of attention heads")
-	maxSeqLength = flag.Int("maxlen", 512, "Maximum sequence length")
+	bartDataPath = flag.String("data", "trainingdata/bartdata/bartdata.json", "Path to BART training data for the model")
+	dimModel     = flag.Int("dim", 64, "Dimension of the model")
+	numHeads     = flag.Int("heads", 4, "Number of attention heads")
+	maxSeqLength = flag.Int("maxlen", 64, "Maximum sequence length")
+	batchSize    = flag.Int("batchsize", 4, "Batch size for training")
 )
 
 func main() {
 	flag.Parse()
 
-	modelPath := "gob_models/simplified_bart_model.gob"
-	jsonpath := "trainingdata/tagdata/nlp_training_data.json"
-	vocabPath := "gob_models/vocabulary.gob" // Path to your vocabulary file
-	var vocabulary *bartsimple.Vocabulary
-	var err error
-	trainingData, err := vocab.LoadTrainingDataJSON(jsonpath)
+	// Define paths, consider making these flags as well for more flexibility
+	const modelPath = "gob_models/simplified_bart_model.gob"
+	const trainingDataPath = "trainingdata/tagdata/nlp_training_data.json"
+	const vocabPath = "gob_models/vocabulary.gob"
+
+	vocabulary, err := setupVocabulary(vocabPath, trainingDataPath)
 	if err != nil {
-		fmt.Println("error loading training data: %w", err)
-	}
-	// Create vocabularies
-	tokenVocab := vocab.CreateTokenVocab(trainingData.Sentences)
-	// Use CreateVocab to either load the existing vocabulary or build a new one
-	vocabulary = bartsimple.NewVocabulary()
-	for word := range tokenVocab {
-		vocabulary.AddToken(word, len(vocabulary.TokenToWord)) // This might reassign IDs if not careful
-	}
-	vocabulary.UnknownTokenID = tokenVocab["UNK"]
-	// Example of using the vocabulary (after loading/creating)
-	// Save the vocabulary (optional)
-	if err := vocabulary.Save(vocabPath); err != nil {
-		fmt.Printf("Error saving vocabulary: %v\n", err)
+		log.Fatalf("Failed to set up vocabulary: %v", err)
 	}
 
-	// Load or build the vocabulary
-	vocabulary, err = bartsimple.LoadVocabulary(vocabPath)
+	model, err := setupModel(modelPath, vocabulary, *dimModel, *numHeads, *maxSeqLength)
 	if err != nil {
-		fmt.Printf("Attempting to load vocabulary from %s\n", vocabPath)
-		fmt.Printf("Error loading vocabulary: %v. Building a new one from training data.\n", err)
-		// If loading fails, build a new vocabulary from training data
-		vocabulary = bartsimple.NewVocabulary()
-		// Re-load training data if needed, or use the 'trainingData' loaded earlier
-		trainingData, loadErr := vocab.LoadTrainingDataJSON(jsonpath)
-		if loadErr != nil {
-			log.Fatalf("Error loading training data to build new vocabulary: %v", loadErr)
+		log.Fatalf("Failed to set up model: %v", err)
+	}
+
+	if *trainMode {
+		runTraining(model, *bartDataPath, modelPath)
+	} else {
+		runInference(model)
+	}
+}
+
+// setupVocabulary loads a vocabulary from vocabPath or builds a new one if loading fails.
+func setupVocabulary(vocabPath, trainingDataPath string) (*bartsimple.Vocabulary, error) {
+	// Attempt to load the vocabulary first
+	vocabulary, err := bartsimple.LoadVocabulary(vocabPath)
+	if err == nil && vocabulary != nil && vocabulary.WordToToken != nil {
+		fmt.Printf("Successfully loaded vocabulary from %s\n", vocabPath)
+		// Validate that the loaded vocabulary contains the essential special tokens.
+		// If not, we'll treat it as an invalid vocabulary and rebuild it.
+		_, unkExists := vocabulary.WordToToken["[UNK]"]
+		_, padExists := vocabulary.WordToToken["[PAD]"]
+		_, bosExists := vocabulary.WordToToken["[BOS]"]
+		_, eosExists := vocabulary.WordToToken["[EOS]"]
+
+		if unkExists && padExists && bosExists && eosExists {
+			// All essential tokens exist, set the IDs and return.
+			vocabulary.UnknownTokenID = vocabulary.WordToToken["[UNK]"]
+			vocabulary.PaddingTokenID = vocabulary.WordToToken["[PAD]"]
+			vocabulary.BeginningOfSentenceID = vocabulary.WordToToken["[BOS]"]
+			vocabulary.EndOfSentenceID = vocabulary.WordToToken["[EOS]"]
+			return vocabulary, nil
 		}
-		uniqueWords := make(map[string]bool)
-		for _, sentence := range trainingData.Sentences {
-			words := strings.Fields(sentence.Sentence)
+		fmt.Println("Loaded vocabulary is missing one or more special tokens. Rebuilding.")
+	} else if err != nil {
+		// If there was an error loading (e.g., file not found), print it and proceed to build.
+		fmt.Printf("Error loading vocabulary: %v. Building a new one from training data.\n", err)
+	}
+
+	// If loading fails, build a new one
+
+	trainingData, loadErr := vocab.LoadTrainingDataJSON(trainingDataPath)
+	if loadErr != nil {
+		return nil, fmt.Errorf("error loading training data to build new vocabulary: %w", loadErr)
+	}
+
+	fmt.Println("Building new vocabulary...")
+	allWords := make(map[string]bool)
+
+	// Gather words from all sources.
+	addWordsFromJSONTrainingData(trainingData, allWords)
+	addWordsFromRAGDocs("trainingdata/ragdata/ragdocs.txt", allWords)
+	addWordsFromRAGJSON("trainingdata/ragdata/rag_data.json", allWords)
+	addWordsFromHTML("docs/index.html", allWords)
+
+	// 5. Expand vocabulary with words from WikiQA data
+	addWordsFromWikiQA("trainingdata/WikiQA-train.txt", allWords)
+
+
+	newVocab := bartsimple.NewVocabulary()
+
+	// Add special tokens first to ensure they have consistent IDs
+	newVocab.AddToken("[PAD]", 0)
+	newVocab.AddToken("[UNK]", 1)
+	newVocab.AddToken("[BOS]", 2)
+	newVocab.AddToken("[EOS]", 3)
+
+	for word := range allWords {
+		// Avoid re-adding special tokens
+		if _, exists := newVocab.WordToToken[word]; !exists {
+			newVocab.AddToken(word, len(newVocab.TokenToWord))
+		}
+	}
+
+	newVocab.PaddingTokenID = newVocab.WordToToken["[PAD]"]
+	newVocab.UnknownTokenID = newVocab.WordToToken["[UNK]"]
+	newVocab.BeginningOfSentenceID = newVocab.WordToToken["[BOS]"]
+	newVocab.EndOfSentenceID = newVocab.WordToToken["[EOS]"]
+
+	// Save the new vocabulary
+	if err := newVocab.Save(vocabPath); err != nil {
+		// Log the error but continue, as we have a functional vocabulary in memory
+		fmt.Printf("Warning: Error saving newly built vocabulary: %v\n", err)
+	} else {
+		fmt.Printf("Saved new vocabulary to %s\n", vocabPath)
+	}
+
+	return newVocab, nil
+}
+
+// addWordsFromJSONTrainingData extracts words from the primary annotated training data.
+func addWordsFromJSONTrainingData(trainingData *vocab.TrainingDataJSON, wordSet map[string]bool) {
+	fmt.Println("Expanding vocabulary with words from JSON training data...")
+	tokenVocab := vocab.CreateTokenVocab(trainingData.Sentences)
+	for word := range tokenVocab {
+		wordSet[word] = true
+	}
+}
+
+// addWordsFromRAGDocs extracts words from the plain text RAG documents
+func addWordsFromRAGDocs(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open RAG docs to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		words := strings.Fields(scanner.Text())
+		for _, word := range words {
+			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+			if cleanedWord != "" {
+				wordSet[cleanedWord] = true
+			}
+		}
+	}
+}
+
+// addWordsFromWikiQA extracts words from the WikiQA training data.
+func addWordsFromWikiQA(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open WikiQA data to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, "\t", 4) // Split into max 4 parts
+		if len(parts) > 1 {                   // Ensure there's at least a question and answer
+			question := parts[0]             // The question
+			words := strings.Fields(question) // Then process the question
 			for _, word := range words {
-				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_")) // Basic cleaning
+				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
 				if cleanedWord != "" {
-					uniqueWords[cleanedWord] = true
+					wordSet[cleanedWord] = true
 				}
 			}
 		}
-		tokenVocab := vocab.CreateTokenVocab(trainingData.Sentences)
-		for word := range tokenVocab {
-			vocabulary.AddToken(word, len(vocabulary.TokenToWord))
-		}
-		// Make sure special tokens are added if they are not in your training data
-		vocabulary.AddToken("[UNK]", len(vocabulary.TokenToWord))
-		vocabulary.AddToken("[BOS]", len(vocabulary.TokenToWord))
-		vocabulary.AddToken("[EOS]", len(vocabulary.TokenToWord))
-		vocabulary.AddToken("[PAD]", len(vocabulary.TokenToWord))
-		// Add unique words from training data in a consistent order (e.g., alphabetical)
-		//sortedWords := []string{}
-		// for word := range uniqueWords {
-		// 	sortedWords = append(sortedWords, word)
-		// }
-		vocabulary.UnknownTokenID = vocabulary.WordToToken["[UNK]"]
-		vocabulary.BeginningOfSentenceID = vocabulary.WordToToken["[BOS]"]
-		vocabulary.EndOfSentenceID = vocabulary.WordToToken["[EOS]"]
-		vocabulary.PaddingTokenID = vocabulary.WordToToken["[PAD]"]
-
-		// Save the new vocabulary
-		if err := vocabulary.Save(vocabPath); err != nil {
-			fmt.Printf("Error saving newly built vocabulary: %v\n", err)
-		}
 	}
-	if vocabulary.UnknownTokenID == -1 {
-		if unkID, ok := vocabulary.WordToToken["[UNK]"]; ok {
-			vocabulary.UnknownTokenID = unkID
-		} else {
-			// This indicates an issue with the saved vocabulary file
-			fmt.Println("Loaded vocabulary does not contain '[UNK]' token and UnknownTokenID is -1.")
-		}
-	}
-	if vocabulary.BeginningOfSentenceID == -1 {
-		if bosID, ok := vocabulary.WordToToken["[BOS]"]; ok {
-			vocabulary.BeginningOfSentenceID = bosID
-		} else {
-			fmt.Println("Warning: '[BOS]' token not found in vocabulary after loading/creation.")
-		}
-	}
+}
 
-	var model *bartsimple.SimplifiedBARTModel
-	var modelLoadErr error
-	fmt.Printf("Vocabulary size before attempting to load model: %d\n", len(vocabulary.WordToToken))
-	model, modelLoadErr = bartsimple.LoadSimplifiedBARTModelFromGOB(modelPath) // Assuming LoadSimplifiedBARTModelFromGOB exists and handles loading
-	if modelLoadErr != nil {
-		fmt.Printf("Attempting to load simplified BART model from %s\n", modelPath)
-		fmt.Printf("Error loading simplified BART model: %v. Creating a new one.\n", modelLoadErr)
-		log.Println("Model loading failed, skipping saving of a new model for now to avoid panic.")
-		var createErr error
-		tokenizer, err := bartsimple.NewTokenizer(vocabulary, 0, 0, 0, 0)
-		if err != nil {
-			fmt.Println("Error creating tokenizer: ", err)
-			return // Handle the error appropriately, perhaps exit
-		}
-		fmt.Printf("Vocabulary size being passed to NewSimplifiedBARTModel: %d\n", len(vocabulary.WordToToken))
-		model, createErr = bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, *dimModel, *numHeads, *maxSeqLength)
-		if createErr != nil {
-			log.Fatalf("Failed to create a new simplified BART model: %v", createErr)
-		}
-
-		// If loading fails, create a new model, passing the tokenizer and vocabulary
-		
-
-	} else {
-		// Check if the model object is nil EVEN IF modelLoadErr is nil
-		if model == nil {
-			log.Fatalf("Model loading succeeded according to error, but the model object is nil!")
-		}
-		model.Vocabulary = vocabulary
-
-	}
-	// If loaded successfully, you might want to update model fields that are not serialized
-	// Assign the correctly loaded/created vocabulary to the model
-	model.Vocabulary = vocabulary
-
-	// Create a tokenizer using the loaded/built vocabulary
-	bosID := vocabulary.BeginningOfSentenceID
-	padID := vocabulary.PaddingTokenID
-	eosID := vocabulary.EndOfSentenceID
-	// Use the potentially updated UnknownTokenID
-	// Set unkID to the size of the vocabulary to ensure it's out of the valid range [0, Size-1)
-	unkID := vocabulary.Size
-
-	tokenizer, err := bartsimple.NewTokenizer(vocabulary, bosID, eosID, padID, unkID)
+// addWordsFromRAGJSON extracts words from the structured RAG JSON data.
+func addWordsFromRAGJSON(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Error creating tokenizer: ", err)
-		return // Handle the error appropriately, perhaps exit
+		fmt.Printf("Warning: could not open RAG JSON data to expand vocabulary: %v\n", err)
+		return
 	}
-	if model != nil {
-		model.Vocabulary = vocabulary // This vocabulary has UnknownTokenID = 103
-		model.Tokenizer = tokenizer   // This tokenizer was created with the vocabulary where UnknownTokenID = 103
-	} else {
-		fmt.Println("Model is nil after loading or creation.")
+	defer file.Close()
+
+	var ragData []struct {
+		Content string `json:"Content"`
 	}
-	// Assign the newly created tokenizer to the model
-	model.Tokenizer = tokenizer
+	if err := json.NewDecoder(file).Decode(&ragData); err != nil {
+		fmt.Printf("Warning: could not decode RAG JSON data from %s: %v\n", path, err)
+		return
+	}
 
-	if *trainMode {
-		fmt.Println("--- Running in Training Mode ---")
-
-		// 1. Load BART-specific training data
-		bartTrainingData, err := bartsimple.LoadBARTTrainingData(*bartDataPath)
-		if err != nil {
-			log.Fatalf("Error loading BART training data from %s: %v", *bartDataPath, err)
+	for _, entry := range ragData {
+		words := strings.Fields(entry.Content)
+		for _, word := range words {
+			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+			if cleanedWord != "" {
+				wordSet[cleanedWord] = true
+			}
 		}
-		fmt.Printf("Loaded %d training sentences for BART model.\n", len(bartTrainingData.Sentences))
+	}
+}
 
-		// 2. Train the model
-		err = bartsimple.TrainBARTModel(model, bartTrainingData, *epochs, *learningRate)
-		if err != nil {
-			log.Fatalf("BART model training failed: %v", err)
-		}
+// addWordsFromHTML extracts text content from an HTML file to expand the vocabulary.
+func addWordsFromHTML(path string, wordSet map[string]bool) {
+	fmt.Printf("Expanding vocabulary with words from %s\n", path)
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Warning: could not open docs file to expand vocabulary: %v\n", err)
+		return
+	}
+	defer file.Close()
 
-		// 3. Save the trained model
-		fmt.Printf("Training complete. Saving trained model to %s...\n", modelPath)
-		if err := bartsimple.SaveSimplifiedBARTModelToGOB(model, modelPath); err != nil {
-			log.Fatalf("Error saving trained BART model: %v", err)
+	tokenizer := html.NewTokenizer(file)
+htmlLoop:
+	for {
+		tt := tokenizer.Next()
+		switch tt {
+		case html.ErrorToken:
+			if tokenizer.Err() != io.EOF {
+				fmt.Printf("Warning: error parsing HTML from %s: %v\n", path, tokenizer.Err())
+			}
+			break htmlLoop // End of the document
+		case html.TextToken:
+			words := strings.Fields(string(tokenizer.Text()))
+			for _, word := range words {
+				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
+				if cleanedWord != "" {
+					wordSet[cleanedWord] = true
+				}
+			}
 		}
-		fmt.Println("Model saved successfully.")
+	}
+}
+
+// setupModel loads a model from modelPath or creates a new one if loading fails.
+func setupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads, maxLen int) (*bartsimple.SimplifiedBARTModel, error) {
+	// Attempt to load the model
+	model, err := bartsimple.LoadSimplifiedBARTModelFromGOB(modelPath)
+	if err == nil && model != nil {
+		// Check if the loaded model's vocabulary size matches the current vocabulary.
+		// This is a critical check to prevent panics from using an old model with a new, larger vocabulary.
+		if model.VocabSize == len(vocabulary.WordToToken) {
+			fmt.Printf("Successfully loaded simplified BART model from %s\n", modelPath)
+			// Ensure the loaded model uses the up-to-date vocabulary and tokenizer
+			model.Vocabulary = vocabulary
+			if model.TokenEmbedding != nil {
+				model.TokenEmbedding.VocabSize = model.VocabSize
+			}
+			tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
+			if tknErr != nil {
+				return nil, fmt.Errorf("failed to create tokenizer for loaded model: %w", tknErr)
+			}
+			model.Tokenizer = tokenizer
+			return model, nil
+		}
+		// If vocabulary sizes do not match, the model is incompatible.
+		fmt.Printf("Loaded model has a vocabulary size of %d, but the current vocabulary has size %d. Rebuilding model.\n", model.VocabSize, len(vocabulary.WordToToken))
+		// Fall through to create a new model.
+	}
+
+	// If loading fails, create a new one
+	if err != nil {
+		fmt.Printf("Error loading simplified BART model: %v. Creating a new one.\n", err)
+	} else if model == nil {
+		fmt.Println("Model file loaded without error, but model is nil. Creating a new one.")
+	}
+
+	tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
+	if tknErr != nil {
+		return nil, fmt.Errorf("failed to create tokenizer for new model: %w", tknErr)
+	}
+
+	fmt.Printf("Creating new simplified BART model with vocab size: %d\n", len(vocabulary.WordToToken))
+	newModel, createErr := bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, dim, heads, maxLen)
+	if createErr != nil {
+		return nil, fmt.Errorf("failed to create a new simplified BART model: %w", createErr)
+	}
+
+	// Save the newly created model so it can be used next time.
+	fmt.Printf("Saving newly created model to %s...\n", modelPath)
+	if err := bartsimple.SaveSimplifiedBARTModelToGOB(newModel, modelPath); err != nil {
+		// Log as a warning because the model is still usable in memory for this run
+		fmt.Printf("Warning: Error saving newly created BART model: %v\n", err)
 	} else {
-		fmt.Println("--- Running in Inference Mode ---")
-		//go run . -train -epochs 50 -lr 0.001 -data trainingdata/bart_training_data.json
-		//go run . -train -dim 256 -heads 8 -maxlen 256
-		answer := InputScanDirections("\n what do you want?")
+		fmt.Println("New model saved successfully.")
+	}
+
+	return newModel, nil
+}
+
+func runTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath string) {
+	fmt.Println("--- Running in Training Mode ---")
+
+	// 1. Load BART-specific training data
+	bartTrainingData, err := bartsimple.LoadBARTTrainingData(bartDataPath)
+	if err != nil {
+		log.Fatalf("Error loading BART training data from %s: %v", bartDataPath, err)
+	}
+	fmt.Printf("Loaded %d training sentences for BART model.\n", len(bartTrainingData.Sentences))
+	// 2. Train the model
+	err = bartsimple.TrainBARTModel(model, bartTrainingData, *epochs, *learningRate, *batchSize)
+	if err != nil {
+		log.Fatalf("BART model training failed: %v", err)
+	}
+
+	// 3. Save the trained model
+	fmt.Printf("Training complete. Saving trained model to %s...\n", modelPath)
+	if err := bartsimple.SaveSimplifiedBARTModelToGOB(model, modelPath); err != nil {
+		log.Fatalf("Error saving trained BART model: %v", err)
+	}
+	fmt.Println("Model saved successfully.")
+}
+
+func runInference(model *bartsimple.SimplifiedBARTModel) {
+	fmt.Println("--- Running in Inference Mode ---")
+	for {
+		command := InputScanDirections("\nEnter a command (or 'quit' to exit):")
+		if strings.ToLower(command) == "quit" {
+			fmt.Println("Exiting.")
+			break
+		}
+		if command == "" {
+			continue
+		}
+
 		// Process the command using BartProcessCommand
-		summary, err := model.BartProcessCommand(answer) // If BartProcessCommand needs the vocabulary, pass it here
+		summary, err := model.BartProcessCommand(command)
 		if err != nil {
-			log.Fatalf("Error processing command with BART model: %v", err)
+			log.Printf("Error processing command with BART model: %v", err)
+			continue // Continue to next loop iteration
 		}
 		fmt.Printf("Generated Summary: %s\n", summary)
 	}
 }
 
+// InputScanDirections prompts the user for input and returns the cleaned string.
 func InputScanDirections(directions string) string {
 	fmt.Println(directions)
 
 	scannerdesc := bufio.NewScanner(os.Stdin)
-	tr := scannerdesc.Scan()
-	if tr {
+	if scannerdesc.Scan() {
 		dir := scannerdesc.Text()
-		stripdir := strings.TrimSpace(dir)
-		return stripdir
-	} else {
-		return ""
+		return strings.TrimSpace(dir)
 	}
-
+	if err := scannerdesc.Err(); err != nil {
+		log.Printf("Error reading input: %v", err)
+	}
+	return ""
 }

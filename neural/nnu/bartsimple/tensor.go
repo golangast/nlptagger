@@ -96,6 +96,16 @@ func NewTensor(data []float64, shape []int, requiresGrad bool) *Tensor {
 	}
 }
 
+// ZeroGrad resets the gradient of the tensor to zero.
+// It iterates through the gradient's data slice and sets each element to 0.
+func (t *Tensor) ZeroGrad() {
+	if t.Grad != nil {
+		for i := range t.Grad.Data {
+			t.Grad.Data[i] = 0
+		}
+	}
+}
+
 // Get returns the element at the given indices. (Simplified)
 func (t *Tensor) Get(indices ...int) (float64, error) {
 	// Simplified: Basic index calculation for flattened data

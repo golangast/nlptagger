@@ -128,11 +128,84 @@ func (it *MatMul4DIterator) CurrentChunkSize() (rows, cols int) {
 	return rows, cols
 }
 
+// BatchHeadIterator iterates over the batch and head dimensions of a 4D tensor.
+type BatchHeadIterator struct {
+	batchSize int
+	numHeads  int
+	currentB  int
+	currentH  int
+}
+
+// NewBatchHeadIterator creates a new iterator for 4D tensor batches and heads.
+func NewBatchHeadIterator(batchSize, numHeads int) *BatchHeadIterator {
+	return &BatchHeadIterator{
+		batchSize: batchSize,
+		numHeads:  numHeads,
+		currentB:  0,
+		currentH:  -1, // Start before the first head to make the first call to Next() correct.
+	}
+}
+
+// Next moves the iterator to the next batch/head combination.
+// It returns true if there are more elements, false otherwise.
+func (it *BatchHeadIterator) Next() bool {
+	it.currentH++
+	if it.currentH >= it.numHeads {
+		it.currentH = 0
+		it.currentB++
+	}
+	return it.currentB < it.batchSize
+}
+
+// Current returns the current batch and head indices.
+func (it *BatchHeadIterator) Current() (b, h int) {
+	return it.currentB, it.currentH
+}
+
 // Row represents a single row of a tensor (as a slice).
 type Row []float64
 
 // Column represents a single column of a tensor (as a slice).
 type Column []float64
+
+// matMul2DViewWithUnroll performs an optimized 2D matrix multiplication on slice views.
+// It calculates resultView = tView @ otherView.
+// Shapes: tView (M, K), otherView (K, N), resultView (M, N).
+const unrollFactor4D = 4 // Unroll factor for the inner loop
+
+func matMul2DViewWithUnroll(resultView, tView, otherView []float64, M, K, N int) {
+	// Initialize the result view to zeros.
+	// This is important as we are accumulating results (+=).
+	for i := range resultView {
+		resultView[i] = 0.0
+	}
+
+	// Use a cache-friendly loop order (i, k, j).
+	// This improves performance by maximizing sequential memory access.
+	for i := 0; i < M; i++ { // Iterate over rows of the output/tView
+		for k := 0; k < K; k++ { // Iterate over the common dimension
+			// For each element in the i-th row of tView, we will use it
+			// to scale the k-th row of otherView and add it to the i-th row of the result.
+			t_ik := tView[i*K+k]
+
+			// Unrolled loop over columns (j).
+			// This processes multiple elements of the row in a single loop iteration,
+			// reducing loop overhead and allowing for better instruction-level parallelism.
+			j := 0
+			for ; j <= N-unrollFactor4D; j += unrollFactor4D {
+				resultView[i*N+j] += t_ik * otherView[k*N+j]
+				resultView[i*N+j+1] += t_ik * otherView[k*N+j+1]
+				resultView[i*N+j+2] += t_ik * otherView[k*N+j+2]
+				resultView[i*N+j+3] += t_ik * otherView[k*N+j+3]
+			}
+
+			// Cleanup loop for remaining columns that don't fit in the unrolled part.
+			for ; j < N; j++ {
+				resultView[i*N+j] += t_ik * otherView[k*N+j]
+			}
+		}
+	}
+}
 
 func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 	start := time.Now()
@@ -164,25 +237,6 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		var wg sync.WaitGroup
 		numGoroutines := runtime.NumCPU() // Or a fixed number
 
-		// Iterate over batches sequentially
-		for batchView, ok := batchIter.NextBatch(); ok; batchView, ok = batchIter.NextBatch() {
-			currentBatchIndex := batchIter.GetCurrentBatchIndex() // Get the current batch index
-
-			// Get a row iterator for the current batch view
-			batchRowIter := batchView.BatchRowIterator() // Use the BatchRowIterator for the view
-
-			// Iterate over rows of the current batch view
-			for rowA, okA := batchRowIter.NextRow(); okA; rowA, okA = batchRowIter.NextRow() {
-				currentRowIndex := batchRowIter.GetCurrentRowIndex()
-
-				// Call the helper function to perform matrix multiplication for this row
-				err := MatMulRow(rowA, other, result, currentBatchIndex, currentRowIndex, colsA, resultCols)
-				if err != nil {
-					return nil, fmt.Errorf("MatMulRow failed: %w", err)
-				}
-			}
-		}
-
 		// Channel to send batch views to worker goroutines
 		batchViewChan := make(chan *BatchView, numGoroutines)
 
@@ -209,66 +263,72 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		for batchView, ok := batchIter.NextBatch(); ok; batchView, ok = batchIter.NextBatch() {
 			batchViewChan <- batchView
 		}
+		// Close the channel to signal that no more batches will be sent.
+		close(batchViewChan)
+
+		// Wait for all goroutines to finish their work.
+		wg.Wait()
 		elapsed := time.Since(start)
 		fmt.Println("loop took ", elapsed)
 		return result, nil
 		// } else if len(t.Shape) == 4 && len(other.Shape) == 4 {
 	} else if len(t.Shape) == 4 && len(other.Shape) == 4 {
 		// 4D x 4D logic for batched matrix multiplication:
-		// [batch, dim1, dim2, dim3] * [batch, dim1, dim3, dim4]
+		// [batch, head, M, K] @ [batch, head, K, N] -> [batch, head, M, N]
 		// Batch size and dim1 must match, and dim3 must match.
 		if t.Shape[0] != other.Shape[0] || t.Shape[1] != other.Shape[1] || t.Shape[3] != other.Shape[2] {
 			return nil, fmt.Errorf("incompatible shapes for 4D batched matrix multiplication: %v and %v", t.Shape, other.Shape)
 		}
 
-		// Add print statements to show tensor shapes
-		//fmt.Printf("4D MatMul: t.Shape = %v, other.Shape = %v\n", t.Shape, other.Shape)
-
 		batchSize := t.Shape[0]
 		numHeads := t.Shape[1]
-		dim2_t := t.Shape[2]         // Corresponds to seq_length in Q
-		dim3_t := t.Shape[3]         // Corresponds to head_dim in Q and K
-		dim3_other := other.Shape[3] // Corresponds to seq_length in K^T (dim4_other)
+		M := t.Shape[2]
+		K := t.Shape[3]
+		N := other.Shape[3]
 
-		// Expected result shape: [batch, num_heads, dim2_t, dim3_other]
-		resultShape := []int{batchSize, numHeads, dim2_t, dim3_other}
-		// Calculate the total size of the tensor data from the resultShape
-		dataSize := 1
-		for _, dim := range resultShape {
-			dataSize *= dim
-		}
-		// Create a slice of float64 with the calculated size and initialize it with zeros
+		resultShape := []int{batchSize, numHeads, M, N}
+		dataSize := batchSize * numHeads * M * N
 		data := make([]float64, dataSize)
 		result := NewTensor(data, resultShape, false) // Create the result tensor
 
-		// Create the 4D matrix multiplication iterator
-		// Add print statements to inspect input tensor data before multiplication
-		// fmt.Printf("4D MatMul: t.Data (first %d elements): %v\n", min(20, len(t.Data)), t.Data[:min(20, len(t.Data))])
-		// fmt.Printf("4D MatMul: other.Data (first %d elements): %v\n", min(20, len(other.Data)), other.Data[:min(20, len(other.Data))])
+		// Use a worker pool to parallelize the 2D matrix multiplications.
+		// This is more efficient than iterating sequentially, especially on multi-core systems.
+		var wg sync.WaitGroup
+		numWorkers := runtime.NumCPU()
+		workChan := make(chan struct{ b, h int }, numWorkers)
 
-		iter := NewMatMul4DIterator(batchSize, numHeads, dim2_t, dim3_other)
+		// Start worker goroutines
+		for i := 0; i < numWorkers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for work := range workChan {
+					b, h := work.b, work.h
+					// Get slice views for the current 2D matrices
+					tView := t.Data[b*numHeads*M*K+h*M*K : b*numHeads*M*K+(h+1)*M*K]
+					otherView := other.Data[b*numHeads*K*N+h*K*N : b*numHeads*K*N+(h+1)*K*N]
+					resultView := result.Data[b*numHeads*M*N+h*M*N : b*numHeads*M*N+(h+1)*M*N]
 
-		// Parallelize the outer loops (batch and head) or the chunk iterations
-		for iter.Next() { // This iterator now iterates over chunks
-			b, h, startRow, startCol := iter.Current()
-			chunkRows, chunkCols := iter.CurrentChunkSize()
-
-			// Iterate through the elements within the current chunk
-			for i := 0; i < chunkRows; i++ {
-				for j := 0; j < chunkCols; j++ { // This is the outer loop over columns of the result chunk
-					// Calculate the absolute row and column indices within the 2D slice
-					MatMulElement4D(t, other, result, b, h, startRow+i, startCol+j, dim3_t) // Call the helper function
+					// Perform optimized 2D matrix multiplication on the views
+					matMul2DViewWithUnroll(resultView, tView, otherView, M, K, N)
 				}
-			}
+			}()
 		}
 
-		// Add print statements to inspect the result tensor data after multiplication
-		//fmt.Printf("4D MatMul: result.Data (first %d elements): %v\n", min(20, len(result.Data)), result.Data[:min(20, len(result.Data))])
+		// Use the iterator to send work to the workers
+		iter := NewBatchHeadIterator(batchSize, numHeads)
+		for iter.Next() {
+			b, h := iter.Current()
+			workChan <- struct{ b, h int }{b, h}
+		}
+		close(workChan)
+		wg.Wait()
 
 		elapsed := time.Since(start)
-		fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
+		fmt.Printf("4D x 4D MatMul (with goroutines) took %s\n", elapsed)
 		return result, nil
 	} else if len(t.Shape) == 2 && len(other.Shape) == 2 {
+		
 		// The original implementation for 2D x 2D multiplication was designed for
 		// lazy execution, which doesn't work for the current inference path.
 		// We'll call MatMulFromScratch to perform the calculation immediately.
@@ -300,7 +360,7 @@ func MatMulRow4d(
 	otherBaseOffset := currentBatchIndex*other.Shape[1]*other.Shape[2]*other.Shape[3] + currentHeadIndex*other.Shape[2]*other.Shape[3] // Corrected other shape reference	// The stride to move down a row in the 2D slice of 'other' within its 4D structure is other.Shape[3].
 
 	colDimOther := otherDim3 // Define colDimOther here
-	unrollFactor := 30       // Define the unrolling factor, adjust as needed
+	unrollFactor := 50       // Define the unrolling factor, adjust as needed
 
 	sum := 0.0 // Declare sum here, outside of the inner loop
 	// Iterate through columns of the result row with unrolling
@@ -436,18 +496,16 @@ func (op *MatMulOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
 			op.output.Data = make([]float64, M*N)
 		}
 
-		// Use the iterator pattern for computation
-		it := NewMatMulIterator(M, N)
+		// Iterate over each row of the first matrix (A) and compute the corresponding output row.
+		// This row-by-row approach is analogous to the batch processing in the 3D case and is cache-friendly.
+		for i := 0; i < M; i++ {
+			// Get slice views for the current row of A and the corresponding row of the output.
+			// These are lightweight views and do not copy the underlying data.
+			rowA := op.input1.Data[i*K : (i+1)*K]
+			outputRow := op.output.Data[i*N : (i+1)*N]
 
-		for it.Next() {
-			flatIndex, i, j := it.Current()
-			sum := 0.0
-			for k := 0; k < K; k++ {
-				aIndex := i*K + k
-				bIndex := k*N + j
-				sum += op.input1.Data[aIndex] * op.input2.Data[bIndex]
-				op.output.Data[flatIndex] = sum
-			}
+			// Call the optimized row multiplication function.
+			matMulRow2DWithUnroll(outputRow, rowA, op.input2, K, N)
 		}
 		return op.output, nil
 	case len(shape1) == 3 && len(shape2) == 2:
@@ -544,6 +602,48 @@ func (op *MatMulOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
 	}
 
 	return op.output, nil
+}
+
+const unrollFactor2D = 4
+
+// matMulRow2DWithUnroll computes one row of the output matrix C for C = A @ B,
+// where A and B are 2D matrices. It takes a single row from A and the entire B matrix.
+// It uses a cache-friendly loop order and loop unrolling for performance.
+func matMulRow2DWithUnroll(
+	outputRow []float64, // slice view into the output tensor's data for the current row
+	rowA []float64,      // slice view for the current row of tensor A
+	tensorB *Tensor,     // the entire tensor B
+	K, N int,            // K is common dimension, N is columns of B
+) {
+	// This function calculates: outputRow = rowA @ tensorB
+	// outputRow has length N, rowA has length K, tensorB is KxN.
+
+	// Initialize the output row to zeros.
+	for i := range outputRow {
+		outputRow[i] = 0.0
+	}
+
+	// The (i, k, j) loop order is generally more cache-friendly than (i, j, k).
+	// We iterate through each element of rowA (k loop), and for each element,
+	// we iterate through the corresponding row in B (j loop).
+	for k := 0; k < K; k++ { // k is the common dimension
+		a_k := rowA[k]
+		rowB := tensorB.Data[k*N : (k+1)*N] // Get a view of the k-th row of B
+
+		// Unrolled loop over columns of B
+		j := 0
+		for ; j <= N-unrollFactor2D; j += unrollFactor2D {
+			outputRow[j] += a_k * rowB[j]
+			outputRow[j+1] += a_k * rowB[j+1]
+			outputRow[j+2] += a_k * rowB[j+2]
+			outputRow[j+3] += a_k * rowB[j+3]
+		}
+
+		// Cleanup loop for remaining columns that didn't fit in the unrolled part.
+		for ; j < N; j++ {
+			outputRow[j] += a_k * rowB[j]
+		}
+	}
 }
 
 // Backward performs the backward pass for the matrix multiplication operation.

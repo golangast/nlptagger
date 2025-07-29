@@ -350,24 +350,23 @@ func (l *LayerNormalization) Backward(grad *Tensor) error {
 			l.Gamma.Grad = NewTensor(make([]float64, len(l.Gamma.Data)), l.Gamma.Shape, false)
 		}
 	}
-	if l.Gamma.requiresGrad {
-		if l.Gamma.Grad == nil {
-			l.Gamma.Grad = NewTensor(make([]float64, len(l.Gamma.Data)), l.Gamma.Shape, false)
+	if l.Beta.requiresGrad {
+		if l.Beta.Grad == nil {
+			l.Beta.Grad = NewTensor(make([]float64, len(l.Beta.Data)), l.Beta.Shape, false)
 		}
 	}
 
-	// Calculate gradients for gamma (Scale) and beta (Bias)
-	// dLoss/dBeta = Sum(grad) over all dims except the last one
-	if l.Gamma.requiresGrad {
-		// Sum grad over all dimensions except the last one and add to l.Gamma.Grad.Data
-		// This is the same summation logic as in Linear.Backward for bias.
+	// --- Calculate Gradient with respect to Beta (Bias) ---
+	// dLoss/dBeta = Sum(grad) over all dims except the last one.
+	if l.Beta.requiresGrad {
 		for i := 0; i < len(grad.Data); i++ {
 			biasIndex := i % lastDimSize
-			l.Gamma.Grad.Data[biasIndex] += grad.Data[i]
+			l.Beta.Grad.Data[biasIndex] += grad.Data[i]
 		}
 	}
 
-	// dLoss/dGamma = Sum(grad * normalized_input) over all dims except the last one
+	// --- Calculate Gradient with respect to Gamma (Scale) ---
+	// dLoss/dGamma = Sum(grad * normalized_input) over all dims except the last one.
 	if l.Gamma.requiresGrad {
 		if l.Gamma.Grad == nil {
 			l.Gamma.Grad = NewTensor(make([]float64, len(l.Gamma.Data)), l.Gamma.Shape, false)
@@ -429,27 +428,28 @@ func (l *LayerNormalization) Backward(grad *Tensor) error {
 		if l.inputTensor.Grad == nil {
 			l.inputTensor.Grad = NewTensor(make([]float64, len(l.inputTensor.Data)), l.inputTensor.Shape, false)
 		}
+		// Iterate over each feature vector (e.g., each token embedding in a sequence)
 		for i := 0; i < numElementsToNormalize; i++ {
+			// Pre-calculate sums for the current feature vector to avoid redundant computation.
+			sum_dL_dNorm := 0.0
+			sum_dL_dNorm_x_minus_mean := 0.0
+			for k := 0; k < lastDimSize; k++ {
+				flatIndex_k := i*lastDimSize + k
+				sum_dL_dNorm += dLoss_dNormalizedInputData[flatIndex_k]
+				sum_dL_dNorm_x_minus_mean += dLoss_dNormalizedInputData[flatIndex_k] * (l.inputTensor.Data[flatIndex_k] - l.mean.Data[i])
+			}
+
+			invStdDev_i := l.invStdDev.Data[i]
+
+			// Now, calculate the gradient for each element within the feature vector using the pre-calculated sums.
 			for j := 0; j < lastDimSize; j++ {
 				flatIndex := i*lastDimSize + j
+				x_j_minus_mean_i := l.inputTensor.Data[flatIndex] - l.mean.Data[i]
 
-				sum_dL_dNorm := 0.0              // Sum(dLoss/dNormalizedInput)
-				sum_dL_dNorm_x_minus_mean := 0.0 // Sum(dLoss/dNormalizedInput * (x - mean))
+				// Calculate dLoss/dx_j
+				dL_dx_j := invStdDev_i * (dLoss_dNormalizedInputData[flatIndex] - sum_dL_dNorm/float64(lastDimSize) - x_j_minus_mean_i*invStdDev_i*invStdDev_i*sum_dL_dNorm_x_minus_mean/float64(lastDimSize))
 
-				for k := 0; k < lastDimSize; k++ {
-					flatIndex_k := i*lastDimSize + k
-					sum_dL_dNorm += dLoss_dNormalizedInputData[flatIndex_k]
-					sum_dL_dNorm_x_minus_mean += dLoss_dNormalizedInputData[flatIndex_k] * (l.inputTensor.Data[flatIndex_k] - l.mean.Data[i])
-				}
-
-				invStdDev_i := l.invStdDev.Data[i]
-				x_i_minus_mean_i := l.inputTensor.Data[flatIndex] - l.mean.Data[i]
-
-				// Calculate dLoss/dx_i
-				dL_dx_i := invStdDev_i * (dLoss_dNormalizedInputData[flatIndex] - sum_dL_dNorm/float64(lastDimSize) - x_i_minus_mean_i*invStdDev_i*invStdDev_i*sum_dL_dNorm_x_minus_mean/float64(lastDimSize))
-
-				l.inputTensor.Grad.Data[flatIndex] += dL_dx_i // Accumulate gradient
-
+				l.inputTensor.Grad.Data[flatIndex] += dL_dx_j // Accumulate gradient
 			}
 		}
 	}
