@@ -56,7 +56,7 @@ When you need a program to understand context of commands.
 POS tags are commonly used to define rules for identifying phrases (e.g., a noun phrase might be defined as a sequence of words starting with a determiner followed by one or more adjectives and a noun).
 NER can be used to identify specific types of phrases (e.g., a phrase tagged as "PERSON" might indicate a person's name).
 
-
+Bart sequence-to-sequence neural network that learns to translate natural language into a different, more structured format based on the examples you provide during training.
 
 
 ## Why build this?

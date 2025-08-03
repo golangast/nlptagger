@@ -12,15 +12,18 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/golangast/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
+	"github.com/golangast/nlptagger/neural/nnu/bartsimple"
+	"github.com/golangast/nlptagger/neural/nnu/bert"
 	"github.com/golangast/nlptagger/neural/nnu/vocab"
 )
 
 var (
-	trainMode    = flag.Bool("train", false, "Enable training mode")
+	trainBart    = flag.Bool("train-bart", false, "Enable BART model training")
+	trainBert    = flag.Bool("train-bert", false, "Enable BERT model training")
 	epochs       = flag.Int("epochs", 10, "Number of training epochs")
 	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
-	bartDataPath = flag.String("data", "trainingdata/bartdata/bartdata.json", "Path to BART training data for the model")
+	bartDataPath = flag.String("bart-data", "trainingdata/bartdata/bartdata.json", "Path to BART training data")
+	bertDataPath = flag.String("bert-data", "trainingdata/bertdata/bert.json", "Path to BERT training data")
 	dimModel     = flag.Int("dim", 64, "Dimension of the model")
 	numHeads     = flag.Int("heads", 4, "Number of attention heads")
 	maxSeqLength = flag.Int("maxlen", 64, "Maximum sequence length")
@@ -30,8 +33,9 @@ var (
 func main() {
 	flag.Parse()
 
-	// Define paths, consider making these flags as well for more flexibility
-	const modelPath = "gob_models/simplified_bart_model.gob"
+	// Define paths
+	const bartModelPath = "gob_models/simplified_bart_model.gob"
+	const bertModelPath = "gob_models/bert_classifier_model.gob"
 	const trainingDataPath = "trainingdata/tagdata/nlp_training_data.json"
 	const vocabPath = "gob_models/vocabulary.gob"
 
@@ -40,16 +44,48 @@ func main() {
 		log.Fatalf("Failed to set up vocabulary: %v", err)
 	}
 
-	model, err := setupModel(modelPath, vocabulary, *dimModel, *numHeads, *maxSeqLength)
+	bartModel, err := setupModel(bartModelPath, vocabulary, *dimModel, *numHeads, *maxSeqLength)
 	if err != nil {
-		log.Fatalf("Failed to set up model: %v", err)
+		log.Fatalf("Failed to set up BART model: %v", err)
 	}
 
-	if *trainMode {
-		runTraining(model, *bartDataPath, modelPath)
-	} else {
-		runInference(model)
+	if *trainBart {
+		runTraining(bartModel, *bartDataPath, bartModelPath)
+		return // Exit after training
 	}
+
+	// BERT model setup and training
+	bertConfig := bert.BertConfig{
+		VocabSize:             len(vocabulary.WordToToken),
+		HiddenSize:            *dimModel,
+		NumHiddenLayers:       2, // Example value
+		NumAttentionHeads:     *numHeads,
+		IntermediateSize:      *dimModel * 4, // Example value
+		MaxPositionEmbeddings: *maxSeqLength,
+		TypeVocabSize:         2, // Example value
+		LayerNormEps:          1e-12,
+		HiddenDropoutProb:     0.1,
+	}
+
+	var bertModel *bert.BertModel
+	if *trainBert {
+		bertTrainingData, err := bert.LoadTrainingData(*bertDataPath)
+		if err != nil {
+			log.Fatalf("Error loading BERT training data: %v", err)
+		}
+		bertModel, err = bert.Train(bertConfig, bertTrainingData, *epochs, *learningRate)
+		if err != nil {
+			log.Fatalf("BERT model training failed: %v", err)
+		}
+		// Add saving logic for the trained BERT model if needed
+	} else {
+		// Add loading logic for a pre-trained BERT model here
+		// For now, we'll just initialize a new model.
+		bertModel = bert.NewBertModel(bertConfig)
+		fmt.Println("Initialized new BERT model for inference.")
+	}
+
+	runInference(bartModel, bertModel, bertConfig)
 }
 
 // setupVocabulary loads a vocabulary from vocabPath or builds a new one if loading fails.
@@ -328,7 +364,13 @@ func runTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath 
 	fmt.Println("Model saved successfully.")
 }
 
-func runInference(model *bartsimple.SimplifiedBARTModel) {
+func runInference(bartModel *bartsimple.SimplifiedBARTModel, bertModel *bert.BertModel, bertConfig bert.BertConfig) {
+	// Define a map of intents to functions
+	intentMap := map[string]func(args []string){
+		"CREATE_WEBSERVER": createWebserver,
+		// Add other intents here
+	}
+
 	fmt.Println("--- Running in Inference Mode ---")
 	for {
 		command := InputScanDirections("\nEnter a command (or 'quit' to exit):")
@@ -340,15 +382,76 @@ func runInference(model *bartsimple.SimplifiedBARTModel) {
 			continue
 		}
 
-		// Process the command using BartProcessCommand
-		summary, err := model.BartProcessCommand(command)
+		// 1. Use the BERT model to predict the intent
+		intent, err := bertModel.BertProcessCommand(command, bertConfig, bartModel.Tokenizer)
 		if err != nil {
-			log.Printf("Error processing command with BART model: %v", err)
-			continue // Continue to next loop iteration
+			log.Printf("Error processing command with BERT model: %v", err)
+			continue
 		}
-		fmt.Printf("Generated Summary: %s\n", summary)
+
+		fmt.Printf("Predicted Intent: %s\n", intent)
+
+		// 2. Execute the action based on the intent
+		if action, ok := intentMap[intent]; ok {
+			// For now, we are not extracting entities. We will pass the raw command.
+			args := strings.Fields(command)
+			action(args)
+		} else {
+			fmt.Printf("Unknown intent: %s\n", intent)
+		}
 	}
 }
+type BARTTrainingPair struct {
+Input string
+Output string
+
+}
+func updateTrainingData(input, output, path string) {
+	// Load existing data
+	file, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("Could not read training data file: %v", err)
+		return
+	}
+
+	var data struct {
+		Sentences []BARTTrainingPair `json:"sentences"`
+	}
+	if err := json.Unmarshal(file, &data); err != nil {
+		log.Printf("Could not unmarshal training data: %v", err)
+		return
+	}
+
+	// Add new data
+	data.Sentences = append(data.Sentences, BARTTrainingPair{Input: input, Output: output})
+
+	// Write updated data back to the file
+	updatedData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		log.Printf("Could not marshal updated training data: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(path, updatedData, 0644); err != nil {
+		log.Printf("Could not write updated training data: %v", err)
+		return
+	}
+
+	fmt.Println("Training data updated. Please retrain the model with --train-bart to apply the changes.")
+}
+
+// createWebserver is a placeholder function to demonstrate command execution.
+func createWebserver(args []string) {
+	if len(args) < 4 {
+		fmt.Println("Usage: create webserver <name> with handler <handler_name>")
+		return
+	}
+	serverName := args[0]
+	handlerName := args[3]
+	fmt.Printf("Creating webserver named '%s' with handler '%s'\n", serverName, handlerName)
+	// In a real application, you would generate the webserver code here.
+}
+
 
 // InputScanDirections prompts the user for input and returns the cleaned string.
 func InputScanDirections(directions string) string {

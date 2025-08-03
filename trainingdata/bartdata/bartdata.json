@@ -1,20 +1,32 @@
 {
   "sentences": [
     {
-      "input": "generate a webserver named jim and handler named jill",
-      "output": "create webserver jim with handler jill"
+      "Input": "generate a webserver named jim and handler named jill",
+      "Output": "create webserver jim with handler jill"
     },
     {
-      "input": "create a database named accounting",
-      "output": "created database accounting"
+      "Input": "create a database named accounting",
+      "Output": "created database accounting"
     },
     {
-      "input": "generate a rest api named userapi",
-      "output": "create rest api userapi"
+      "Input": "generate a rest api named userapi",
+      "Output": "create rest api userapi"
     },
     {
-      "input": "scaffold a react component named user",
-      "output": "created react component user"
+      "Input": "scaffold a react component named user",
+      "Output": "created react component user"
+    },
+    {
+      "Input": "generate a webserver",
+      "Output": "generate a webserver"
+    },
+    {
+      "Input": "generate a webserver",
+      "Output": "generating a webserver"
+    },
+    {
+      "Input": "generate a webserver",
+      "Output": "generate a webserver"
     }
   ]
 }

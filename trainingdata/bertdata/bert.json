@@ -1,0 +1,30 @@
+[
+  {
+    "text": "generate a webserver named jim and handler named jill",
+    "intent": "CREATE_WEBSERVER",
+    "entities": [
+      {"start": 11, "end": 20, "label": "COMPONENT"},
+      {"start": 27, "end": 30, "label": "SERVER_NAME"},
+      {"start": 42, "end": 49, "label": "COMPONENT"},
+      {"start": 56, "end": 60, "label": "HANDLER_NAME"}
+    ]
+  },
+  {
+    "text": "create a database named accounting",
+    "intent": "CREATE_DATABASE",
+    "entities": [
+      {"start": 9, "end": 17, "label": "COMPONENT"},
+      {"start": 24, "end": 35, "label": "DATABASE_NAME"}
+    ]
+  },
+  {
+    "text": "generate a handler in server Jill with data structure cat",
+    "intent": "CREATE_HANDLER",
+    "entities": [
+      {"start": 11, "end": 18, "label": "COMPONENT"},
+      {"start": 29, "end": 33, "label": "SERVER_NAME"},
+      {"start": 40, "end": 54, "label": "DATA_STRUCTURE_DEF"},
+      {"start": 55, "end": 58, "label": "DATA_STRUCTURE_NAME"}
+    ]
+  }
+]

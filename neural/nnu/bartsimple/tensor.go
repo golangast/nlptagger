@@ -209,7 +209,8 @@ func (t *Tensor) Mul(other *Tensor) (*Tensor, error) {
 func (t *Tensor) ScalarMul(scalar float64) (*Tensor, error) {
 	// Create a new tensor for the result
 	outputData := make([]float64, len(t.Data))
-	output := NewTensor(outputData, t.Shape, false) // Use NewTensor to create the output tensor
+	// The output requires grad if the input tensor does.
+	output := NewTensor(outputData, t.Shape, t.requiresGrad)
 
 	// Perform element-wise multiplication
 	for i := range t.Data {
