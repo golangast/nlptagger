@@ -35,7 +35,6 @@ func main() {
 
 	// Define paths
 	const bartModelPath = "gob_models/simplified_bart_model.gob"
-	const bertModelPath = "gob_models/bert_classifier_model.gob"
 	const trainingDataPath = "trainingdata/tagdata/nlp_training_data.json"
 	const vocabPath = "gob_models/vocabulary.gob"
 
@@ -68,7 +67,7 @@ func main() {
 	}
 
 	var bertModel *bert.BertModel
-	if *trainBert {
+	
 		bertTrainingData, err := bert.LoadTrainingData(*bertDataPath)
 		if err != nil {
 			log.Fatalf("Error loading BERT training data: %v", err)
@@ -77,15 +76,35 @@ func main() {
 		if err != nil {
 			log.Fatalf("BERT model training failed: %v", err)
 		}
-		// Add saving logic for the trained BERT model if needed
-	} else {
-		// Add loading logic for a pre-trained BERT model here
-		// For now, we'll just initialize a new model.
-		bertModel = bert.NewBertModel(bertConfig)
-		fmt.Println("Initialized new BERT model for inference.")
-	}
+		bertModel.TrainingData = bertTrainingData 
+		tokenizer, err := bartsimple.NewTokenizer(
+			vocabulary,
+			vocabulary.BeginningOfSentenceID,
+			vocabulary.EndOfSentenceID,
+			vocabulary.PaddingTokenID,
+			vocabulary.UnknownTokenID,
+		)
+		if err != nil {
+			log.Fatalf("Failed to create tokenizer: %v", err)
+		}
 
-	runInference(bartModel, bertModel, bertConfig)
+		// Make sure tokenizer is initialized before this block!
+		for i := range bertModel.TrainingData {
+			ex := &bertModel.TrainingData[i]
+			tokenIDs, _ := tokenizer.Encode(ex.Text)
+			inputTensor := bert.NewTensor(nil, []int{1, len(tokenIDs)}, false)
+			for j, id := range tokenIDs {
+				inputTensor.Data[j] = float64(id)
+			}
+			tokenTypeIDs := bert.NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
+			embeddingOutput := bertModel.Embeddings.Forward(inputTensor, tokenTypeIDs)
+			sequenceOutput, _ := bertModel.Encoder.Forward(embeddingOutput)
+			pooledOutput, _ := bertModel.Pooler.Forward(sequenceOutput)
+			ex.Embedding = make([]float64, len(pooledOutput.Data))
+			copy(ex.Embedding, pooledOutput.Data)
+		}
+	
+	runInference(bartModel, bertModel, bertConfig, tokenizer)
 }
 
 // setupVocabulary loads a vocabulary from vocabPath or builds a new one if loading fails.
@@ -318,9 +337,15 @@ func setupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads,
 		fmt.Println("Model file loaded without error, but model is nil. Creating a new one.")
 	}
 
-	tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
-	if tknErr != nil {
-		return nil, fmt.Errorf("failed to create tokenizer for new model: %w", tknErr)
+	tokenizer, err := bartsimple.NewTokenizer(
+		vocabulary,
+		vocabulary.BeginningOfSentenceID,
+		vocabulary.EndOfSentenceID,
+		vocabulary.PaddingTokenID,
+		vocabulary.UnknownTokenID,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
 	fmt.Printf("Creating new simplified BART model with vocab size: %d\n", len(vocabulary.WordToToken))
@@ -364,7 +389,12 @@ func runTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath 
 	fmt.Println("Model saved successfully.")
 }
 
-func runInference(bartModel *bartsimple.SimplifiedBARTModel, bertModel *bert.BertModel, bertConfig bert.BertConfig) {
+func runInference(
+	bartModel *bartsimple.SimplifiedBARTModel,
+	bertModel *bert.BertModel,
+	bertConfig bert.BertConfig,
+	tokenizer *bartsimple.Tokenizer,
+) {
 	// Define a map of intents to functions
 	intentMap := map[string]func(args []string){
 		"CREATE_WEBSERVER": createWebserver,
@@ -383,7 +413,9 @@ func runInference(bartModel *bartsimple.SimplifiedBARTModel, bertModel *bert.Ber
 		}
 
 		// 1. Use the BERT model to predict the intent
-		intent, err := bertModel.BertProcessCommand(command, bertConfig, bartModel.Tokenizer)
+		intent, bartReply, err := bertModel.BertProcessCommand(command, bertConfig, tokenizer, bartModel)
+		fmt.Println("Intent:", intent)
+		fmt.Println("BART reply:", bartReply)
 		if err != nil {
 			log.Printf("Error processing command with BERT model: %v", err)
 			continue
@@ -406,40 +438,6 @@ Input string
 Output string
 
 }
-func updateTrainingData(input, output, path string) {
-	// Load existing data
-	file, err := os.ReadFile(path)
-	if err != nil {
-		log.Printf("Could not read training data file: %v", err)
-		return
-	}
-
-	var data struct {
-		Sentences []BARTTrainingPair `json:"sentences"`
-	}
-	if err := json.Unmarshal(file, &data); err != nil {
-		log.Printf("Could not unmarshal training data: %v", err)
-		return
-	}
-
-	// Add new data
-	data.Sentences = append(data.Sentences, BARTTrainingPair{Input: input, Output: output})
-
-	// Write updated data back to the file
-	updatedData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		log.Printf("Could not marshal updated training data: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(path, updatedData, 0644); err != nil {
-		log.Printf("Could not write updated training data: %v", err)
-		return
-	}
-
-	fmt.Println("Training data updated. Please retrain the model with --train-bart to apply the changes.")
-}
-
 // createWebserver is a placeholder function to demonstrate command execution.
 func createWebserver(args []string) {
 	if len(args) < 4 {
@@ -467,3 +465,4 @@ func InputScanDirections(directions string) string {
 	}
 	return ""
 }
+

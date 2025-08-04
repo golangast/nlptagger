@@ -6,22 +6,18 @@ import (
 	"os"
 )
 
-// TrainingData represents the structure of the bert.json file.
+// TrainingExample represents the structure of the bert.json file.
 // We assume it contains pairs of sentences and their corresponding command labels.
-type TrainingData struct {
-	Text  string `json:"text"`
-	Label int    `json:"label"` // Assuming labels are integers representing command IDs
-}
 
 // LoadTrainingData loads the BERT training data from a JSON file.
-func LoadTrainingData(path string) ([]TrainingData, error) {
+func LoadTrainingData(path string) ([]TrainingExample, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("could not open training data file: %w", err)
 	}
 	defer file.Close()
 
-	var data []TrainingData
+	var data []TrainingExample
 	if err := json.NewDecoder(file).Decode(&data); err != nil {
 		return nil, fmt.Errorf("could not decode training data: %w", err)
 	}
@@ -29,7 +25,7 @@ func LoadTrainingData(path string) ([]TrainingData, error) {
 }
 
 // Train function to orchestrate the training of the BERT model.
-func Train(config BertConfig, data []TrainingData, epochs int, learningRate float64) (*BertModel, error) {
+func Train(config BertConfig, data []TrainingExample, epochs int, learningRate float64) (*BertModel, error) {
 	// 1. Initialize the Model
 	model := NewBertModel(config)
 

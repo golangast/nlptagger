@@ -13,8 +13,20 @@ import (
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
+type BartSimpleModel struct {
+    // Example field: you can add more fields as needed for your real model
+    Name string
+}
 
-// --- Custom Tensor and Autodiff Engine ---
+// Generate produces a dummy summary/response for the input.
+// Replace this with your actual BART inference logic if available.
+func (m *BartSimpleModel) Generate(input string) (string, error) {
+    if input == "" {
+        return "", fmt.Errorf("input is empty")
+    }
+    // Dummy implementation: just returns a formatted string
+    return fmt.Sprintf("[BART reply for '%s']", input), nil
+}
 
 // Tensor is a multi-dimensional matrix that supports automatic differentiation.
 type Tensor struct {
@@ -301,7 +313,7 @@ func (t1 *Tensor) MatMul(t2 *Tensor) (*Tensor, error) {
         }
         return NewTensor(resultData, resultShape, t1.Grad != nil || t2.Grad != nil), nil
     }
-    return nil, fmt.Errorf("Unsupported MatMul shapes: %v and %v", t1.Shape, t2.Shape)
+    return nil, fmt.Errorf("unsupported MatMul shapes: %v and %v", t1.Shape, t2.Shape)
 }
 
 func (t1 *Tensor) Add(t2 *Tensor) *Tensor {
@@ -401,19 +413,6 @@ func (t *Tensor) Tanh() *Tensor {
 	return result
 }
 
-// gelu activation function
-func gelu(x float64) float64 {
-	return 0.5 * x * (1.0 + math.Tanh(math.Sqrt(2.0/math.Pi)*(x+0.044715*math.Pow(x, 3))))
-}
-
-// gelu derivative
-func geluDerivative(x float64) float64 {
-	const a = 0.044715
-	const b = 0.7978845608 // sqrt(2/pi)
-	tanh_arg := b * (x + a*math.Pow(x, 3))
-	sech_sq := 1 - math.Pow(math.Tanh(tanh_arg), 2)
-	return 0.5*(1+math.Tanh(tanh_arg)) + 0.5*x*sech_sq*b*(1+3*a*math.Pow(x, 2))
-}
 
 // BertConfig holds the configuration for the BERT model.
 type BertConfig struct {
@@ -506,6 +505,7 @@ type BertModel struct {
 	Encoder            *BertEncoder
 	Pooler             *BertPooler
 	ClassificationHead *Linear
+	TrainingData       []TrainingExample
 }
 
 func NewBertModel(config BertConfig) *BertModel {
@@ -644,50 +644,160 @@ func CrossEntropyLoss(logits *Tensor, labels *Tensor) *Tensor {
 	return loss
 }
 
-func (m *BertModel) BertProcessCommand(command string, config BertConfig, tokenizer *bartsimple.Tokenizer) (string, error) {
-	// 1. Tokenize the input command
-	tokenIDs, err := tokenizer.Encode(command)
-	if err != nil{
-		return "", err
-	}
+func (m *BertModel) BertProcessCommand(
+    command string,
+    config BertConfig,
+    tokenizer *bartsimple.Tokenizer,
+    bartModel *bartsimple.SimplifiedBARTModel, // <-- use the external type
+) (string, string, error) {
+    // 1. Tokenize the input command
+    tokenIDs, err := tokenizer.Encode(command)
+    if err != nil {
+        return "", "", err
+    }
 
-	// 2. Create input tensors
-	inputTensor := NewTensor(nil, []int{1, len(tokenIDs)}, false)
-	for i, id := range tokenIDs {
-		inputTensor.Data[i] = float64(id)
-	}
-	tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false) // All zeros for a single sentence
+    // 2. Create input tensors
+    inputTensor := NewTensor(nil, []int{1, len(tokenIDs)}, false)
+    for i, id := range tokenIDs {
+        inputTensor.Data[i] = float64(id)
+    }
+    tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false) // All zeros for a single sentence
 
-	// 3. Perform a forward pass
-	logits, err := m.Forward(inputTensor, tokenTypeIDs)
-	if err != nil {
-		return "", err
-	}
+    // 3. Perform a forward pass with BERT
+    logits, err := m.Forward(inputTensor, tokenTypeIDs)
+    if err != nil {
+        return "", "", err
+    }
 
-	// 4. Find the predicted label
-	maxLogit := -1e9
-	predictedLabel := -1
-	for i, logit := range logits.Data {
-		if logit > maxLogit {
-			maxLogit = logit
-			predictedLabel = i
-		}
-	}
+    // 4. Find the predicted label
+    maxLogit := -1e9
+    predictedLabel := -1
+    for i, logit := range logits.Data {
+        if logit > maxLogit {
+            maxLogit = logit
+            predictedLabel = i
+        }
+    }
 
-	if predictedLabel == -1 {
-		return "", fmt.Errorf("prediction failed")
-	}
+    if predictedLabel == -1 {
+        return "", "", fmt.Errorf("prediction failed")
+    }
 
-	// 5. Map label to intent string (hardcoded for now)
-	intentMap := map[int]string{
-		0: "CREATE_WEBSERVER",
-		1: "CREATE_DATABASE",
-		2: "CREATE_HANDLER",
-	}
+    // 5. Map label to intent string (hardcoded for now)
+    intentMap := map[int]string{
+        0: "CREATE_WEBSERVER",
+        1: "CREATE_DATABASE",
+        2: "CREATE_HANDLER",
+    }
+    intent := "UNKNOWN"
+    if val, ok := intentMap[predictedLabel]; ok {
+        intent = val
+    }
 
-	if intent, ok := intentMap[predictedLabel]; ok {
-		return intent, nil
-	} else {
-		return "UNKNOWN", nil
-	}
+    // 6. Use BERT to search for a relevant example
+    retrieved, err := m.FindMostSimilarExample(command, tokenizer)
+    if err != nil {
+        return intent, "", fmt.Errorf("retrieval failed: %v", err)
+    }
+
+    // 7. Use BART to summarize or give context for the retrieved example
+    bartReply := ""
+    if bartModel != nil {
+        bartInput := fmt.Sprintf("Relevant example: %s", retrieved.Text)
+        bartReply, err = bartModel.Generate(bartInput)
+        if err != nil {
+            bartReply = "BART generation failed: " + err.Error()
+        }
+    } else {
+        bartReply = "BART model not loaded."
+    }
+
+    return intent, bartReply, nil
+}
+
+func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.Tokenizer) (TrainingExample, error) {
+    // 1. Encode input
+    tokenIDs, err := tokenizer.Encode(input)
+    if err != nil {
+        return TrainingExample{}, err
+    }
+    inputTensor := NewTensor(nil, []int{1, len(tokenIDs)}, false)
+    for i, id := range tokenIDs {
+        inputTensor.Data[i] = float64(id)
+    }
+    tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
+
+    // 2. Get embedding for input (use pooled output)
+    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs)
+    sequenceOutput, err := m.Encoder.Forward(embeddingOutput)
+    if err != nil {
+        return TrainingExample{}, err
+    }
+    _, err = m.Pooler.Forward(sequenceOutput)
+    if err != nil {
+        return TrainingExample{}, err
+    }
+
+    // 3. Compare to all training examples (brute force)
+    // For demo, assume you have precomputed pooledOutput for each training example
+    // Here, just return the first example as a placeholder
+    // You should implement cosine similarity between pooledOutput and each training example's embedding
+
+    // Compute pooled output for input
+    pooledOutput, err := m.Pooler.Forward(sequenceOutput)
+    if err != nil {
+        return TrainingExample{}, err
+    }
+
+    // Find the most similar example using cosine similarity
+    bestIdx := -1
+    bestSim := -1.0
+    for i, ex := range m.TrainingData {
+        // For demo, assume each TrainingExample has a field: Embedding []float64
+        // If not, you need to compute or store these in advance.
+        embedding := ex.Embedding // []float64, length = hiddenSize
+        if embedding == nil || len(embedding) != len(pooledOutput.Data) {
+            continue
+        }
+        // Compute cosine similarity
+        dot := 0.0
+        normA := 0.0
+        normB := 0.0
+        for j := 0; j < len(embedding); j++ {
+            a := pooledOutput.Data[j]
+            b := embedding[j]
+            dot += a * b
+            normA += a * a
+            normB += b * b
+        }
+        if normA == 0 || normB == 0 {
+            continue
+        }
+        sim := dot / (math.Sqrt(normA) * math.Sqrt(normB))
+        if sim > bestSim {
+            bestSim = sim
+            bestIdx = i
+        }
+    }
+
+    if bestIdx == -1 {
+        return TrainingExample{}, fmt.Errorf("no suitable training example found")
+    }
+    return m.TrainingData[bestIdx], nil
+}
+
+type TrainingData struct {
+    Text      string
+    Label     int
+    embedding []float64
+}
+
+func (td *TrainingData) Embedding() []float64 {
+    return td.embedding
+}
+
+type TrainingExample struct {
+    Text      string
+    Label     int
+    Embedding []float64
 }
