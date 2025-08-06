@@ -9,6 +9,7 @@ import (
 
 const tenThousand = 10000.0
 
+
 // Embedding represents a simple token embedding layer.
 type Embedding struct {
 	Weights   *Tensor // Embedding weights (learnable)

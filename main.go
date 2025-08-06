@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	trainBart    = flag.Bool("train-bart", false, "Enable BART model training")
+	trainBart    = flag.Bool("train-bart", false, "Enable BART model training")	
 	trainBert    = flag.Bool("train-bert", false, "Enable BERT model training")
+
 	epochs       = flag.Int("epochs", 10, "Number of training epochs")
 	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
 	bartDataPath = flag.String("bart-data", "trainingdata/bartdata/bartdata.json", "Path to BART training data")
@@ -91,6 +92,9 @@ func main() {
 		// Make sure tokenizer is initialized before this block!
 		for i := range bertModel.TrainingData {
 			ex := &bertModel.TrainingData[i]
+			if ex.Embedding != nil && len(ex.Embedding) == bertConfig.HiddenSize {
+				continue // Already has a valid embedding
+			}
 			tokenIDs, _ := tokenizer.Encode(ex.Text)
 			inputTensor := bert.NewTensor(nil, []int{1, len(tokenIDs)}, false)
 			for j, id := range tokenIDs {
@@ -104,6 +108,16 @@ func main() {
 			copy(ex.Embedding, pooledOutput.Data)
 		}
 	
+		// After precomputing embeddings for all examples:
+		file, err := os.Create(*bertDataPath)
+		if err != nil {
+			log.Fatalf("Could not save training data with embeddings: %v", err)
+		}
+		defer file.Close()
+		if err := json.NewEncoder(file).Encode(bertModel.TrainingData); err != nil {
+			log.Fatalf("Could not encode training data with embeddings: %v", err)
+		}
+
 	runInference(bartModel, bertModel, bertConfig, tokenizer)
 }
 
@@ -365,7 +379,28 @@ func setupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads,
 
 	return newModel, nil
 }
+func GetCommands() []string {
 
+// Load the command map from the JSON file
+	commandsFile, err := os.Open("neural/nnu/bert/commands/commands.json")
+	if err != nil {
+		log.Fatalf("Error opening commands file: %v", err)
+	}
+	defer commandsFile.Close()
+    var commands struct {
+		Commands []string `json:"commands"`
+	}
+	
+	if err := json.NewDecoder(commandsFile).Decode(&commands); err != nil {
+		fmt.Println(commands)
+		log.Fatalf("Error decoding commands file: %v", err)
+
+	}
+
+	// Create a map of intents to actions
+	return commands.Commands
+
+}
 func runTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath string) {
 	fmt.Println("--- Running in Training Mode ---")
 
@@ -395,25 +430,90 @@ func runInference(
 	bertConfig bert.BertConfig,
 	tokenizer *bartsimple.Tokenizer,
 ) {
-	// Define a map of intents to functions
-	intentMap := map[string]func(args []string){
-		"CREATE_WEBSERVER": createWebserver,
-		// Add other intents here
+	// Load the command map from the JSON file
+	commands := GetCommands()
+	intentMap := make(map[string]func([]string))
+
+	for _, cmd := range commands {
+		switch cmd {
+		case "CREATE_FILE":
+			intentMap["CREATE_FILE"] = func(args []string) {
+				if len(args) < 2 {
+					fmt.Println("Usage: CREATE_FILE <filename>")
+					return
+				}
+				filename := args[1]
+				file, err := os.Create(filename)
+				if err != nil {
+					fmt.Printf("Error creating file %s: %v\n", filename, err)
+					return
+				}
+				defer file.Close()
+				fmt.Printf("File %s created successfully.\n", filename)
+			}
+		case "CREATE_WEBSERVER":
+			intentMap["CREATE_WEBSERVER"] = func(args []string) {
+				if len(args) < 2 {
+					fmt.Println("Usage: CREATE_WEBSERVER <name>")
+					return
+				}
+				name := args[1]
+				fmt.Printf("Web server %s created successfully.\n", name)
+			}
+		case "CREATE_DATABASE":
+			intentMap["CREATE_DATABASE"] = func(args []string) {
+				if len(args) < 2 {
+					fmt.Println("Usage: CREATE_DATABASE <name>")
+					return
+				}
+				name := args[1]
+				fmt.Printf("Database %s created successfully.\n", name)
+			}
+		case "GENERATE_HANDLER":
+			intentMap["GENERATE_HANDLER"] = func(args []string) {
+				if len(args) < 2 {
+					fmt.Println("Usage: GENERATE_HANDLER <name>")
+					return
+				}
+				name := args[1]
+				fmt.Printf("Handler %s generated successfully.\n", name)
+			}
+		}
 	}
+
+	fmt.Printf("Loaded commands: %v\n", commands)
+	// Create a map of intents to actions
+
+	//intentMap := commands.GetCommands()
 
 	fmt.Println("--- Running in Inference Mode ---")
 	for {
-		command := InputScanDirections("\nEnter a command (or 'quit' to exit):")
-		if strings.ToLower(command) == "quit" {
+		command := InputScanDirections("\nEnter a command (or 'quit', exit, 'stop', 'q', 'close', 'help', 'list' to list available commands):")
+		upperCmd := strings.ToUpper(command)
+		switch upperCmd {
+		case "LIST", "COMMANDS", "HELP":
+			fmt.Println("Available commands are:")
+			for i, cmd := range commands {
+				fmt.Printf("- %d. %s\n", i, cmd)
+			}
+			continue
+		case "":
+			fmt.Println("No command entered. Please try again.")
+			continue
+		case "EXIT", "STOP", "Q", "QUIT", "CLOSE":
 			fmt.Println("Exiting.")
-			break
+			return
 		}
-		if command == "" {
+
+		// If the command is a known action, just execute it.
+		if action, ok := intentMap[upperCmd]; ok {
+			args := strings.Fields(command)
+			action(args)
 			continue
 		}
 
 		// 1. Use the BERT model to predict the intent
-		intent, bartReply, err := bertModel.BertProcessCommand(command, bertConfig, tokenizer, bartModel)
+		intent, bartReply, err := bertModel.BertProcessCommand(command, bertConfig, tokenizer, bartModel, bertModel.TrainingData)
 		fmt.Println("Intent:", intent)
 		fmt.Println("BART reply:", bartReply)
 		if err != nil {
@@ -425,30 +525,80 @@ func runInference(
 
 		// 2. Execute the action based on the intent
 		if action, ok := intentMap[intent]; ok {
-			// For now, we are not extracting entities. We will pass the raw command.
 			args := strings.Fields(command)
 			action(args)
 		} else {
-			fmt.Printf("Unknown intent: %s\n", intent)
+			// If the intent is not in the map, ask the user for the correct command
+			fmt.Print("Enter the correct command to execute: ")
+			scanner := bufio.NewScanner(os.Stdin)
+			var correctCommand string
+			if scanner.Scan() {
+				correctCommand = scanner.Text()
+			}
+			if err := scanner.Err(); err != nil {
+				log.Printf("Error reading input: %v", err)
+				continue
+			}
+
+			// Split the corrected command into arguments
+			correctCommand = strings.TrimSpace(correctCommand)
+			if correctCommand == "" {
+				fmt.Println("No command entered. Please try again.")
+				continue
+			}
+
+			args := strings.Fields(correctCommand)
+			if len(args) > 0 {
+				commandName := strings.ToUpper(args[0])
+				isNewCommand := true
+				for _, cmd := range commands {
+					if cmd == commandName {
+						isNewCommand = false
+						break
+					}
+				}
+
+				if isNewCommand {
+					commands = append(commands, commandName)
+					// Update the commands.json file
+					file, err := os.Create("neural/nnu/bert/commands/commands.json")
+					if err != nil {
+						log.Printf("Error updating commands file: %v", err)
+					} else {
+						encoder := json.NewEncoder(file)
+						encoder.SetIndent("", "  ")
+						if err := encoder.Encode(commands); err != nil {
+							log.Printf("Error encoding updated commands: %v", err)
+						}
+						file.Close()
+						fmt.Printf("Command '%s' added to commands list.\n", commandName)
+					}
+				}
+
+				// The first argument should be the command name
+				if action, ok := intentMap[commandName]; ok {
+					action(args)
+				} else if commandName == "QUIT" {
+					fmt.Println("Exiting.")
+				} else if commandName == "HELP" {
+					fmt.Println("Available commands are:")
+					for cmd := range intentMap {
+						fmt.Printf("- %s\n", cmd)
+					}
+					fmt.Println("Please try again with a valid command.")
+				} else {
+					fmt.Printf("Unknown command: %s\n", commandName)
+					fmt.Println("Available commands are:")
+					for cmd := range intentMap {
+						fmt.Printf("- %s\n", cmd)
+					}
+					fmt.Println("Please try again with a valid command.")
+				}
+			}
 		}
 	}
 }
-type BARTTrainingPair struct {
-Input string
-Output string
 
-}
-// createWebserver is a placeholder function to demonstrate command execution.
-func createWebserver(args []string) {
-	if len(args) < 4 {
-		fmt.Println("Usage: create webserver <name> with handler <handler_name>")
-		return
-	}
-	serverName := args[0]
-	handlerName := args[3]
-	fmt.Printf("Creating webserver named '%s' with handler '%s'\n", serverName, handlerName)
-	// In a real application, you would generate the webserver code here.
-}
 
 
 // InputScanDirections prompts the user for input and returns the cleaned string.
@@ -466,3 +616,6 @@ func InputScanDirections(directions string) string {
 	return ""
 }
 
+type TrainingExample = bert.TrainingExample
+
+//go run main.go -train-bert -bert-data=trainingdata/bertdata/bert.json -epochs=10 -lr=0.001  

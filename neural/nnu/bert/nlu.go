@@ -1,9 +1,12 @@
 package bert
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/golangast/nlptagger/neural/nnu/bartsimple"
@@ -508,9 +511,18 @@ type BertModel struct {
 	TrainingData       []TrainingExample
 }
 
-func NewBertModel(config BertConfig) *BertModel {
+func NewBertModel(config BertConfig, trainingData []TrainingExample) *BertModel {
 	initializerStdDev := 0.02
-	config.NumLabels = 3
+
+	// Determine the number of labels from the training data
+	numLabels := 0
+	for _, example := range trainingData {
+		if example.Label+1 > numLabels {
+			numLabels = example.Label + 1
+		}
+	}
+	config.NumLabels = numLabels
+
 	return &BertModel{
 		Embeddings:         NewBertEmbeddings(config, initializerStdDev),
 		Encoder:            NewBertEncoder(config, initializerStdDev),
@@ -644,11 +656,55 @@ func CrossEntropyLoss(logits *Tensor, labels *Tensor) *Tensor {
 	return loss
 }
 
+func createIntentMap(trainingData []TrainingExample) map[int]string {
+	intentMap := make(map[int]string)
+	for _, example := range trainingData {
+		words := strings.Split(example.Text, " ")
+		var action, entity string
+
+		// Simple keyword-based intent extraction
+		for i, word := range words {
+			switch strings.ToLower(word) {
+			case "create", "generate", "build", "make":
+				action = "CREATE"
+			case "delete", "remove", "destroy":
+				action = "DELETE"
+			case "update", "modify", "change":
+				action = "UPDATE"
+			case "restart", "reboot":
+				action = "RESTART"
+			case "deploy":
+				action = "DEPLOY"
+			case "database", "webserver", "handler", "user", "application":
+				if i > 0 && entity == "" { // Avoid setting entity multiple times
+					entity = strings.ToUpper(word)
+				}
+			}
+		}
+
+		// Fallback for entity
+		if entity == "" && len(words) > 1 {
+			// If no specific entity keyword is found, use the last word as a guess
+			entity = strings.ToUpper(words[len(words)-1])
+		}
+		
+		if action != "" && entity != "" {
+			intent := fmt.Sprintf("%s_%s", action, entity)
+			intentMap[example.Label] = intent
+		} else if action != "" {
+			intent := fmt.Sprintf("%s_UNKNOWN", action)
+			intentMap[example.Label] = intent
+		}
+	}
+	return intentMap
+}
+
 func (m *BertModel) BertProcessCommand(
     command string,
     config BertConfig,
     tokenizer *bartsimple.Tokenizer,
     bartModel *bartsimple.SimplifiedBARTModel, // <-- use the external type
+    trainingData []TrainingExample,
 ) (string, string, error) {
     // 1. Tokenize the input command
     tokenIDs, err := tokenizer.Encode(command)
@@ -683,21 +739,17 @@ func (m *BertModel) BertProcessCommand(
         return "", "", fmt.Errorf("prediction failed")
     }
 
-    // 5. Map label to intent string (hardcoded for now)
-    intentMap := map[int]string{
-        0: "CREATE_WEBSERVER",
-        1: "CREATE_DATABASE",
-        2: "CREATE_HANDLER",
-    }
+    // 5. Map label to intent string
+    intentMap := createIntentMap(trainingData)
     intent := "UNKNOWN"
     if val, ok := intentMap[predictedLabel]; ok {
         intent = val
     }
 
     // 6. Use BERT to search for a relevant example
-    retrieved, err := m.FindMostSimilarExample(command, tokenizer)
+    retrieved, err := m.FindMostSimilarExample(command, tokenizer, intent)
     if err != nil {
-        return intent, "", fmt.Errorf("retrieval failed: %v", err)
+        // It's okay if no similar example is found, just continue
     }
 
     // 7. Use BART to summarize or give context for the retrieved example
@@ -712,10 +764,79 @@ func (m *BertModel) BertProcessCommand(
         bartReply = "BART model not loaded."
     }
 
+    // 8. Get user feedback
+    fmt.Printf("Predicted Intent: %s\n", intent)
+    fmt.Print("Is this correct? (y/n): ")
+    var response string
+    fmt.Scanln(&response)
+
+    if strings.ToLower(response) == "n" {
+        fmt.Print("Enter the correct intent: ")
+        var correctIntent string
+        fmt.Scanln(&correctIntent)
+        intent = correctIntent
+
+        // Add the new training data
+        embedding, err := m.getEmbedding(command, tokenizer)
+        if err != nil {
+            return intent, bartReply, fmt.Errorf("failed to get embedding: %v", err)
+        }
+
+        newExample := TrainingExample{
+            Text:      command,
+            Label:     len(trainingData), // Simple way to assign a new label
+            Embedding: embedding, // Placeholder
+        }
+        trainingData = append(trainingData, newExample)
+
+        // Save the updated training data
+        err = saveTrainingData(trainingData, "/home/zendrulat/code/nlptagger/trainingdata/bertdata/bert.json")
+        if err != nil {
+            return intent, bartReply, fmt.Errorf("failed to save training data: %v", err)
+        }
+    }
+
     return intent, bartReply, nil
 }
 
-func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.Tokenizer) (TrainingExample, error) {
+func (m *BertModel) getEmbedding(input string, tokenizer *bartsimple.Tokenizer) ([]float64, error) {
+    tokenIDs, err := tokenizer.Encode(input)
+    if err != nil {
+        return nil, err
+    }
+    inputTensor := NewTensor(nil, []int{1, len(tokenIDs)}, false)
+    for i, id := range tokenIDs {
+        inputTensor.Data[i] = float64(id)
+    }
+    tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
+
+    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs)
+    sequenceOutput, err := m.Encoder.Forward(embeddingOutput)
+    if err != nil {
+        return nil, err
+    }
+    pooledOutput, err := m.Pooler.Forward(sequenceOutput)
+    if err != nil {
+        return nil, err
+    }
+    return pooledOutput.Data, nil
+}
+
+func saveTrainingData(trainingData []TrainingExample, filePath string) error {
+	data, err := json.MarshalIndent(trainingData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal training data: %v", err)
+	}
+
+	err = ioutil.WriteFile(filePath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write training data to file: %v", err)
+	}
+
+	return nil
+}
+
+func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.Tokenizer, predictedIntent string) (TrainingExample, error) {
     // 1. Encode input
     tokenIDs, err := tokenizer.Encode(input)
     if err != nil {
@@ -733,33 +854,33 @@ func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.T
     if err != nil {
         return TrainingExample{}, err
     }
-    _, err = m.Pooler.Forward(sequenceOutput)
-    if err != nil {
-        return TrainingExample{}, err
-    }
-
-    // 3. Compare to all training examples (brute force)
-    // For demo, assume you have precomputed pooledOutput for each training example
-    // Here, just return the first example as a placeholder
-    // You should implement cosine similarity between pooledOutput and each training example's embedding
-
-    // Compute pooled output for input
     pooledOutput, err := m.Pooler.Forward(sequenceOutput)
     if err != nil {
         return TrainingExample{}, err
     }
 
-    // Find the most similar example using cosine similarity
+    // 3. Filter training examples by the predicted intent
+    intentMap := createIntentMap(m.TrainingData)
+    var filteredExamples []TrainingExample
+    for _, ex := range m.TrainingData {
+        if intent, ok := intentMap[ex.Label]; ok && intent == predictedIntent {
+            filteredExamples = append(filteredExamples, ex)
+        }
+    }
+
+    if len(filteredExamples) == 0 {
+        // If no examples match the predicted intent, fall back to all examples
+        filteredExamples = m.TrainingData
+    }
+
+    // 4. Find the most similar example from the filtered list
     bestIdx := -1
     bestSim := -1.0
-    for i, ex := range m.TrainingData {
-        // For demo, assume each TrainingExample has a field: Embedding []float64
-        // If not, you need to compute or store these in advance.
-        embedding := ex.Embedding // []float64, length = hiddenSize
+    for i, ex := range filteredExamples {
+        embedding := ex.Embedding
         if embedding == nil || len(embedding) != len(pooledOutput.Data) {
             continue
         }
-        // Compute cosine similarity
         dot := 0.0
         normA := 0.0
         normB := 0.0
@@ -783,7 +904,7 @@ func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.T
     if bestIdx == -1 {
         return TrainingExample{}, fmt.Errorf("no suitable training example found")
     }
-    return m.TrainingData[bestIdx], nil
+    return filteredExamples[bestIdx], nil
 }
 
 type TrainingData struct {

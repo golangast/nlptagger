@@ -27,7 +27,7 @@ func LoadTrainingData(path string) ([]TrainingExample, error) {
 // Train function to orchestrate the training of the BERT model.
 func Train(config BertConfig, data []TrainingExample, epochs int, learningRate float64) (*BertModel, error) {
 	// 1. Initialize the Model
-	model := NewBertModel(config)
+	model := NewBertModel(config, data)
 
 	// 2. Initialize the Optimizer
 	optimizer := NewAdam(model.Parameters(), learningRate)

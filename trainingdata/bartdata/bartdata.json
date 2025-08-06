@@ -1,32 +1,56 @@
 {
-  "sentences": [
-    {
-      "Input": "generate a webserver named jim and handler named jill",
-      "Output": "create webserver jim with handler jill"
-    },
-    {
-      "Input": "create a database named accounting",
-      "Output": "created database accounting"
-    },
-    {
-      "Input": "generate a rest api named userapi",
-      "Output": "create rest api userapi"
-    },
-    {
-      "Input": "scaffold a react component named user",
-      "Output": "created react component user"
-    },
-    {
-      "Input": "generate a webserver",
-      "Output": "generate a webserver"
-    },
-    {
-      "Input": "generate a webserver",
-      "Output": "generating a webserver"
-    },
-    {
-      "Input": "generate a webserver",
-      "Output": "generate a webserver"
-    }
-  ]
+    "sentences": [
+        {
+            "input": "generate a webserver named jim and handler named jill",
+            "output": "create webserver jim with handler jill"
+        },
+        {
+            "input": "create a database named accounting",
+            "output": "created database accounting"
+        },
+        {
+            "input": "generate a rest api named userapi",
+            "output": "create rest api userapi"
+        },
+        {
+            "input": "scaffold a react component named user",
+            "output": "created react component user"
+        },
+        {
+            "input": "add a new route to the webserver",
+            "output": "route added to webserver"
+        },
+        {
+            "input": "delete the user table from the database",
+            "output": "user table deleted from database"
+        },
+        {
+            "input": "update the handler to return JSON",
+            "output": "handler updated to return JSON"
+        },
+        {
+            "input": "list all available APIs",
+            "output": "listing all available APIs"
+        },
+        {
+            "input": "restart the webserver",
+            "output": "webserver restarted"
+        },
+        {
+            "input": "deploy the application to production",
+            "output": "application deployed to production"
+        },
+        {
+            "input": "generate a database",
+            "output": "create database"
+        },
+        {
+            "input": "generate a database named sales",
+            "output": "create database sales"
+        },
+        {
+            "input": "create a database called orders",
+            "output": "create database orders"
+        }
+    ]
 }
