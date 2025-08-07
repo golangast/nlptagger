@@ -89,7 +89,7 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 			numBatches++
 		}
 		avgLoss := totalLoss / float64(numBatches)
-		log.Printf("Epoch %d/%d, Average Loss: %f\n", epoch+1, epochs, avgLoss)
+		fmt.Printf("Epoch %d/%d, Average Loss: %f\n", epoch+1, epochs, avgLoss)
 	}
 
 	log.Println("BART model training finished.")
@@ -158,9 +158,12 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 		return 0, fmt.Errorf("loss gradient calculation failed: %w", err)
 	}
 
+	// Initialize the gradient of the output logits with the calculated loss gradient.
+	outputLogits.Grad = outputGradient
+
 	// Start the backward pass from the output tensor. This will propagate gradients
 	// through the entire computation graph.
-	outputLogits.Backward(outputGradient)
+	outputLogits.Backward(outputLogits.Grad)
 
 	// 5. Optimizer Step
 	optimizer.Step()

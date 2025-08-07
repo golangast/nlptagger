@@ -873,11 +873,9 @@ func (op *addWithBroadcastOperation) Forward(inputs ...*Tensor) (*Tensor, error)
 // grad is the gradient from the output (dLoss/dOutput).
 func (op *addWithBroadcastOperation) Backward(grad *Tensor) error {
 	if grad == nil || grad.Data == nil {
-		// No gradient to propagate
 		return nil
 	}
 
-	// Ensure gradients are initialized for inputs that require them
 	if op.input1.requiresGrad {
 		if op.input1.Grad == nil {
 			op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.input1.Shape, false)
@@ -889,301 +887,73 @@ func (op *addWithBroadcastOperation) Backward(grad *Tensor) error {
 		}
 	}
 
-	// Calculate strides for input and output shapes
-	gradStride := calculateStrides(grad.Shape) // Gradient has the shape of the output
-	shape1Stride := calculateStrides(op.shape1)
-	shape2Stride := calculateStrides(op.shape2)
+	gradStride := calculateStrides(grad.Shape)
+	input1Stride := calculateStrides(op.shape1)
+	input2Stride := calculateStrides(op.shape2)
 
-	// Iterate over the flattened index of the gradient tensor
-	gradIndices := make([]int, len(grad.Shape)) // Reuse slice
-	for i := 0; i < len(grad.Data); i++ {
-		// Calculate multi-dimensional indices for the current flattened index 'i' in the gradient tensor
-		tempFlatIndex := i
-		for j := 0; j < len(grad.Shape); j++ {
-			if gradStride[j] > 0 {
-				gradIndices[j] = tempFlatIndex / gradStride[j]
-				tempFlatIndex %= gradStride[j]
-			} else {
-				gradIndices[j] = 0
+	// For input1
+	if op.input1.requiresGrad {
+		for i := 0; i < len(grad.Data); i++ {
+			input1FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape1, i, gradStride, input1Stride)
+			if err != nil {
+				return fmt.Errorf("error mapping index for input1 gradient: %w", err)
 			}
-		}
-
-		// Map gradient indices back to input indices based on broadcasting rules
-		// and sum gradients over broadcasted dimensions.
-
-		// For input1
-		if op.input1.requiresGrad {
-			input1Indices := make([]int, len(op.shape1)) // Reuse slice
-
-			// Iterate from the rightmost dimension
-			for j := 1; j <= len(grad.Shape); j++ {
-				input1DimIndex := len(op.shape1) - j
-
-				if input1DimIndex >= 0 {
-					if op.shape1[input1DimIndex] == 1 {
-						// This dimension was broadcasted for input1.
-						// The corresponding index in input1 is always 0.
-						input1Indices[input1DimIndex] = 0
-
-						// Initialize temporary gradient tensors for inputs
-						tempGrad1 := NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
-						tempGrad2 := NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
-
-						// Iterate over the flattened index of the output gradient tensor
-						outputGradientFlatIndex := 0
-						outputGradientIndices := make([]int, len(grad.Shape))
-						for outputGradientFlatIndex < len(grad.Data) {
-							// Calculate multi-dimensional indices for the current flattened index
-							tempFlatIndex := outputGradientFlatIndex
-							for j := 0; j < len(grad.Shape); j++ {
-								if gradStride[j] > 0 {
-									outputGradientIndices[j] = tempFlatIndex / gradStride[j]
-									tempFlatIndex %= gradStride[j]
-								} else {
-									outputGradientIndices[j] = 0
-								}
-							}
-
-							// Map output gradient indices back to input1 indices
-							input1IndicesMap := make([]int, len(op.shape1)) // Use a new slice for mapping
-							input1FlatIndex := 0
-							// Iterate from the rightmost dimension
-							for j := 1; j <= len(grad.Shape); j++ {
-								gradDimIndex := len(grad.Shape) - j
-								input1DimIndex := len(op.shape1) - j
-
-								if input1DimIndex >= 0 {
-									if op.shape1[input1DimIndex] == 1 {
-										// Dimension was broadcasted in input1, corresponding index in input1 is 0
-										input1IndicesMap[input1DimIndex] = 0
-									} else {
-										// Dimension was not broadcasted, index matches output gradient index
-										input1IndicesMap[input1DimIndex] = outputGradientIndices[gradDimIndex]
-									}
-								}
-							}
-							// Calculate flat index in input1's gradient tensor
-							input1FlatIndex = 0
-							for j := 0; j < len(input1IndicesMap); j++ {
-								if j >= len(shape1Stride) {
-									// Should not happen
-									panic("internal error: input1IndicesMap length exceeds shape1Stride length")
-								}
-								input1FlatIndex += input1IndicesMap[j] * shape1Stride[j]
-							}
-
-							// Add the output gradient element to the corresponding input1 gradient element
-							if op.input1.requiresGrad {
-								if input1FlatIndex < 0 || input1FlatIndex >= len(tempGrad1.Data) {
-									panic(fmt.Sprintf("internal error: input1 gradient flat index out of bounds: %d/%d", input1FlatIndex, len(tempGrad1.Data)))
-								}
-								tempGrad1.Data[input1FlatIndex] += grad.Data[outputGradientFlatIndex]
-							}
-
-							// Map output gradient indices back to input2 indices
-							input2IndicesMap := make([]int, len(op.shape2)) // Use a new slice for mapping
-							input2FlatIndex := 0
-							// Iterate from the rightmost dimension
-							for j := 1; j <= len(grad.Shape); j++ {
-								gradDimIndex := len(grad.Shape) - j
-								input2DimIndex := len(op.shape2) - j
-
-								if input2DimIndex >= 0 {
-									if op.shape2[input2DimIndex] == 1 {
-										// Dimension was broadcasted in input2, corresponding index in input2 is 0
-										input2IndicesMap[input2DimIndex] = 0
-									} else {
-										// Dimension was not broadcasted, index matches output gradient index
-										input2IndicesMap[input2DimIndex] = outputGradientIndices[gradDimIndex]
-									}
-								}
-							}
-							// Calculate flat index in input2's gradient tensor
-							input2FlatIndex = 0
-							for j := 0; j < len(input2IndicesMap); j++ {
-								if j >= len(shape2Stride) {
-									// Should not happen
-									panic("internal error: input2IndicesMap length exceeds shape2Stride length")
-								}
-								input2FlatIndex += input2IndicesMap[j] * shape2Stride[j]
-							}
-
-							// Add the output gradient element to the corresponding input2 gradient element
-							if op.input2.requiresGrad {
-								if input2FlatIndex < 0 || input2FlatIndex >= len(tempGrad2.Data) {
-									panic(fmt.Sprintf("internal error: input2 gradient flat index out of bounds: %d/%d", input2FlatIndex, len(tempGrad2.Data)))
-								}
-								tempGrad2.Data[input2FlatIndex] += grad.Data[outputGradientFlatIndex]
-							}
-
-							outputGradientFlatIndex++ // Move to the next element in the output gradient
-						}
-
-						// Add the accumulated gradients from the temporary tensors to the input tensors' gradients
-						if op.input1.requiresGrad {
-							if op.input1.Grad == nil {
-								op.input1.Grad = tempGrad1 // Assign if nil
-							} else {
-								// Add accumulated gradients (element-wise)
-								for i := range op.input1.Grad.Data {
-									op.input1.Grad.Data[i] += tempGrad1.Data[i]
-								}
-							}
-						}
-
-						if op.input2.requiresGrad {
-							if op.input2.Grad == nil {
-								op.input2.Grad = tempGrad2 // Assign if nil
-							} else {
-								// Add accumulated gradients (element-wise)
-								for i := range op.input2.Grad.Data {
-									op.input2.Grad.Data[i] += tempGrad2.Data[i]
-								}
-							}
-						}
-					}
-					return nil // Exit the Backward method after processing
-				}
-			}
-
-			// If the current dimension was not broadcasted for input1, the index matches the output gradient index.
-			// Add the gradient element to the corresponding input1 gradient element.
-			if op.input1.requiresGrad {
-				if op.input1.Grad == nil {
-					op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
-				}
-				// Need to map gradIndices to input1.Grad indices
-				// Calculate flat index in input1.Grad
-				input1FlatIndex := 0
-				for j := 0; j < len(gradIndices); j++ { // Iterate through gradIndices
-					input1DimIndex := len(op.shape1) - (len(grad.Shape) - j) // Corresponding dimension in input1
-					if input1DimIndex >= 0 {
-						if op.shape1[input1DimIndex] == 1 {
-							// This dimension was broadcasted in input1, index is always 0
-							// This case should be handled by the summation logic above
-						} else {
-							// Dimension was not broadcasted, index matches grad index
-							input1FlatIndex += gradIndices[j] * shape1Stride[input1DimIndex] // Assuming strides align
-						}
-					}
-					// If input1DimIndex < 0, this dimension was added by broadcasting, no corresponding input1 index.
-				}
-
-				// This direct index mapping is incorrect when broadcasting happens in earlier dimensions.
-				// The correct approach involves iterating through the output gradient and mapping back,
-				// or iterating through the input gradient and finding all corresponding output gradient elements.
-
-				// Let's stick with the approach of iterating over the output gradient and summing.
-				// The previous nested loop structure was closer to what's needed for summation.
-
-				// Reverting to the summation logic outline:
-
-				// We need to iterate through the gradient from the output
-				// and add its value to the correct position in the gradient
-				// of the input tensor, considering broadcasting.
-
-				// This requires a helper function to map an index in the output
-				// gradient tensor back to an index in the input tensor's gradient tensor,
-				// handling the summation over broadcasted dimensions.
-
-				// Let's refine the summation logic.
-				// For each element in the output gradient:
-				// 1. Get its multi-dimensional index.
-				// 2. Map this index back to the multi-dimensional index of input1 and input2, considering broadcasting.
-				//    If an input dimension was 1 (broadcasted), the input index is always 0 for that dimension.
-				//    If an input dimension matched the output dimension, the input index is the same as the output index.
-				// 3. Calculate the flattened index for the input gradient based on the mapped multi-dimensional index and the input's strides.
-				// 4. Add the output gradient element to the flattened index in the input gradient's data.
-
-				// This is what the manual nested loop implementation in the Forward method was doing,
-				// but applied to the gradient instead of the data.
-
-				// Let's implement a helper function for mapping indices with broadcasting.
-
-				// helper function: mapOutputIndexToInputIndex
-				// takes: outputShape, inputShape, outputIndex (flattened), outputStride, inputStride
-				// returns: inputIndex (flattened)
-
-				// func mapOutputIndexToInputIndex(outputShape, inputShape, outputIndex int, outputStride, inputStride []int) (int, error) {
-				// 	outputIndices := make([]int, len(outputShape))
-				// 	// Calculate multi-dimensional output indices
-				// 	tempFlatIndex := outputIndex
-				// 	for j := 0; j < len(outputShape); j++ {
-				// 		if outputStride[j] > 0 {
-				// 			outputIndices[j] = tempFlatIndex / outputStride[j]
-				// 			tempFlatIndex %= outputStride[j]
-				// 		} else {
-				// 			outputIndices[j] = 0
-				// 		}
-				// 	}
-
-				// 	inputIndices := make([]int, len(inputShape))
-				// 	// Map output indices back to input indices
-				// 	for j := 1; j <= len(outputShape); j++ {
-				// 		outputDimIndex := len(outputShape) - j
-				// 		inputDimIndex := len(inputShape) - j
-
-				// 		if inputDimIndex >= 0 {
-				// 			if inputShape[inputDimIndex] == 1 {
-				// 				inputIndices[inputDimIndex] = 0 // Broadcasted dimension
-				// 			} else {
-				// 				inputIndices[inputDimIndex] = outputIndices[outputDimIndex] // Matching dimension
-				// 			}
-				// 		}
-				// 	}
-
-				// 	// Calculate flattened input index
-				// 	inputFlatIndex := 0
-				// 	for j := 0; j < len(inputIndices); j++ {
-				// 		if j >= len(inputStride) {
-				// 			return 0, errors.New("internal error: inputIndices length exceeds inputStride length")
-				// 		}
-				// 		inputFlatIndex += inputIndices[j] * inputStride[j]
-				// 	}
-				// 	return inputFlatIndex, nil
-				// }
-
-				// Now, iterate through the output gradient and use this helper function:
-
-				// For input1
-				// if op.input1.requiresGrad {
-				// 	if op.input1.Grad == nil {
-				// 		op.input1.Grad = NewTensor(make([]float64, len(op.input1.Data)), op.shape1, false)
-				// 	}
-				// 	input1Stride := calculateStrides(op.shape1)
-				// 	for i := 0; i < len(grad.Data); i++ {
-				// 		input1FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape1, i, gradStride, input1Stride)
-				// 		if err != nil {
-				// 			panic(fmt.Sprintf("error mapping index for input1 gradient: %v", err))
-				// 		}
-				// 		op.input1.Grad.Data[input1FlatIndex] += grad.Data[i]
-				// 	}
-				// }
-
-				// // For input2
-				// if op.input2.requiresGrad {
-				// 	if op.input2.Grad == nil {
-				// 		op.input2.Grad = NewTensor(make([]float64, len(op.input2.Data)), op.shape2, false)
-				// 	}
-				// 	input2Stride := calculateStrides(op.shape2)
-				// 	for i := 0; i < len(grad.Data); i++ {
-				// 		input2FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape2, i, gradStride, input2Stride)
-				// 		if err != nil {
-				// 			panic(fmt.Sprintf("error mapping index for input2 gradient: %v", err))
-				// 		}
-				// 		op.input2.Grad.Data[input2FlatIndex] += grad.Data[i]
-				// 	}
-				// }
-
-				// The above approach with mapOutputIndexToInputIndex seems more correct for handling summation.
-				// I will provide this implementation for the Backward method.
-			}
+			op.input1.Grad.Data[input1FlatIndex] += grad.Data[i]
 		}
 	}
+
+	// For input2
+	if op.input2.requiresGrad {
+		for i := 0; i < len(grad.Data); i++ {
+			input2FlatIndex, err := mapOutputIndexToInputIndex(grad.Shape, op.shape2, i, gradStride, input2Stride)
+			if err != nil {
+				return fmt.Errorf("error mapping index for input2 gradient: %w", err)
+			}
+			op.input2.Grad.Data[input2FlatIndex] += grad.Data[i]
+		}
+	}
+
 	return nil
 }
 
-// AddWithBroadcast performs element-wise addition with broadcasting.
+// mapOutputIndexToInputIndex maps a flattened output tensor index to a flattened input tensor index,
+// considering broadcasting rules. It sums gradients over broadcasted dimensions.
+func mapOutputIndexToInputIndex(outputShape, inputShape []int, outputFlatIndex int, outputStride, inputStride []int) (int, error) {
+	outputIndices := make([]int, len(outputShape))
+	tempFlatIndex := outputFlatIndex
+	for j := 0; j < len(outputShape); j++ {
+		if outputStride[j] > 0 {
+			outputIndices[j] = tempFlatIndex / outputStride[j]
+			tempFlatIndex %= outputStride[j]
+		} else {
+			outputIndices[j] = 0
+		}
+	}
+
+	inputIndices := make([]int, len(inputShape))
+	for j := 1; j <= len(outputShape); j++ {
+		outputDimIndex := len(outputShape) - j
+		inputDimIndex := len(inputShape) - j
+
+		if inputDimIndex >= 0 {
+			if inputShape[inputDimIndex] == 1 {
+				inputIndices[inputDimIndex] = 0 // Broadcasted dimension
+			} else {
+				inputIndices[inputDimIndex] = outputIndices[outputDimIndex] // Matching dimension
+			}
+		}
+	}
+
+	inputFlatIndex := 0
+	for j := 0; j < len(inputIndices); j++ {
+		if j >= len(inputStride) {
+			return 0, errors.New("internal error: inputIndices length exceeds inputStride length")
+		}
+		inputFlatIndex += inputIndices[j] * inputStride[j]
+	}
+	return inputFlatIndex, nil
+}
+
 func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
 	// Determine the output shape based on broadcasting rules
 	outputShape, err := calculateBroadcastShape(t.Shape, other.Shape)

@@ -167,7 +167,6 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 
 	generatedSummary := strings.Join(summaryWords, " ") // Assuming "strings" package imported
 
-	// Print or return the generated summary
 	return generatedSummary, nil
 }
 

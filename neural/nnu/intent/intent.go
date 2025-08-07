@@ -203,7 +203,7 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 					extractedObject = "webserver"
 				}
 				if intent == "create a file" {
-					commands.Createfile()
+					commands.Createfile([]string{})
 				}
 				continue // Skip other checks if a phrase is matched
 			} else {
@@ -232,12 +232,12 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 			}
 			intent = fmt.Sprintf("%s the %s", actionMap[extractedAction], extractedObject) // Example: create the file
 			if intent == "create the file" {
-				commands.Createfile()
+				commands.Createfile([]string{})
 			}
 		} else if extractedAction != "" {
 			intent = fmt.Sprintf("%s", actionMap[extractedAction]) // Example: create
 			if intent == "create" {
-				commands.Createfile()
+				commands.Createfile([]string{})
 			}
 
 			verbToken = token

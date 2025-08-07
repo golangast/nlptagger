@@ -219,10 +219,6 @@ type SimplifiedBARTModel struct {
 	MaxSequenceLength   int
 	Vocabulary          *Vocabulary
 }
-// In bartsimple/simplified_bart_model.go (or similar)
-func (m *SimplifiedBARTModel) Generate(input string) (string, error) {
-    return fmt.Sprintf("[BART reply for '%s']", input), nil
-}
 // NewSimplifiedBARTModel creates a new simplified BART model.
 func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimModel, numHeads, maxSequenceLength int) (*SimplifiedBARTModel, error) {
 	vocabSize := len(vocabulary.WordToToken)

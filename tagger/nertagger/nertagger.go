@@ -54,11 +54,40 @@ var nerTags = map[string]string{
 	`\b\d+\b`: "NUMBER", // Matches one or more digits
 }
 
+var nerTagToID map[string]int
+
+func init() {
+	nerTagToID = make(map[string]int)
+	id := 0
+	for _, tagValue := range nerTags {
+		if _, ok := nerTagToID[tagValue]; !ok {
+			nerTagToID[tagValue] = id
+			id++
+		}
+	}
+}
+
+func NerTagMap() map[string]string {
+	return nerTags
+}
+
+func NerTagToIDMap() map[string]int {
+	return nerTagToID
+}
+
+func NerTags() int {
+	return len(nerTagToID)
+}
+
 // take in text and return a map of tokens to NER tags
 func Nertagger(t tag.Tag) tag.Tag {
+	if len(t.Tokens) == 0 {
+		return t
+	}
+	t.NerTag = make([]string, len(t.Tokens))
 	for i, token := range t.Tokens {
 		// Force "Create" to be "COMMAND"
-		if t.Tokens[0] == "Create" {
+		if i == 0 && token == "Create" && len(t.NerTag) > 0 {
 			t.NerTag[0] = "COMMAND"
 		}
 		for pattern, tag := range nerTags {

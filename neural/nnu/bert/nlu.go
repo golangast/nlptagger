@@ -16,20 +16,11 @@ import (
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
-type BartSimpleModel struct {
-    // Example field: you can add more fields as needed for your real model
-    Name string
-}
+
 
 // Generate produces a dummy summary/response for the input.
 // Replace this with your actual BART inference logic if available.
-func (m *BartSimpleModel) Generate(input string) (string, error) {
-    if input == "" {
-        return "", fmt.Errorf("input is empty")
-    }
-    // Dummy implementation: just returns a formatted string
-    return fmt.Sprintf("[BART reply for '%s']", input), nil
-}
+
 
 // Tensor is a multi-dimensional matrix that supports automatic differentiation.
 type Tensor struct {
@@ -430,6 +421,7 @@ type BertConfig struct {
 	HiddenDropoutProb       float64
 	AttentionProbsDropoutProb float64
 	NumLabels                 int // Number of labels for classification
+	Vocabulary                *bartsimple.Vocabulary
 }
 
 // --- Full BERT Model Components ---
@@ -511,7 +503,7 @@ type BertModel struct {
 	TrainingData       []TrainingExample
 }
 
-func NewBertModel(config BertConfig, trainingData []TrainingExample) *BertModel {
+func NewBertModel(config BertConfig, trainingData []TrainingExample, word2vecEmbeddings map[string][]float64) *BertModel {
 	initializerStdDev := 0.02
 
 	// Determine the number of labels from the training data
@@ -524,15 +516,18 @@ func NewBertModel(config BertConfig, trainingData []TrainingExample) *BertModel 
 	config.NumLabels = numLabels
 
 	return &BertModel{
-		Embeddings:         NewBertEmbeddings(config, initializerStdDev),
+		Embeddings:         NewBertEmbeddings(config, initializerStdDev, nil),
 		Encoder:            NewBertEncoder(config, initializerStdDev),
 		Pooler:             NewBertPooler(config, initializerStdDev),
 		ClassificationHead: NewLinear(config.HiddenSize, config.NumLabels, initializerStdDev),
 	}
 }
 
-func (m *BertModel) Forward(inputIDs, tokenTypeIDs *Tensor) (*Tensor, error) {
-	embeddingOutput := m.Embeddings.Forward(inputIDs, tokenTypeIDs)
+func (m *BertModel) Forward(inputIDs, tokenTypeIDs, posTagIDs, nerTagIDs *Tensor) (*Tensor, error) {
+    if inputIDs == nil || tokenTypeIDs == nil || posTagIDs == nil || nerTagIDs == nil {
+		return nil, fmt.Errorf("BertModel.Forward: input tensors cannot be nil")
+	}
+	embeddingOutput := m.Embeddings.Forward(inputIDs, tokenTypeIDs, posTagIDs, nerTagIDs)
 	sequenceOutput, err := m.Encoder.Forward(embeddingOutput)
 	if err != nil {
 		return nil, err
@@ -685,9 +680,12 @@ func createIntentMap(trainingData []TrainingExample) map[int]string {
 		// Fallback for entity
 		if entity == "" && len(words) > 1 {
 			// If no specific entity keyword is found, use the last word as a guess
-			entity = strings.ToUpper(words[len(words)-1])
+			lastWord := words[len(words)-1]
+			if lastWord != "named" {
+				entity = strings.ToUpper(lastWord)
+			}
 		}
-		
+
 		if action != "" && entity != "" {
 			intent := fmt.Sprintf("%s_%s", action, entity)
 			intentMap[example.Label] = intent
@@ -720,7 +718,7 @@ func (m *BertModel) BertProcessCommand(
     tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false) // All zeros for a single sentence
 
     // 3. Perform a forward pass with BERT
-    logits, err := m.Forward(inputTensor, tokenTypeIDs)
+    logits, err := m.Forward(inputTensor, tokenTypeIDs, NewTensor(nil, []int{1, 1}, false), NewTensor(nil, []int{1, 1}, false))
     if err != nil {
         return "", "", err
     }
@@ -746,55 +744,18 @@ func (m *BertModel) BertProcessCommand(
         intent = val
     }
 
-    // 6. Use BERT to search for a relevant example
-    retrieved, err := m.FindMostSimilarExample(command, tokenizer, intent)
-    if err != nil {
-        // It's okay if no similar example is found, just continue
-    }
-
     // 7. Use BART to summarize or give context for the retrieved example
     bartReply := ""
     if bartModel != nil {
-        bartInput := fmt.Sprintf("Relevant example: %s", retrieved.Text)
-        bartReply, err = bartModel.Generate(bartInput)
+        bartReply, err = bartModel.BartProcessCommand(command)
         if err != nil {
-            bartReply = "BART generation failed: " + err.Error()
+            return intent, "", fmt.Errorf("BART generation failed: %w", err)
         }
     } else {
         bartReply = "BART model not loaded."
     }
 
-    // 8. Get user feedback
-    fmt.Printf("Predicted Intent: %s\n", intent)
-    fmt.Print("Is this correct? (y/n): ")
-    var response string
-    fmt.Scanln(&response)
-
-    if strings.ToLower(response) == "n" {
-        fmt.Print("Enter the correct intent: ")
-        var correctIntent string
-        fmt.Scanln(&correctIntent)
-        intent = correctIntent
-
-        // Add the new training data
-        embedding, err := m.getEmbedding(command, tokenizer)
-        if err != nil {
-            return intent, bartReply, fmt.Errorf("failed to get embedding: %v", err)
-        }
-
-        newExample := TrainingExample{
-            Text:      command,
-            Label:     len(trainingData), // Simple way to assign a new label
-            Embedding: embedding, // Placeholder
-        }
-        trainingData = append(trainingData, newExample)
-
-        // Save the updated training data
-        err = saveTrainingData(trainingData, "/home/zendrulat/code/nlptagger/trainingdata/bertdata/bert.json")
-        if err != nil {
-            return intent, bartReply, fmt.Errorf("failed to save training data: %v", err)
-        }
-    }
+    
 
     return intent, bartReply, nil
 }
@@ -810,7 +771,7 @@ func (m *BertModel) getEmbedding(input string, tokenizer *bartsimple.Tokenizer) 
     }
     tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
 
-    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs)
+    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs, NewTensor(nil, []int{1, 1}, false), NewTensor(nil, []int{1, 1}, false))
     sequenceOutput, err := m.Encoder.Forward(embeddingOutput)
     if err != nil {
         return nil, err
@@ -849,7 +810,7 @@ func (m *BertModel) FindMostSimilarExample(input string, tokenizer *bartsimple.T
     tokenTypeIDs := NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
 
     // 2. Get embedding for input (use pooled output)
-    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs)
+    embeddingOutput := m.Embeddings.Forward(inputTensor, tokenTypeIDs, NewTensor(nil, []int{1, 1}, false), NewTensor(nil, []int{1, 1}, false))
     sequenceOutput, err := m.Encoder.Forward(embeddingOutput)
     if err != nil {
         return TrainingExample{}, err

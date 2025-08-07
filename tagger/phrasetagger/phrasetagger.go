@@ -79,7 +79,7 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 				t.NerTag[i+2] == "ACTION" && t.PosTag[i+2] == "NN" {
 				t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
 			}
-		case t.Tokens[i] == "generate" && t.Tokens[i+1] == "a" && t.Tokens[i+2] == "handler" && t.Tokens[i+3] == "named" && t.NerTag[i+4] == "OBJECT_NAME":
+		case t.Tokens[i] == "generate" && i+4 < len(tokens) && t.Tokens[i+1] == "a" && t.Tokens[i+2] == "handler" && t.Tokens[i+3] == "named" && t.NerTag[i+4] == "OBJECT_NAME":
 			// Check for "generate a handler named <object_name>"
 			t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
 		case t.PosTag[i] == "COMMAND_VERB" && i < len(tokens)-5 && t.PosTag[i+1] == "DET" && t.PosTag[i+2] == "NN" && tokens[i+3] == "named" && t.PosTag[i+4] == "NN":

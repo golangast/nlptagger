@@ -61,6 +61,31 @@ var posTags = map[string]string{
 	`\b(?:\w+@\w+\.\w+)\b`: "EMAIL",
 }
 
+var posTagToID map[string]int
+
+func init() {
+	posTagToID = make(map[string]int)
+	id := 0
+	for _, tagValue := range posTags {
+		if _, ok := posTagToID[tagValue]; !ok {
+			posTagToID[tagValue] = id
+			id++
+		}
+	}
+}
+
+func PosTagMap() map[string]string {
+	return posTags
+}
+
+func PosTagToIDMap() map[string]int {
+	return posTagToID
+}
+
+func PosTags() int {
+	return len(posTagToID)
+}
+
 // take in text and return a map of tokens to NER tags
 func Postagger(text string) tag.Tag {
 

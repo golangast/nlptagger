@@ -394,12 +394,12 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 		wordIndices[i] = i
 	}
 
-	var totalLoss float64
-	var iterationCount int
+	// var totalLoss float64
+	// var iterationCount int
 
 	// Main training loop
 	for i := 0; i < sw2v.Epochs; i++ {
-		totalLoss = 0
+		//totalLoss = 0
 		var learningRate = sw2v.LearningRate - sw2v.LearningRate*0.99*float64(i)/float64(sw2v.Epochs)
 
 		for _, sentence := range trainingData {
@@ -481,6 +481,6 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 			}
 		}
 
-		fmt.Printf("Epoch %d, Loss: %f\n", i, totalLoss/float64(iterationCount+1))
+		//fmt.Printf("Epoch %d, Loss: %f\n", i, totalLoss/float64(iterationCount+1))
 	}
 }

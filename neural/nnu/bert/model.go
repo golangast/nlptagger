@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+
+	"github.com/golangast/nlptagger/tagger/nertagger"
+	"github.com/golangast/nlptagger/tagger/postagger"
 )
 
 // Embedding layer for token embeddings.
@@ -22,8 +25,16 @@ func NewEmbedding(numEmbeddings, embeddingDim int, initializerStdDev float64) *E
 
 // Forward pass for Embedding layer (lookup).
 func (e *Embedding) Forward(inputIDs *Tensor) *Tensor {
+	if e.Weight == nil {
+		panic("Embedding.Forward: e.Weight is nil!")
+	}
+	if len(e.Weight.Shape) < 2 {
+		panic(fmt.Sprintf("Embedding.Forward: e.Weight.Shape is too short: %v", e.Weight.Shape))
+	}
 	batchSize, seqLength := inputIDs.Shape[0], inputIDs.Shape[1]
 	embeddingDim := e.Weight.Shape[1]
+
+
 	outputData := make([]float64, batchSize*seqLength*embeddingDim)
 
 	for i := 0; i < batchSize; i++ {
@@ -64,6 +75,8 @@ type BertEmbeddings struct {
 	WordEmbeddings        *Embedding
 	PositionEmbeddings    *Embedding
 	TokenTypeEmbeddings   *Embedding
+	PosTagEmbeddings      *Embedding
+	NerTagEmbeddings      *Embedding
 	LayerNorm             *LayerNorm
 	Dropout               float64
 	PositionIDs           *Tensor
@@ -71,11 +84,22 @@ type BertEmbeddings struct {
 }
 
 // NewBertEmbeddings creates a new BertEmbeddings layer.
-func NewBertEmbeddings(config BertConfig, initializerStdDev float64) *BertEmbeddings {
+func NewBertEmbeddings(config BertConfig, initializerStdDev float64, word2vecEmbeddings map[string][]float64) *BertEmbeddings {
 	wordEmbeddings := NewEmbedding(config.VocabSize, config.HiddenSize, initializerStdDev)
+	if word2vecEmbeddings != nil {
+		// Initialize with Word2Vec embeddings
+		for word, i := range config.Vocabulary.WordToToken {
+			if vec, ok := word2vecEmbeddings[word]; ok {
+				copy(wordEmbeddings.Weight.Data[i*config.HiddenSize:(i+1)*config.HiddenSize], vec)
+			}
+		}
+	}
 	positionEmbeddings := NewEmbedding(config.MaxPositionEmbeddings, config.HiddenSize, initializerStdDev)
 	tokenTypeEmbeddings := NewEmbedding(config.TypeVocabSize, config.HiddenSize, initializerStdDev)
+	posTagEmbeddings := NewEmbedding(postagger.PosTags(), config.HiddenSize, initializerStdDev)
+	nerTagEmbeddings := NewEmbedding(nertagger.NerTags(), config.HiddenSize, initializerStdDev)
 	layerNorm := NewLayerNorm(config.HiddenSize, config.LayerNormEps)
+
 
 	// Create position IDs tensor
 	posData := make([]float64, config.MaxPositionEmbeddings)
@@ -88,6 +112,8 @@ func NewBertEmbeddings(config BertConfig, initializerStdDev float64) *BertEmbedd
 		WordEmbeddings:        wordEmbeddings,
 		PositionEmbeddings:    positionEmbeddings,
 		TokenTypeEmbeddings:   tokenTypeEmbeddings,
+		PosTagEmbeddings:      posTagEmbeddings,
+		NerTagEmbeddings:      nerTagEmbeddings,
 		LayerNorm:             layerNorm,
 		Dropout:               config.HiddenDropoutProb,
 		PositionIDs:           positionIDs,
@@ -95,15 +121,18 @@ func NewBertEmbeddings(config BertConfig, initializerStdDev float64) *BertEmbedd
 }
 
 // Forward pass for BertEmbeddings.
-func (e *BertEmbeddings) Forward(inputIDs, tokenTypeIDs *Tensor) *Tensor {
+func (e *BertEmbeddings) Forward(inputIDs, tokenTypeIDs, posTagIDs, nerTagIDs *Tensor) *Tensor {
 	seqLength := inputIDs.Shape[1]
+
 	positionIDs := e.PositionIDs.slice(0, seqLength)
 
 	words := e.WordEmbeddings.Forward(inputIDs)
 	positions := e.PositionEmbeddings.Forward(positionIDs)
 	types := e.TokenTypeEmbeddings.Forward(tokenTypeIDs)
+	posTags := e.PosTagEmbeddings.Forward(posTagIDs)
+	nerTags := e.NerTagEmbeddings.Forward(nerTagIDs)
 
-	embeddings := words.Add(positions).Add(types)
+	embeddings := words.Add(positions).Add(types).Add(posTags).Add(nerTags)
 	normalizedEmbeddings := e.LayerNorm.Forward(embeddings)
 
 	return normalizedEmbeddings
@@ -525,7 +554,6 @@ func (ln *LayerNorm) Forward(x *Tensor) *Tensor {
 					}
 
 					gradVariance := gradInvStdDev * -0.5 * math.Pow(invStdDev, 3)
-
 					gradXCenteredFromVar := make([]float64, lastDim)
 					for j := 0; j < lastDim; j++ {
 						gradXCenteredFromVar[j] = gradVariance * (2.0 / float64(lastDim)) * (vectorSlice[j] - mean)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
-	"time"
 )
 
 // MatMulIterator is an iterator for the result tensor of a matrix multiplication.
@@ -208,7 +207,7 @@ func matMul2DViewWithUnroll(resultView, tView, otherView []float64, M, K, N int)
 }
 
 func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
-	start := time.Now()
+	// start := time.Now()
 	if len(t.Shape) == 3 && len(other.Shape) == 2 {
 		batchSize := t.Shape[0] // Get the batch size
 		rowsA, colsA := t.Shape[1], t.Shape[2]
@@ -268,8 +267,8 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 
 		// Wait for all goroutines to finish their work.
 		wg.Wait()
-		elapsed := time.Since(start)
-		fmt.Println("loop took ", elapsed)
+		// elapsed := time.Since(start)
+		// fmt.Println("loop took ", elapsed)
 		return result, nil
 		// } else if len(t.Shape) == 4 && len(other.Shape) == 4 {
 	} else if len(t.Shape) == 4 && len(other.Shape) == 4 {
@@ -324,8 +323,8 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		close(workChan)
 		wg.Wait()
 
-		elapsed := time.Since(start)
-		fmt.Printf("4D x 4D MatMul (with goroutines) took %s\n", elapsed)
+		// elapsed := time.Since(start)
+		// fmt.Printf("4D x 4D MatMul (with goroutines) took %s\n", elapsed)
 		return result, nil
 	} else if len(t.Shape) == 2 && len(other.Shape) == 2 {
 		
@@ -334,8 +333,8 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 		// We'll call MatMulFromScratch to perform the calculation immediately.
 		return t.MatMulFromScratch(other)
 	}
-	elapsed := time.Since(start)
-	fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
+	// elapsed := time.Since(start)
+	// fmt.Printf("2D x 2D MatMul (no goroutines) took %s\n", elapsed)
 	return nil, fmt.Errorf("unsupported tensor shapes for matrix multiplication: %v and %v", t.Shape, other.Shape)
 }
 
