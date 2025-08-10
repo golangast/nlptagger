@@ -9,6 +9,7 @@ import (
 	"log"
 
 	"github.com/golangast/nlptagger/neural/nnu/bartsimple"
+	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 	"github.com/golangast/nlptagger/tagger"
 	"github.com/golangast/nlptagger/tagger/nertagger"
 	"github.com/golangast/nlptagger/tagger/postagger"
@@ -113,35 +114,17 @@ func Train(config BertConfig, data []TrainingExample, epochs int, learningRate f
 }
 
 // SetupModel loads a model from modelPath or creates a new one if loading fails.
-func SetupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads, maxLen int) (*bartsimple.SimplifiedBARTModel, error) {
-	// Attempt to load the model
-	model, err := bartsimple.LoadSimplifiedBARTModelFromGOB(modelPath)
-	if err == nil && model != nil {
-		// Check if the loaded model's vocabulary size matches the current vocabulary.
-		// This is a critical check to prevent panics from using an old model with a new, larger vocabulary.
-		if model.VocabSize == len(vocabulary.WordToToken) {
-			// Ensure the loaded model uses the up-to-date vocabulary and tokenizer
-			model.Vocabulary = vocabulary
-			if model.TokenEmbedding != nil {
-				model.TokenEmbedding.VocabSize = model.VocabSize
-			}
-			tokenizer, tknErr := bartsimple.NewTokenizer(vocabulary, vocabulary.BeginningOfSentenceID, vocabulary.EndOfSentenceID, vocabulary.PaddingTokenID, vocabulary.UnknownTokenID)
-			if tknErr != nil {
-				return nil, fmt.Errorf("failed to create tokenizer for loaded model: %w", tknErr)
-			}
-			model.Tokenizer = tokenizer
-			return model, nil
-		}
-		// If vocabulary sizes do not match, the model is incompatible.
-		fmt.Printf("Loaded model has a vocabulary size of %d, but the current vocabulary has size %d. Rebuilding model.\n", model.VocabSize, len(vocabulary.WordToToken))
-		// Fall through to create a new model.
-	}
-
+func SetupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads, maxLen int, pretrainedEmbeddings map[string][]float64) (*bartsimple.SimplifiedBARTModel, error) {
 	// If loading fails, create a new one
+
+	// Load word2vec model only when creating a new BART model
+	word2vecModel, err := word2vec.LoadModel("gob_models/word2vec_model.gob")
 	if err != nil {
-		fmt.Printf("Error loading simplified BART model: %v. Creating a new one.\n", err)
-	} else if model == nil {
-		fmt.Println("Model file loaded without error, but model is nil. Creating a new one.")
+		log.Printf("Warning: Could not load word2vec model: %v. BART embeddings will be initialized randomly.", err)
+		pretrainedEmbeddings = nil // Or an empty map
+	} else {
+		log.Println("Word2vec model loaded successfully.")
+		pretrainedEmbeddings = word2vec.ConvertToMap(word2vecModel.WordVectors, word2vecModel.Vocabulary)
 	}
 
 	tokenizer, err := bartsimple.NewTokenizer(
@@ -156,7 +139,7 @@ func SetupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads,
 	}
 
 	fmt.Printf("Creating new simplified BART model with vocab size: %d\n", len(vocabulary.WordToToken))
-	newModel, createErr := bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, dim, heads, maxLen)
+	newModel, createErr := bartsimple.NewSimplifiedBARTModel(tokenizer, vocabulary, dim, heads, maxLen, pretrainedEmbeddings)
 	if createErr != nil {
 		return nil, fmt.Errorf("failed to create a new simplified BART model: %w", createErr)
 	}
@@ -175,6 +158,30 @@ func SetupModel(modelPath string, vocabulary *bartsimple.Vocabulary, dim, heads,
 
 func RunTraining(model *bartsimple.SimplifiedBARTModel, bartDataPath, modelPath string, epochs int, learningRate float64, batchSize int) {
 	fmt.Println("--- Running in Training Mode ---")
+
+	// Train Word2Vec model first
+	word2vecTrainingDataPath := "trainingdata/tagdata/nlp_training_data.json"
+	word2vecModelSavePath := "gob_models/word2vec_model.gob"
+	word2vecVectorSize := 100
+	word2vecEpochs := 50
+	word2vecWindow := 5
+	word2vecNegativeSamples := 5
+	word2vecMinWordFrequency := 1
+	word2vecUseCBOW := true
+
+	_, err := word2vec.TrainWord2VecModel(
+		word2vecTrainingDataPath,
+		word2vecModelSavePath,
+		word2vecVectorSize,
+		word2vecEpochs,
+		word2vecWindow,
+		word2vecNegativeSamples,
+		word2vecMinWordFrequency,
+		word2vecUseCBOW,
+	)
+	if err != nil {
+		log.Fatalf("Error training Word2Vec model: %v", err)
+	}
 
 	// 1. Load BART-specific training data
 	bartTrainingData, err := bartsimple.LoadBARTTrainingData(bartDataPath)

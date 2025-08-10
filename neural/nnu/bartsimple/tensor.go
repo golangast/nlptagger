@@ -226,63 +226,16 @@ func (t *Tensor) ScalarMul(scalar float64) (*Tensor, error) {
 // This implementation is a placeholder and currently only works along the last axis.
 // This implementation is numerically stable.
 func (t *Tensor) Softmax(axis int) (*Tensor, error) {
-	if axis < 0 || axis >= len(t.Shape) {
-		return nil, fmt.Errorf("softmax axis %d is out of bounds for tensor shape %v", axis, t.Shape)
+	// Create the softmax operation
+	operation := &softmaxOperation{input: t, axis: axis}
+
+	// Perform the forward pass using the operation
+	outputTensor, err := operation.Forward(t)
+	if err != nil {
+		return nil, fmt.Errorf("error during softmax forward pass: %w", err)
 	}
 
-	outputData := make([]float64, len(t.Data))
-	copy(outputData, t.Data) // Work on a copy
-
-	// Reshape for easier iteration along the specified axis
-	// This part depends on your Tensor implementation's ability to handle reshapes or provide views
-	// For a simple flattened slice, you'll need to calculate indices manually.
-
-	// Assuming the outputLogits in BartProcessCommand are [batch_size, sequence_length, vocab_size]
-	// and you apply softmax along the vocab_size axis (axis 2)
-	// The following logic is for softmax along the last axis (axis = len(t.Shape) - 1)
-
-	if axis != len(t.Shape)-1 {
-		return nil, errors.New("softmax placeholder only implemented for the last axis")
-		// A full implementation would require reshaping or more complex index calculations
-	}
-
-	// Assuming the last axis is the one we iterate over for softmax
-	sizeOfAxis := t.Shape[axis]
-	numVectors := len(t.Data) / sizeOfAxis // Total number of vectors to apply softmax to
-
-	for i := 0; i < numVectors; i++ {
-		// Find the maximum value in the current vector (for numerical stability)
-		maxVal := outputData[i*sizeOfAxis]
-		for j := 1; j < sizeOfAxis; j++ {
-			if outputData[i*sizeOfAxis+j] > maxVal {
-				maxVal = outputData[i*sizeOfAxis+j]
-			}
-		}
-
-		// Exponentiate and sum
-		sumExp := 0.0
-		for j := 0; j < sizeOfAxis; j++ {
-			outputData[i*sizeOfAxis+j] = math.Exp(outputData[i*sizeOfAxis+j] - maxVal) // Subtract maxVal
-			sumExp += outputData[i*sizeOfAxis+j]
-		}
-
-		// Normalize to get probabilities
-		if sumExp == 0 {
-			// Handle case where sumExp is zero to avoid division by zero
-			fmt.Printf("Warning: Sum of exponentiated values is zero for vector %d. Setting probabilities to zero.", i)
-			for j := 0; j < sizeOfAxis; j++ {
-				outputData[i*sizeOfAxis+j] = 0.0
-			}
-		} else {
-			for j := 0; j < sizeOfAxis; j++ {
-				outputData[i*sizeOfAxis+j] /= sumExp
-			}
-		}
-
-	}
-
-	output := NewTensor(outputData, t.Shape, false)
-	return output, nil
+	return outputTensor, nil
 }
 
 // Reshape changes the shape of the tensor and reorders the underlying data based on standard C-order (row-major) indexing.
@@ -979,4 +932,136 @@ func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
 	}
 	return outputTensor, nil
 
+}
+
+// softmaxOperation represents the softmax activation function.
+type softmaxOperation struct {
+	input  *Tensor
+	output *Tensor // Store output for backward pass
+	axis   int
+}
+
+// Forward performs the forward pass of the softmax operation.
+func (op *softmaxOperation) Forward(inputs ...*Tensor) (*Tensor, error) {
+	if len(inputs) != 1 {
+		return nil, fmt.Errorf("softmaxOperation requires exactly one input tensor, got %d", len(inputs))
+	}
+	op.input = inputs[0]
+
+	if op.axis < 0 || op.axis >= len(op.input.Shape) {
+		return nil, fmt.Errorf("softmax axis %d is out of bounds for tensor shape %v", op.axis, op.input.Shape)
+	}
+
+	outputData := make([]float64, len(op.input.Data))
+	copy(outputData, op.input.Data) // Work on a copy
+
+	// Assuming the last axis is the one we iterate over for softmax
+	if op.axis != len(op.input.Shape)-1 {
+		return nil, errors.New("softmax operation only implemented for the last axis")
+	}
+
+	sizeOfAxis := op.input.Shape[op.axis]
+	numVectors := len(op.input.Data) / sizeOfAxis // Total number of vectors to apply softmax to
+
+	for i := 0; i < numVectors; i++ {
+		maxVal := outputData[i*sizeOfAxis]
+		for j := 1; j < sizeOfAxis; j++ {
+			if outputData[i*sizeOfAxis+j] > maxVal {
+				maxVal = outputData[i*sizeOfAxis+j]
+			}
+		}
+
+		sumExp := 0.0
+		for j := 0; j < sizeOfAxis; j++ {
+			outputData[i*sizeOfAxis+j] = math.Exp(outputData[i*sizeOfAxis+j] - maxVal)
+			sumExp += outputData[i*sizeOfAxis+j]
+		}
+
+		if sumExp == 0 {
+			for j := 0; j < sizeOfAxis; j++ {
+				outputData[i*sizeOfAxis+j] = 0.0
+			}
+		} else {
+			for j := 0; j < sizeOfAxis; j++ {
+				outputData[i*sizeOfAxis+j] /= sumExp
+			}
+		}
+	}
+
+	op.output = NewTensor(outputData, op.input.Shape, op.input.requiresGrad)
+	if op.output.requiresGrad {
+		op.output.creator = op
+	}
+	return op.output, nil
+}
+
+func (op *softmaxOperation) Inputs() []*Tensor {
+	return []*Tensor{op.input}
+}
+
+// Backward performs the backward pass for the softmax operation.
+func (op *softmaxOperation) Backward(grad *Tensor) error {
+	if grad == nil || grad.Data == nil {
+		return nil
+	}
+
+	if op.input.requiresGrad {
+		if op.input.Grad == nil {
+			op.input.Grad = NewTensor(make([]float64, len(op.input.Data)), op.input.Shape, false)
+		}
+
+		// Gradient of softmax: dL/dx_i = sum_j (dL/dy_j * dy_j/dx_i)
+		// dy_j/dx_i = y_j * (delta_ij - y_i)
+		// dL/dx_i = sum_j (dL/dy_j * y_j * (delta_ij - y_i))
+		// dL/dx_i = dL/dy_i * y_i - y_i * sum_j (dL/dy_j * y_j)
+
+		// For each vector (batch item, sequence position)
+		sizeOfAxis := op.input.Shape[op.axis]
+		numVectors := len(op.input.Data) / sizeOfAxis
+
+		for i := 0; i < numVectors; i++ {
+			// Calculate sum_j (dL/dy_j * y_j) for the current vector
+			sum_dL_dy_y := 0.0
+			for j := 0; j < sizeOfAxis; j++ {
+				outputFlatIndex := i*sizeOfAxis + j
+				sum_dL_dy_y += grad.Data[outputFlatIndex] * op.output.Data[outputFlatIndex]
+			}
+
+			// Calculate dL/dx_k for each element in the current vector
+			for k := 0; k < sizeOfAxis; k++ {
+				outputFlatIndex := i*sizeOfAxis + k
+				dL_dy_k := grad.Data[outputFlatIndex]
+				y_k := op.output.Data[outputFlatIndex]
+
+				dL_dx_k := y_k * (dL_dy_k - sum_dL_dy_y)
+				op.input.Grad.Data[outputFlatIndex] += dL_dx_k
+			}
+		}
+	}
+	return nil
+}
+
+// Slice extracts a slice from a tensor along a specified dimension.
+func (t *Tensor) Slice(axis, start, end int) (*Tensor, error) {
+	if axis < 0 || axis >= len(t.Shape) {
+		return nil, fmt.Errorf("invalid axis for slicing: %d", axis)
+	}
+	if start < 0 || end > t.Shape[axis] || start > end {
+		return nil, fmt.Errorf("invalid slice indices: start %d, end %d, for shape %v", start, end, t.Shape)
+	}
+
+	newShape := make([]int, len(t.Shape))
+	copy(newShape, t.Shape)
+	newShape[axis] = end - start
+
+	// This is a simplified implementation and will not work for all cases.
+	// A more robust implementation would require more complex index calculations.
+	stride := 1
+	for i := axis + 1; i < len(t.Shape); i++ {
+		stride *= t.Shape[i]
+	}
+
+	newData := t.Data[start*stride : end*stride]
+
+	return NewTensor(newData, newShape, t.requiresGrad), nil
 }

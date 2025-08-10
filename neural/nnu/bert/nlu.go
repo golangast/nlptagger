@@ -745,15 +745,15 @@ func (m *BertModel) BertProcessCommand(
     }
 
     // 7. Use BART to summarize or give context for the retrieved example
-    bartReply := ""
-    if bartModel != nil {
-        bartReply, err = bartModel.BartProcessCommand(command)
-        if err != nil {
-            return intent, "", fmt.Errorf("BART generation failed: %w", err)
-        }
-    } else {
-        bartReply = "BART model not loaded."
-    }
+	bartReply := ""
+	if bartModel != nil {
+		bartReply, err = bartModel.Reply(command)
+		if err != nil {
+			return intent, "", fmt.Errorf("BART generation failed: %w", err)
+		}
+	} else {
+		bartReply = "BART model not loaded."
+	}
 
     
 

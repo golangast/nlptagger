@@ -49,14 +49,6 @@ func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
 		}
 	}
 
-	// If index exceeded vocabulary size
-	if index > len(tokenVocab)-1 { // Dynamically determine vocabulary size
-		// Handle unknown tokens
-		tokenVocab["UNK"] = len(tokenVocab) // Add "UNK" token
-		index = len(tokenVocab)             // Update index to reflect new vocabulary size
-
-	}
-
 	return tokenVocab
 }
 

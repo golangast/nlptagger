@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 
+	
 	"github.com/golangast/nlptagger/tagger/nertagger"
 	"github.com/golangast/nlptagger/tagger/postagger"
 )
@@ -13,7 +14,30 @@ import (
 type Embedding struct {
 	Weight *Tensor
 }
+func cosineSimilarity(vec1, vec2 []float64) float64 {
+	if len(vec1) == 0 || len(vec2) == 0 {
+		return 0.0
+	}
 
+	dotProduct := 0.0
+	mag1 := 0.0
+	mag2 := 0.0
+
+	for i := 0; i < len(vec1); i++ {
+		dotProduct += vec1[i] * vec2[i]
+		mag1 += vec1[i] * vec1[i]
+		mag2 += vec2[i] * vec2[i]
+	}
+
+	mag1 = math.Sqrt(mag1)
+	mag2 = math.Sqrt(mag2)
+
+	if mag1 == 0 || mag2 == 0 {
+		return 0.0
+	}
+
+	return dotProduct / (mag1 * mag2)
+}
 // NewEmbedding creates a new Embedding layer.
 func NewEmbedding(numEmbeddings, embeddingDim int, initializerStdDev float64) *Embedding {
 	weight := NewTensor(nil, []int{numEmbeddings, embeddingDim}, true)
@@ -689,3 +713,5 @@ func (p *Pooler) Forward(hiddenStates *Tensor) (*Tensor, error) {
 func (p *Pooler) Parameters() []*Tensor {
 	return p.Dense.Parameters()
 }
+
+

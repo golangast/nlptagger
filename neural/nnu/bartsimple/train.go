@@ -8,6 +8,8 @@ import (
 	"log"
 	"math"
 	"os"
+
+	"github.com/golangast/nlptagger/neural/nnu/word2vec"
 )
 
 // BARTTrainingData represents the structure of the training data JSON.
@@ -52,19 +54,19 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 		return errors.New("model tokenizer is not initialized")
 	}
 	if model.TokenEmbedding == nil {
-		return errors.New("model token embedding is not initialized")
+		// Load word2vec model
+		word2vecModel, err := word2vec.LoadModel("gob_models/word2vec_model.gob")
+		if err != nil {
+			log.Printf("Warning: Could not load word2vec model: %v. Initializing BART embeddings randomly.\n", err)
+			// If word2vec model fails to load, initialize BART embeddings randomly
+			model.TokenEmbedding = NewEmbedding(model.VocabSize, model.Encoder.Layer.SelfAttention.DimModel)
+		} else {
+			log.Println("Word2vec model loaded successfully. Initializing BART embeddings with pretrained vectors.")
+			// Convert word2vec.WordVectors to map[string][]float64 for NewEmbeddingWithPretrained
+			pretrainedEmbeddings := word2vec.ConvertToMap(word2vecModel.WordVectors, word2vecModel.Vocabulary)
+			model.TokenEmbedding = NewEmbeddingWithPretrained(model.VocabSize, model.TokenEmbedding.DimModel, model.Vocabulary, pretrainedEmbeddings)
+		}
 	}
-	if model.PositionalEmbedding == nil {
-		return errors.New("model positional embedding is not initialized")
-	}
-	if model.Encoder == nil || model.Decoder == nil {
-		return errors.New("model encoder or decoder is not initialized")
-	}
-	if model.OutputLinear == nil {
-		return errors.New("model output linear layer is not initialized")
-	}
-
-	log.Printf("Starting BART model training for %d epochs with learning rate %f\n", epochs, learningRate)
 
 	// Create an optimizer for the model's parameters. This relies on the Parameters() methods you added.
 	optimizer := NewOptimizer(model.Parameters(), learningRate)
@@ -146,20 +148,29 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 
 	// 3. Calculate Loss
 	// Compare the model's output logits with the target token IDs.
-	loss, err := CalculateCrossEntropyLoss(outputLogits, flatTargetIDsForLoss)
+	loss, err := CalculateCrossEntropyLoss(outputLogits, flatTargetIDsForLoss, model.Tokenizer.PadID)
 	if err != nil {
 		return 0, fmt.Errorf("loss calculation failed: %w", err)
 	}
 
 	// 4. Backpropagation
 	// Calculate the initial gradient of the loss with respect to the model's output logits.
-	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, flatTargetIDsForLoss)
+	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, flatTargetIDsForLoss, model.Tokenizer.PadID)
 	if err != nil {
 		return 0, fmt.Errorf("loss gradient calculation failed: %w", err)
 	}
 
 	// Initialize the gradient of the output logits with the calculated loss gradient.
 	outputLogits.Grad = outputGradient
+
+	fmt.Printf("\n--- trainBARTBatch: outputLogits.requiresGrad: %t ---\n", outputLogits.requiresGrad)
+	fmt.Printf("--- trainBARTBatch: outputLogits.Grad is nil: %t ---\n", outputLogits.Grad == nil)
+	if outputLogits.Grad != nil {
+		fmt.Printf("--- trainBARTBatch: outputLogits.Grad.Shape: %v ---\n", outputLogits.Grad.Shape)
+		for i := 0; i < int(math.Min(float64(len(outputLogits.Grad.Data)), 10)); i++ {
+			fmt.Printf("--- trainBARTBatch: outputLogits.Grad.Data[%d]: %f ---\n", i, outputLogits.Grad.Data[i])
+		}
+	}
 
 	// Start the backward pass from the output tensor. This will propagate gradients
 	// through the entire computation graph.
@@ -171,7 +182,7 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 }
 
 // CalculateCrossEntropyLoss calculates the average cross-entropy loss between logits and target token IDs.
-func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int) (float64, error) {
+func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, error) {
 	if logits == nil || logits.Data == nil {
 		return 0, errors.New("logits tensor is nil or has no data")
 	}
@@ -201,8 +212,10 @@ func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int) (float64, error)
 			flatTargetIndex := b*seqLength + s
 			targetID := targetIDs[flatTargetIndex]
 
-			// Optional: Skip padding tokens in loss calculation if you have a PadID
-			// if targetID == model.Tokenizer.PadID { continue }
+			// Skip padding tokens in loss calculation
+			if targetID == padID {
+				continue
+			}
 
 			if targetID < 0 || targetID >= vocabSize {
 				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d. Skipping for loss calculation.\n", targetID, b, s)
@@ -236,7 +249,7 @@ func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int) (float64, error)
 
 // CalculateCrossEntropyLossGradient calculates the gradient of the cross-entropy loss with respect to the logits.
 // This is typically softmax(logits) - one_hot(target_token_ids).
-func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int) (*Tensor, error) {
+func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int, padID int) (*Tensor, error) {
 	if logits == nil || logits.Data == nil {
 		return nil, errors.New("logits tensor is nil or has no data")
 	}
@@ -272,8 +285,17 @@ func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int) (*Tensor
 			targetIndexInBatch := b*seqLength + s
 			targetID := targetIDs[targetIndexInBatch]
 
+			// Skip padding tokens in gradient calculation
+			if targetID == padID {
+				// Zero out gradients for all vocabulary tokens at this padded position
+				for v := 0; v < vocabSize; v++ {
+					gradFlatIndex := b*seqLength*vocabSize + s*vocabSize + v
+					gradientData[gradFlatIndex] = 0
+				}
+				continue
+			}
+
 			if targetID < 0 || targetID >= vocabSize {
-				// This warning is helpful for debugging vocabulary or tokenization issues.
 				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d for gradient calculation. Skipping.\n", targetID, b, s)
 				continue
 			}
@@ -284,7 +306,7 @@ func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int) (*Tensor
 		}
 	}
 
-	outputGradient := NewTensor(gradientData, logits.Shape, false)
+	outputGradient := NewTensor(gradientData, logits.Shape, true)
 
 	return outputGradient, nil
 }

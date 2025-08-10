@@ -78,12 +78,21 @@ Bart sequence-to-sequence neural network that learns to translate natural langua
 ## Requirements
 * go 1.23 for gonew
 
-## How to run as is?
+## How to run
 
+### To run in interactive mode:
+```bash
+go run .
+```
 
+### To train the model:
+```bash
+go run . -train -epochs 100 -lr 0.001
+```
+
+### Example main.go
+The `main.go` file sets up and runs the application. You can see its contents below:
 ```go
-package main
-
 import (
 	"bufio"
 	"encoding/json"
@@ -96,8 +105,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/golangast/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
-	"github.com/golangast/nlptagger/neural/nnu/vocab"
+	"example.com/nlptagger/neural/nnu/bartsimple" // Assuming this is the correct import path
+	"example.com/nlptagger/neural/nnu/vocab"
 )
 
 var (
@@ -449,20 +458,10 @@ func InputScanDirections(directions string) string {
 	return ""
 }
 
-```
+```bash
 
-*- clone it
-```bash
-git clone https://github.com/golangast/nlptagger
-```
-* - or
-* - install gonew to pull down project quickly
-```bash
-go install golang.org/x/tools/cmd/gonew@latest
-```
-* - run gonew
-```bash
-gonew github.com/golangast/nlptagger example.com/nlptagger
+# Clone the repository
+git clone https://github.com/golangast/nlptagger.git
 ```
 
 * - cd into nlptagger

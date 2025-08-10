@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 )
 
 // Linear represents a linear layer (fully connected layer).
@@ -15,14 +16,15 @@ type Linear struct {
 
 // NewLinear creates a new Linear layer with random weights and zero biases.
 func NewLinear(inputDim, outputDim int) (*Linear, error) {
-	// Initialize weights with random values (you might want a better initialization later)
+	// He initialization
+	stdDev := math.Sqrt(2.0 / float64(inputDim))
 	weightsData := make([]float64, inputDim*outputDim)
 	for i := range weightsData {
-		weightsData[i] = float64(i) * 0.01 // Simple non-zero initialization
+		weightsData[i] = rand.NormFloat64() * stdDev
 	}
 	weights := NewTensor(weightsData, []int{inputDim, outputDim}, true)
 
-	// Initialize biases with zeros
+	// Biases are usually initialized to zero
 	biasesData := make([]float64, outputDim)
 	biases := NewTensor(biasesData, []int{outputDim}, true)
 
@@ -39,7 +41,11 @@ func (l *Linear) Parameters() []*Tensor {
 }
 
 // Forward performs the forward pass of the Linear layer.
-func (l *Linear) Forward(input *Tensor) (*Tensor, error) {
+func (l *Linear) Forward(inputs ...*Tensor) (*Tensor, error) {
+    if len(inputs) != 1 {
+        return nil, fmt.Errorf("Linear.Forward expects 1 input, got %d", len(inputs))
+    }
+    input := inputs[0]
 	// Store input tensor for backward pass
 	l.input = input
 
@@ -64,7 +70,7 @@ func (l *Linear) Forward(input *Tensor) (*Tensor, error) {
 		outputDim := l.Weights.Shape[1]
 
 		// Reshape input for batch matrix multiplication
-		reshapedInputData := make([]float64, batchSize*seqLength*inputDim)
+		reshapedInputData := make([]float64, inputDim*outputDim)
 		copy(reshapedInputData, input.Data) // Create a copy to avoid modifying original
 		reshapedInput := NewTensor(reshapedInputData, []int{batchSize * seqLength, inputDim}, true)
 
@@ -95,16 +101,7 @@ func (l *Linear) Forward(input *Tensor) (*Tensor, error) {
 	// Set creator and requiresGrad for the output tensor
 	output.requiresGrad = input.requiresGrad || l.Weights.requiresGrad || (l.Biases != nil && l.Biases.requiresGrad)
 	if output.requiresGrad {
-		// In a real scenario, you would create an operation struct
-		// that encapsulates the MatMul and AddWithBroadcast operations
-		// and set that operation as the creator.
-		// For simplicity here, we'll just set the creator to nil, meaning this is
-		// a composite operation whose backward pass is handled by the layer itself.
-		// A more robust design would define LinearOperation struct.
-		// Setting creator to nil prevents automatic backward traversal
-		// beyond this point via Tensor.Backward().
-		// The layer's Backward method must manually handle the gradients.
-		output.creator = nil // This layer is the 'creator' conceptually, but it's a composite op
+		output.creator = l
 	}
 
 	return output, nil
@@ -120,6 +117,14 @@ func (l *Linear) Backward(grad *Tensor) error {
 	if l.input == nil {
 		return errors.New("linear layer backward called before forward (input is nil)")
 	}
+	fmt.Printf("\n--- Linear.Backward: Incoming Grad ---\n")
+	fmt.Printf("Shape: %v\n", grad.Shape)
+	// Print first few elements to avoid flooding console
+	for i := 0; i < int(math.Min(float64(len(grad.Data)), 10)); i++ {
+		fmt.Printf("Data[%d]: %f\n", i, grad.Data[i])
+	}
+	fmt.Printf("------------------------------------\n")
+
 
 	// Ensure gradients are initialized for parameters that require them
 	if l.Weights.requiresGrad {
@@ -253,7 +258,7 @@ func (l *Linear) Backward(grad *Tensor) error {
 
 			reshapedGradData := make([]float64, batchSize*seqLength*outputDim)
 			copy(reshapedGradData, grad.Data)
-			reshapedGrad := NewTensor(reshapedGradData, []int{batchSize * seqLength, outputDim}, false)
+			reshapedGrad := NewTensor(reshapedGradData, []int{batchSize * seqLength, outputDim}, false);
 
 			// dLoss/dInput: [batch_size * sequence_length, output_dim] @ [output_dim, input_dim] -> [batch_size * sequence_length, input_dim]
 			dInput2D, err := reshapedGrad.MatMul(weightsTranspose)
@@ -594,6 +599,7 @@ func NewMultiHeadAttention(dimModel, numHeads, numKVHeads int) (*MultiHeadAttent
 		NumHeads:     numHeads,
 		DimModel:     dimModel,
 		HeadDim:      headDim, // Store headDim
+		Depth:        headDim, // Initialize Depth
 		QueryLinear:  queryLinear,
 		KeyLinear:    keyLinear,
 		ValueLinear:  valueLinear,
@@ -617,12 +623,24 @@ func (mha *MultiHeadAttention) Backward(grad *Tensor) error {
 		return nil
 	}
 
-	if mha.Wo != nil { // Assuming Wo is a Linear layer
-		mha.Wo.Backward(grad)
+	// Initialize mha.attentionOutput.Grad with the incoming gradient
+	// This is the gradient of the loss with respect to the output of this layer.
+	if mha.attentionOutput == nil {
+		return errors.New("mha.attentionOutput is nil in backward pass")
+	}
+	if mha.attentionOutput.Grad == nil {
+		mha.attentionOutput.Grad = NewTensor(make([]float64, len(grad.Data)), grad.Shape, false)
+	}
+	// Accumulate the incoming gradient to mha.attentionOutput.Grad
+	for i := range grad.Data {
+		mha.attentionOutput.Grad.Data[i] += grad.Data[i]
 	}
 
-	if mha.attentionOutput == nil || mha.attentionOutput.Grad == nil {
-		panic("mha.attentionOutput or its gradient is nil in reshape step")
+	if mha.OutputLinear != nil { // Assuming OutputLinear is a Linear layer
+		err := mha.OutputLinear.Backward(mha.attentionOutput.Grad) // Pass the accumulated gradient
+		if err != nil {
+			return err
+		}
 	}
 
 	batchSize := mha.attentionOutput.Grad.Shape[0]
@@ -995,6 +1013,46 @@ func (mha *MultiHeadAttention) Backward(grad *Tensor) error {
 				// Implement calculation and accumulation for gradWk similar to gradWq
 				// MatMul: inputTransposedForWeights [b, d_m, s] @ gradKCombined [b, s, d_m] -> [b, d_m, d_m]
 				// Sum over batch dimension.
+
+				batchSize := mha.inputTensor.Shape[0]
+				dimModel := mha.DimModel
+				seqLength := mha.inputTensor.Shape[1]
+
+				tempGradWkShape := []int{batchSize, dimModel, dimModel}
+				tempGradWkData := make([]float64, batchSize*dimModel*dimModel)
+				tempGradWk := NewTensor(tempGradWkData, tempGradWkShape, false);
+
+				for b := 0; b < batchSize; b++ {
+					inputSlice := inputTransposedForWeights.Data[b*dimModel*seqLength : (b+1)*dimModel*seqLength]
+					gradKSlice := gradKCombined.Data[b*seqLength*dimModel : (b+1)*seqLength*dimModel]
+					outputSlice := tempGradWk.Data[b*dimModel*dimModel : (b+1)*dimModel*dimModel]
+
+					M := dimModel
+					K := seqLength
+					N := dimModel
+					for i := 0; i < M; i++ {
+						for j := 0; j < N; j++ {
+							sum := 0.0
+							for k := 0; k < K; k++ {
+								sum += inputSlice[i*K+k] * gradKSlice[k*N+j]
+							}
+							outputSlice[i*N+j] = sum
+						}
+					}
+				}
+
+				finalGradWkData := make([]float64, dimModel*dimModel)
+				for b := 0; b < batchSize; b++ {
+					batchStart := b * dimModel * dimModel
+					for i := 0; i < dimModel*dimModel; i++ {
+						finalGradWkData[i] += tempGradWk.Data[batchStart+i]
+					}
+				}
+				finalGradWk := NewTensor(finalGradWkData, []int{dimModel, dimModel}, false);
+
+				for i := range mha.Wk.Grad.Data {
+					mha.Wk.Grad.Data[i] += finalGradWk.Data[i]
+				}
 			}
 
 			// dLoss/dWv = inputTensor^T @ gradVCombined
@@ -1005,6 +1063,46 @@ func (mha *MultiHeadAttention) Backward(grad *Tensor) error {
 				// Implement calculation and accumulation for gradWv similar to gradWq
 				// MatMul: inputTransposedForWeights [b, d_m, s] @ gradVCombined [b, s, d_m] -> [b, d_m, d_m]
 				// Sum over batch dimension.
+
+				batchSize := mha.inputTensor.Shape[0]
+				dimModel := mha.DimModel
+				seqLength := mha.inputTensor.Shape[1]
+
+				tempGradWvShape := []int{batchSize, dimModel, dimModel}
+				tempGradWvData := make([]float64, batchSize*dimModel*dimModel)
+				tempGradWv := NewTensor(tempGradWvData, tempGradWvShape, false);
+
+				for b := 0; b < batchSize; b++ {
+					inputSlice := inputTransposedForWeights.Data[b*dimModel*seqLength : (b+1)*dimModel*seqLength]
+					gradVSlice := gradVCombined.Data[b*seqLength*dimModel : (b+1)*seqLength*dimModel]
+					outputSlice := tempGradWv.Data[b*dimModel*dimModel : (b+1)*dimModel*dimModel]
+
+					M := dimModel
+					K := seqLength
+					N := dimModel
+					for i := 0; i < M; i++ {
+						for j := 0; j < N; j++ {
+							sum := 0.0
+							for k := 0; k < K; k++ {
+								sum += inputSlice[i*K+k] * gradVSlice[k*N+j]
+							}
+							outputSlice[i*N+j] = sum
+						}
+					}
+				}
+
+				finalGradWvData := make([]float64, dimModel*dimModel)
+				for b := 0; b < batchSize; b++ {
+					batchStart := b * dimModel * dimModel
+					for i := 0; i < dimModel*dimModel; i++ {
+						finalGradWvData[i] += tempGradWv.Data[batchStart+i]
+					}
+				}
+				finalGradWv := NewTensor(finalGradWvData, []int{dimModel, dimModel}, false);
+
+				for i := range mha.Wv.Grad.Data {
+					mha.Wv.Grad.Data[i] += finalGradWv.Data[i]
+				}
 			}
 		}
 		// dLoss/dinputTensor is already accumulated in step 6.
@@ -1049,36 +1147,40 @@ func (mha *MultiHeadAttention) Forward(inputs ...*Tensor) (*Tensor, error) {
 
 	// Reshape Q, K, V for multi-head attention
 	// [batch_size, sequence_length, dim_model] -> [batch_size, num_heads, sequence_length, head_dim]
+		// Reshape Q, K, V for multi-head attention
+	// [batch_size, sequence_length, dim_model] -> [batch_size, num_heads, sequence_length, head_dim]
 	qReshaped, err := q.Reshape([]int{batchSize, qSeqLength, mha.NumHeads, mha.HeadDim})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reshape query tensor: %w", err)
 	}
-	mha.q = qReshaped // Store q after reshape/split
 
 	qTransposed, err := qReshaped.Transpose(1, 2) // Transpose to [batch_size, num_heads, q_seq_length, head_dim]
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose query tensor: %w", err)
 	}
+	mha.q = qTransposed // Store q after transpose
+
 	kReshaped, err := k.Reshape([]int{batchSize, kvSeqLength, mha.NumHeads, mha.HeadDim})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reshape key tensor: %w", err)
 	}
-	mha.k = kReshaped // Store k after reshape/split
 
 	kTransposed, err := kReshaped.Transpose(1, 2) // Transpose to [batch_size, num_heads, kv_seq_length, head_dim]
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose key tensor: %w", err)
 	}
+	mha.k = kTransposed // Store k after transpose
+
 	vReshaped, err := v.Reshape([]int{batchSize, kvSeqLength, mha.NumHeads, mha.HeadDim})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reshape value tensor: %w", err)
 	}
-	mha.v = vReshaped // Store v after reshape/split
 
 	vTransposed, err := vReshaped.Transpose(1, 2) // Transpose to [batch_size, num_heads, kv_seq_length, head_dim]
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose value tensor: %w", err)
 	}
+	mha.v = vTransposed // Store v after transpose
 	// Calculate attention scores: Q @ K^T
 	// K^T will have shape [batch_size, num_heads, head_dim, kv_seq_length]
 	kT_Transposed, err := kTransposed.Transpose(2, 3)
@@ -1157,6 +1259,8 @@ func (mha *MultiHeadAttention) Forward(inputs ...*Tensor) (*Tensor, error) {
 		output.creator = mha // Set the creator to the MultiHeadAttention layer itself
 	}
 
+	mha.attentionOutput = output
+
 	return output, nil // Return the output tensor and nil error
 }
 
@@ -1197,7 +1301,8 @@ func NewFeedForward(dimModel int) (*FeedForward, error) {
 	return &FeedForward{
 		Linear1: linear1,
 		Linear2: linear2,
-	}, nil
+	},
+	nil
 }
 
 // Parameters returns all learnable parameters of the layer.
@@ -1228,7 +1333,7 @@ func (ff *FeedForward) Forward(inputs ...*Tensor) (*Tensor, error) { // Changed 
 	for i, val := range hidden.Data {
 		activatedHiddenData[i] = math.Max(0, val)
 	}
-	activatedHidden := NewTensor(activatedHiddenData, hidden.Shape, false)
+	activatedHidden := NewTensor(activatedHiddenData, hidden.Shape, hidden.requiresGrad)
 
 	// Store the output of the activation function
 	ff.activatedHidden = activatedHidden
@@ -1332,8 +1437,8 @@ type MultiHeadCrossAttention struct {
 	NumQHeads  int // Number of query heads
 	NumKVHeads int // Number of key/value heads
 	DimModel   int
-	DimKVHeads int // Dimension per key/value head
-	Depth      int
+	DimKVHeads int // Dimension per key/value head (head_dim for keys/values)
+	Depth      int // Dimension per query head (head_dim for queries)
 
 	// Stored intermediate tensors for backward pass
 	queryTensor                 *Tensor // Original query input from decoder
@@ -1384,6 +1489,7 @@ func NewMultiHeadCrossAttention(dimModel, numQHeads, numKVHeads int) (*MultiHead
 		NumKVHeads:   numKVHeads,
 		DimModel:     dimModel,
 		DimKVHeads:   dimKVHeads, // Store dim per KV head
+		Depth:        dimModel / numQHeads, // Initialize Depth
 		QueryLinear:  queryLinear,
 		KeyLinear:    keyLinear,
 		ValueLinear:  valueLinear,
@@ -1417,17 +1523,25 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 		return nil
 	}
 
+	// Initialize mha.attentionOutput.Grad with the incoming gradient
+	// This is the gradient of the loss with respect to the output of this layer.
+	if mha.attentionOutput == nil {
+		return errors.New("mha.attentionOutput is nil in backward pass")
+	}
+	if mha.attentionOutput.Grad == nil {
+		mha.attentionOutput.Grad = NewTensor(make([]float64, len(grad.Data)), grad.Shape, false)
+	}
+	// Accumulate the incoming gradient to mha.attentionOutput.Grad
+	for i := range grad.Data {
+		mha.attentionOutput.Grad.Data[i] += grad.Data[i]
+	}
+
 	// Backpropagate through the final linear layer (OutputLinear)
 	if mha.OutputLinear != nil {
-		err := mha.OutputLinear.Backward(grad)
+		err := mha.OutputLinear.Backward(mha.attentionOutput.Grad) // Pass the accumulated gradient
 		if err != nil {
 			return err
 		}
-	}
-
-	// Assuming the gradient from the output linear layer is in mha.attentionOutput.Grad
-	if mha.attentionOutput == nil || mha.attentionOutput.Grad == nil {
-		panic("mha.attentionOutput or its gradient is nil in reshape step")
 	}
 
 	batchSize := mha.attentionOutput.Grad.Shape[0]
@@ -1436,6 +1550,8 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 	numQHeads := mha.NumQHeads
 	depth := mha.Depth // Use mha.Depth for the dimension per Q head
 
+	fmt.Printf("--- MHCA Backward: dimModel: %d, numQHeads: %d, depth: %d ---\n", dimModel, numQHeads, depth)
+
 	if dimModel != numQHeads*depth {
 		panic(fmt.Sprintf("dimModel (%d) does not match numQHeads (%d) * depth (%d) in reshape step", dimModel, numQHeads, depth))
 	}
@@ -1443,7 +1559,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 	// The reshaped gradient will have shape [batch_size, num_q_heads, query_seq_len, depth]
 	reshapedShape := []int{batchSize, numQHeads, querySeqLen, depth}
 	gradBeforeConcatData := make([]float64, batchSize*numQHeads*querySeqLen*depth)
-	gradBeforeConcat := NewTensor(gradBeforeConcatData, reshapedShape, false)
+	gradBeforeConcat := NewTensor(gradBeforeConcatData, reshapedShape, false);
 
 	originalFlatIndex := 0
 	for b := 0; b < batchSize; b++ {
@@ -1467,6 +1583,10 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 	if mha.attentionWeights != nil && mha.v != nil && gradBeforeConcat != nil {
 		// dLoss/dattentionWeights = gradBeforeConcat @ mha.v^T
+				// dLoss/dattentionWeights = gradBeforeConcat @ mha.v^T
+		// Transpose mha.v to get shape [batch_size, num_kv_heads, head_dim, kv_seq_length]
+		// mha.v has shape [batch_size, kv_seq_length, num_kv_heads, head_dim]
+		// First transpose: swap kv_seq_length (dim 1) and num_kv_heads (dim 2)
 		vTransposed, err := mha.v.Transpose(len(mha.v.Shape)-2, len(mha.v.Shape)-1)
 		if err != nil {
 			panic(fmt.Sprintf("failed to transpose v for MHCA backward: %v", err))
@@ -1560,7 +1680,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		combinedShapeQ := []int{batchSizeQ, querySeqLenQ, dimModelQ}
 		gradQCombinedData := make([]float64, batchSizeQ*querySeqLenQ*dimModelQ)
-		gradQCombined = NewTensor(gradQCombinedData, combinedShapeQ, false)
+		gradQCombined = NewTensor(gradQCombinedData, combinedShapeQ, false);
 
 		qGradFlatIndex := 0
 		for b := 0; b < batchSizeQ; b++ {
@@ -1599,7 +1719,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		combinedShapeK := []int{batchSizeK, keySeqLenK, dimModelK}
 		gradKCombinedData := make([]float64, batchSizeK*keySeqLenK*dimModelK)
-		gradKCombined = NewTensor(gradKCombinedData, combinedShapeK, false)
+		gradKCombined = NewTensor(gradKCombinedData, combinedShapeK, false);
 
 		kGradFlatIndex := 0
 		for b := 0; b < batchSizeK; b++ {
@@ -1638,7 +1758,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		combinedShapeV := []int{batchSizeV, keySeqLenV, dimModelV}
 		gradVCombinedData := make([]float64, batchSizeV*keySeqLenV*dimModelV)
-		gradVCombined = NewTensor(gradVCombinedData, combinedShapeV, false)
+		gradVCombined = NewTensor(gradVCombinedData, combinedShapeV, false);
 
 		vGradFlatIndex := 0
 		for b := 0; b < batchSizeV; b++ {
@@ -1684,7 +1804,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		tempGradWqShape := []int{batchSize, dimModel, dimModel}
 		tempGradWqData := make([]float64, batchSize*dimModel*dimModel)
-		tempGradWq := NewTensor(tempGradWqData, tempGradWqShape, false)
+		tempGradWq := NewTensor(tempGradWqData, tempGradWqShape, false);
 
 		for b := 0; b < batchSize; b++ {
 			querySlice := queryTransposedForWq.Data[b*dimModel*querySeqLen : (b+1)*dimModel*querySeqLen]
@@ -1712,7 +1832,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 				finalGradWqData[i] += tempGradWq.Data[batchStart+i]
 			}
 		}
-		finalGradWq := NewTensor(finalGradWqData, []int{dimModel, dimModel}, false)
+		finalGradWq := NewTensor(finalGradWqData, []int{dimModel, dimModel}, false);
 
 		for i := range mha.QueryLinear.Weights.Grad.Data {
 			mha.QueryLinear.Weights.Grad.Data[i] += finalGradWq.Data[i]
@@ -1736,7 +1856,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		tempGradWkShape := []int{batchSize, dimModel, dimModel}
 		tempGradWkData := make([]float64, batchSize*dimModel*dimModel)
-		tempGradWk := NewTensor(tempGradWkData, tempGradWkShape, false)
+		tempGradWk := NewTensor(tempGradWkData, tempGradWkShape, false);
 
 		for b := 0; b < batchSize; b++ {
 			keySlice := keyTransposedForWk.Data[b*dimModel*keySeqLen : (b+1)*dimModel*keySeqLen]
@@ -1763,7 +1883,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 				finalGradWkData[i] += tempGradWk.Data[batchStart+i]
 			}
 		}
-		finalGradWk := NewTensor(finalGradWkData, []int{dimModel, dimModel}, false)
+		finalGradWk := NewTensor(finalGradWkData, []int{dimModel, dimModel}, false);
 
 		for i := range mha.KeyLinear.Weights.Grad.Data {
 			mha.KeyLinear.Weights.Grad.Data[i] += finalGradWk.Data[i]
@@ -1787,7 +1907,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 
 		tempGradWvShape := []int{batchSize, dimModel, dimModel}
 		tempGradWvData := make([]float64, batchSize*dimModel*dimModel)
-		tempGradWv := NewTensor(tempGradWvData, tempGradWvShape, false)
+		tempGradWv := NewTensor(tempGradWvData, tempGradWvShape, false);
 
 		for b := 0; b < batchSize; b++ {
 			valueSlice := valueTransposedForWv.Data[b*dimModel*keySeqLen : (b+1)*dimModel*keySeqLen]
@@ -1814,7 +1934,7 @@ func (mha *MultiHeadCrossAttention) Backward(grad *Tensor) error {
 				finalGradWvData[i] += tempGradWv.Data[batchStart+i]
 			}
 		}
-		finalGradWv := NewTensor(finalGradWvData, []int{dimModel, dimModel}, false)
+		finalGradWv := NewTensor(finalGradWvData, []int{dimModel, dimModel}, false);
 
 		for i := range mha.ValueLinear.Weights.Grad.Data {
 			mha.ValueLinear.Weights.Grad.Data[i] += finalGradWv.Data[i]
@@ -1884,27 +2004,28 @@ func (mha *MultiHeadCrossAttention) Forward(inputs ...*Tensor) (*Tensor, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose cross-attention query tensor: %w", err)
 	}
+	mha.q = qTransposed
 
 	// K, V shapes: [batch_size, num_kv_heads, kv_seq_length, head_dim]
 	kReshaped, err := k.Reshape([]int{batchSize, kvSeqLength, mha.NumKVHeads, mha.DimKVHeads}) // Use DimKVHeads
 	if err != nil {
 		return nil, fmt.Errorf("failed to reshape cross-attention key tensor: %w", err)
 	}
-	mha.k = kReshaped // Store k after reshape/split
 	kTransposed, err := kReshaped.Transpose(1, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose cross-attention key tensor: %w", err)
 	}
+	mha.k = kTransposed
 
 	vReshaped, err := v.Reshape([]int{batchSize, kvSeqLength, mha.NumKVHeads, mha.DimKVHeads}) // Use DimKVHeads
 	if err != nil {
 		return nil, fmt.Errorf("failed to reshape cross-attention value tensor: %w", err)
 	}
-	mha.v = vReshaped // Store v after reshape/split
 	vTransposed, err := vReshaped.Transpose(1, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transpose cross-attention value tensor: %w", err)
 	}
+	mha.v = vTransposed
 
 	// Calculate attention scores: Q @ K^T
 	// K^T shape: [batch_size, num_kv_heads, head_dim, kv_seq_length]
@@ -1991,6 +2112,8 @@ func (mha *MultiHeadCrossAttention) Forward(inputs ...*Tensor) (*Tensor, error) 
 	if output.requiresGrad {
 		output.creator = mha // Set the creator to the MultiHeadCrossAttention layer itself
 	}
+
+	mha.attentionOutput = output
 
 	return output, nil
 }

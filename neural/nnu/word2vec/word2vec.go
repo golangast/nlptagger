@@ -69,6 +69,13 @@ func ConvertToMap(wv WordVectors, vocab map[string]int) map[string][]float64 {
 	return result
 }
 
+// TrainingData represents the structure of the training data JSON.
+type TrainingData struct {
+	Sentences []struct {
+		Tokens []string `json:"tokens"`
+	} `json:"sentences"`
+}
+
 // ReadTrainingData reads the training data from a JSON file.
 func ReadTrainingData(filePath string) ([]string, error) {
 	// Open the JSON file
@@ -85,17 +92,15 @@ func ReadTrainingData(filePath string) ([]string, error) {
 	}
 
 	// Unmarshal the JSON data
-	var sentences []struct {
-		Sentence string `json:"sentence"`
-	}
-	err = json.Unmarshal(data, &sentences)
+	var trainingData TrainingData
+	err = json.Unmarshal(data, &trainingData)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling training data: %w", err)
 	}
 
 	var sentenceTexts []string
-	for _, item := range sentences {
-		sentenceTexts = append(sentenceTexts, item.Sentence)
+	for _, item := range trainingData.Sentences {
+		sentenceTexts = append(sentenceTexts, strings.Join(item.Tokens, " "))
 	}
 	return sentenceTexts, nil
 }
@@ -162,7 +167,6 @@ func (sw2v *SimpleWord2Vec) ForwardPass(words []string) []float64 {
 			fmt.Printf("Error: Word index %d not found in WordVectors for word '%s'\n", wordIndex, word)
 			continue
 		}
-		sw2v.InitializeWeights()
 		// Check if Weights and Biases are initialized correctly
 		if sw2v.Weights == nil || len(sw2v.Weights) != sw2v.HiddenSize {
 			fmt.Println("Error: sw2v.Weights is not initialized correctly")
@@ -388,6 +392,7 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 	if sw2v.NgramSize == 0 {
 		sw2v.NgramSize = 3
 	}
+	sw2v.InitializeWeights()
 	// Create a list of word indices for negative sampling
 	wordIndices := make([]int, sw2v.VocabSize)
 	for i := range wordIndices {
@@ -483,4 +488,39 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 
 		//fmt.Printf("Epoch %d, Loss: %f\n", i, totalLoss/float64(iterationCount+1))
 	}
+}
+
+// TrainWord2VecModel initializes, trains, and saves a SimpleWord2Vec model.
+func TrainWord2VecModel(trainingDataPath, modelSavePath string, vectorSize, epochs, window, negativeSamples, minWordFrequency int, useCBOW bool) (*SimpleWord2Vec, error) {
+	// Initialize a new SimpleWord2Vec model
+	sw2v := &SimpleWord2Vec{
+		VectorSize:       vectorSize,
+		HiddenSize:       vectorSize, // Initialize HiddenSize with vectorSize
+		LearningRate:     0.01, // Default learning rate
+		Window:           window,
+		Epochs:           epochs,
+		NegativeSamples:  negativeSamples,
+		UseCBOW:          useCBOW,
+		UNKToken:         "[UNK]",
+		MinWordFrequency: minWordFrequency,
+	}
+
+	// Load training data
+	trainingData, err := ReadTrainingData(trainingDataPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read word2vec training data: %w", err)
+	}
+
+	// Train the model
+	fmt.Printf("Starting Word2Vec model training for %d epochs...\n", epochs)
+	sw2v.Train(trainingData)
+	fmt.Println("Word2Vec model training finished.")
+
+	// Save the trained model
+	if err := sw2v.SaveModel(modelSavePath); err != nil {
+		return nil, fmt.Errorf("failed to save word2vec model: %w", err)
+	}
+	fmt.Printf("Word2Vec model saved to %s\n", modelSavePath)
+
+	return sw2v, nil
 }

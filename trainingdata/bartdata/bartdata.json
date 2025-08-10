@@ -6,7 +6,7 @@
   },
   {
    "input": "create a database named accounting",
-   "output": "created database accounting"
+   "output": "create database accounting"
   },
   {
    "input": "generate a rest api named userapi",
@@ -14,31 +14,31 @@
   },
   {
    "input": "scaffold a react component named user",
-   "output": "created react component user"
+   "output": "create react component user"
   },
   {
    "input": "add a new route to the webserver",
-   "output": "route added to webserver"
+   "output": "add route to webserver"
   },
   {
    "input": "delete the user table from the database",
-   "output": "user table deleted from database"
+   "output": "delete user table from database"
   },
   {
    "input": "update the handler to return JSON",
-   "output": "handler updated to return JSON"
+   "output": "update handler to return JSON"
   },
   {
    "input": "list all available APIs",
-   "output": "listing all available APIs"
+   "output": "list available apis"
   },
   {
    "input": "restart the webserver",
-   "output": "webserver restarted"
+   "output": "restart webserver"
   },
   {
    "input": "deploy the application to production",
-   "output": "application deployed to production"
+   "output": "deploy application to production"
   },
   {
    "input": "generate a database",
@@ -53,36 +53,8 @@
    "output": "create database orders"
   },
   {
-   "input": "generate a webserver",
-   "output": "generate a webserver named jill"
-  },
-  {
    "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "Creating webserver 'jill'"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
+   "output": "create webserver jill"
   },
   {
    "input": "generate a webserver named jill",

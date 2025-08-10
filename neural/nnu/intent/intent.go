@@ -12,7 +12,6 @@ import (
 	"github.com/golangast/nlptagger/commands"
 	"github.com/golangast/nlptagger/neural/nn/g"
 	"github.com/golangast/nlptagger/neural/nn/semanticrole"
-	"github.com/golangast/nlptagger/neural/nn/semanticrole/train_bilstm"
 	"github.com/golangast/nlptagger/neural/nnu/train"
 	"github.com/golangast/nlptagger/tagger/tag"
 )
@@ -159,7 +158,6 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 			mostSimilarIndex = i
 		}
 	}
-	train_bilstm.Train_bilstm()
 	// Assuming you have functions to load the model and role map
 
 	fmt.Println("Most similar training data vector:", trainingData[mostSimilarIndex].Sentence) // Outputting the sentence that is most similar.

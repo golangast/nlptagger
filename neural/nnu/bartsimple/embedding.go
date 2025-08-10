@@ -32,7 +32,7 @@ type PositionalEmbedding struct {
 	inputTensor *Tensor // Add this field
 }
 
-// Example constructor (modify based on your actual constructor)
+// NewEmbedding creates a new Embedding layer with random initialization.
 func NewEmbedding(vocabSize, dimModel int) *Embedding {
 	// Initialize weights with appropriate shape [vocabSize, dimModel]
 	weightsShape := []int{vocabSize, dimModel}
@@ -43,6 +43,40 @@ func NewEmbedding(vocabSize, dimModel int) *Embedding {
 		Weights:  weights,
 		DimModel: dimModel, // Initialize the DimModel field
 		VocabSize: vocabSize, // Initialize the VocabSize field
+	}
+}
+
+// NewEmbeddingWithPretrained creates a new Embedding layer initialized with pretrained word2vec embeddings.
+// It takes the BART model's vocabulary and the word2vec embeddings.
+func NewEmbeddingWithPretrained(vocabSize, dimModel int, bartVocab *Vocabulary, word2VecEmbeddings map[string][]float64) *Embedding {
+	weightsShape := []int{vocabSize, dimModel}
+	weightsData := make([]float64, vocabSize*dimModel)
+	
+	// Initialize with pretrained embeddings where available, otherwise random
+	for word, tokenID := range bartVocab.WordToToken {
+		if vec, found := word2VecEmbeddings[word]; found {
+			if len(vec) == dimModel {
+				copy(weightsData[tokenID*dimModel:(tokenID+1)*dimModel], vec)
+			} else {
+				// Handle dimension mismatch: initialize randomly or resize vec
+				for i := 0; i < dimModel; i++ {
+					weightsData[tokenID*dimModel+i] = rand.Float64()*2 - 1 // Random between -1 and 1
+				}
+			}
+		} else {
+			// Word not found in word2vec, initialize randomly
+			for i := 0; i < dimModel; i++ {
+				weightsData[tokenID*dimModel+i] = rand.Float64()*2 - 1 // Random between -1 and 1
+			}
+		}
+	}
+
+	weights := NewTensor(weightsData, weightsShape, true) // Embedding weights require gradients
+
+	return &Embedding{
+		Weights:  weights,
+		DimModel: dimModel,
+		VocabSize: vocabSize,
 	}
 }
 
@@ -255,7 +289,7 @@ func (pe *PositionalEmbedding) Forward(inputTensor *Tensor) (*Tensor, error) {
 		}
 	}
 
-	return NewTensor(outputData, inputTensor.Shape, false), nil
+	return NewTensor(outputData, inputTensor.Shape, inputTensor.requiresGrad), nil
 }
 
 func init() {

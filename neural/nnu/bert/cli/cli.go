@@ -23,6 +23,12 @@ func RunInference(
 	intentMap := make(map[string]func([]string))
 
 	// Map commands to their corresponding functions
+	for _, cmd := range commands {
+		intentMap[cmd] = func(args []string) {
+			fmt.Printf("Executing command: %s with args: %v\n", cmd, args)
+		}
+	}
+
 	for {
 		command := InputScanDirections("Enter a command (or 'quit', exit, 'stop', 'q', 'close', 'help', 'list' to list available commands):")
 		upperCmd := strings.ToUpper(command)
@@ -63,6 +69,10 @@ func RunInference(
 					file, _ := json.MarshalIndent(bartTrainingData, "", " ")
 					_ = os.WriteFile(bartDataPath, file, 0644)
 					fmt.Println("BART training data updated. Retraining BART model...")
+					fmt.Println("BART training data sources:")
+					for _, s := range bartTrainingData.Sentences {
+						fmt.Printf("  Input: %s, Output: %s\n", s.Input, s.Output)
+					}
 					bartsimple.TrainBARTModel(bartModel, bartTrainingData, 10, 0.001, 4)
 					fmt.Println("BART model retrained.")
 				} else {
@@ -70,10 +80,10 @@ func RunInference(
 				}
 			}
 
-			fmt.Println("Is this correct? (yes/no)")
+			fmt.Println("Is this correct? (y/n)")
             reader := bufio.NewReader(os.Stdin)
             answer, _ := reader.ReadString('\n')
-            if strings.TrimSpace(strings.ToLower(answer)) != "yes" {
+            if strings.TrimSpace(strings.ToLower(answer)) != "y" {
                 fmt.Println("Please provide the correct intent:")
                 correctIntent, _ := reader.ReadString('\n')
                 correctIntent = strings.TrimSpace(correctIntent)
@@ -90,9 +100,9 @@ func RunInference(
             }
 
             fmt.Printf("BART reply: %s\n", bartReply)
-            fmt.Println("Is the BART reply correct? (yes/no)")
+            fmt.Println("Is the BART reply correct? (y/n)")
             bartAnswer, _ := reader.ReadString('\n')
-            if strings.TrimSpace(strings.ToLower(bartAnswer)) != "yes" {
+            if strings.TrimSpace(strings.ToLower(bartAnswer)) != "y" {
                 fmt.Println("Please provide the correct BART reply:")
                 correctBartReply, _ := reader.ReadString('\n')
                 correctBartReply = strings.TrimSpace(correctBartReply)

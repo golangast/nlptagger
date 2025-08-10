@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 // BARTEncoder represents a simplified encoder.
@@ -74,7 +77,8 @@ func NewBARTEncoderLayer(dimModel, numHeads int) (*BARTEncoderLayer, error) {
 		FeedForward:   feedForward,
 		Norm1:         norm1,
 		Norm2:         norm2,
-	}, nil
+	},
+	nil
 }
 
 // Forward performs the forward pass of the simplified encoder layer.
@@ -148,7 +152,8 @@ func NewBARTDecoderLayer(dimModel, numHeads int) (*BARTDecoderLayer, error) {
 		Norm1:          norm1,
 		Norm2:          norm2,
 		Norm3:          norm3,
-	}, nil
+	},
+	nil
 }
 
 // Forward performs the forward pass of the simplified decoder layer.
@@ -220,7 +225,7 @@ type SimplifiedBARTModel struct {
 	Vocabulary          *Vocabulary
 }
 // NewSimplifiedBARTModel creates a new simplified BART model.
-func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimModel, numHeads, maxSequenceLength int) (*SimplifiedBARTModel, error) {
+func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimModel, numHeads, maxSequenceLength int, word2VecEmbeddings map[string][]float64) (*SimplifiedBARTModel, error) {
 	vocabSize := len(vocabulary.WordToToken)
 
 	// Create simplified encoder and decoder with one layer each
@@ -238,7 +243,7 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 
 	// Initialize embedding layers and output linear layer (simplified)
 	// These will need to be implemented in separate simple files
-	tokenEmbedding := NewEmbedding(len(vocabulary.WordToToken), dimModel)
+	tokenEmbedding := NewEmbeddingWithPretrained(len(vocabulary.WordToToken), dimModel, vocabulary, word2VecEmbeddings)
 
 	// Assuming NewEmbedding exists
 	positionalEmbedding := NewPositionalEmbedding(maxSequenceLength, dimModel) // Assuming NewPositionalEmbedding exists
@@ -257,7 +262,8 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 		VocabSize:           vocabSize,
 		MaxSequenceLength:   maxSequenceLength,
 		Vocabulary:          vocabulary,
-	}, nil
+	},
+	nil
 }
 func Reshape(tensor []float64, originalShape, newShape []int) ([]float64, error) {
 	originalSize := 1
@@ -475,4 +481,160 @@ func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor *Tens
 	}
 
 	return outputLogits, nil
+}
+
+// Reply generates a response based on the input text.
+func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
+	// 1. Encode the input text
+	inputTokenIDs, err := m.Tokenizer.Encode(inputText)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode input text: %w", err)
+	}
+
+	// Convert inputTokenIDs to a Tensor
+	inputData := make([]float64, len(inputTokenIDs))
+	for i, id := range inputTokenIDs {
+		inputData[i] = float64(id)
+	}
+	inputTensor := NewTensor(inputData, []int{1, len(inputTokenIDs)}, false)
+
+	// 2. Pass through the encoder
+	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor)
+	if err != nil {
+		return "", fmt.Errorf("encoder token embedding failed: %w", err)
+	}
+	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings)
+	if err != nil {
+		return "", fmt.Errorf("encoder positional embedding failed: %w", err)
+	}
+	encoderOutput, err := m.Encoder.Layer.Forward(encoderInputWithPos, nil) // No mask for now
+	if err != nil {
+		return "", fmt.Errorf("encoder forward pass failed: %w", err)
+	}
+
+	// 3. Initialize decoder input with BOS token
+	decoderInputIDs := []int{m.Tokenizer.BosID}
+	generatedResponse := []string{}
+
+	// 4. Iteratively generate tokens
+	for i := 0; i < m.MaxSequenceLength; i++ {
+		decoderInputData := make([]float64, len(decoderInputIDs))
+		for j, id := range decoderInputIDs {
+			decoderInputData[j] = float64(id)
+		}
+		decoderInputTensor := NewTensor(decoderInputData, []int{1, len(decoderInputIDs)}, false)
+
+		decoderInputEmbeddings, err := m.TokenEmbedding.Forward(decoderInputTensor)
+		if err != nil {
+			return "", fmt.Errorf("decoder token embedding failed: %w", err)
+		}
+		decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
+		if err != nil {
+			return "", fmt.Errorf("decoder positional embedding failed: %w", err)
+		}
+
+		// Create causal mask for self-attention in decoder
+		seqLen := len(decoderInputIDs)
+		maskData := make([]float64, seqLen*seqLen)
+		for r := 0; r < seqLen; r++ {
+			for c := 0; c < seqLen; c++ {
+				if c > r {
+					maskData[r*seqLen+c] = -1e9 // Large negative value for masking
+				}
+			}
+		}
+		causalMask := NewTensor(maskData, []int{1, 1, seqLen, seqLen}, false) // Shape for broadcasting
+
+		decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, causalMask, nil)
+		if err != nil {
+			return "", fmt.Errorf("decoder forward pass failed: %w", err)
+		}
+
+		// Get the last token's output for prediction
+		lastTokenOutput, err := decoderOutput.Slice(1, decoderOutput.Shape[1]-1, decoderOutput.Shape[1])
+		if err != nil {
+			return "", fmt.Errorf("slicing tensor failed: %w", err)
+		}
+		logits, err := m.OutputLinear.Forward(lastTokenOutput)
+		if err != nil {
+			return "", fmt.Errorf("output linear layer failed: %w", err)
+		}
+
+	// Apply softmax and sample the next token using top-k sampling
+		probabilities, err := logits.Softmax(2)
+		if err != nil {
+			return "", fmt.Errorf("softmax failed: %w", err)
+		}
+
+		k := 5 // Example top-k value
+		predictedTokenID, err := TopKSampling(probabilities, k, m.Vocabulary)
+		if err != nil {
+			return "", fmt.Errorf("top-k sampling failed: %w", err)
+		}
+
+		// Stop if EOS token is predicted
+		if predictedTokenID == m.Tokenizer.EosID {
+			break
+		}
+
+		// Append to generated response
+		generatedResponse = append(generatedResponse, m.Vocabulary.TokenToWord[predictedTokenID])
+		decoderInputIDs = append(decoderInputIDs, predictedTokenID)
+	}
+
+	return strings.Join(generatedResponse, " "), nil
+}
+
+// TopKSampling performs top-k sampling on a probability distribution.
+func TopKSampling(probabilities *Tensor, k int, vocabulary *Vocabulary) (int, error) {
+	if k <= 0 {
+		return 0, errors.New("k must be positive")
+	}
+
+	// Create a slice of token-probability pairs
+	type tokenProb struct {
+		ID   int
+		Prob float64
+	}
+
+	probs := make([]tokenProb, len(probabilities.Data))
+	for i, p := range probabilities.Data {
+		probs[i] = tokenProb{ID: i, Prob: p}
+	}
+
+	// Sort by probability in descending order
+	sort.Slice(probs, func(i, j int) bool {
+		return probs[i].Prob > probs[j].Prob
+	})
+
+	// Take the top-k tokens
+	if k > len(probs) {
+		k = len(probs)
+	}
+	topKProbs := probs[:k]
+
+	// Print the top-k tokens and their probabilities
+	fmt.Println("Top-k probabilities:")
+	for _, p := range topKProbs {
+		fmt.Printf("  Token: %s, Probability: %f\n", vocabulary.TokenToWord[p.ID], p.Prob)
+	}
+
+	// Renormalize the probabilities
+	sum := 0.0
+	for _, p := range topKProbs {
+		sum += p.Prob
+	}
+
+	// Sample from the top-k tokens
+	r := rand.Float64() * sum
+	cumulativeProb := 0.0
+	for _, p := range topKProbs {
+		cumulativeProb += p.Prob
+		if r < cumulativeProb {
+			return p.ID, nil
+		}
+	}
+
+	// Should not happen, but as a fallback, return the most likely token
+	return topKProbs[0].ID, nil
 }
