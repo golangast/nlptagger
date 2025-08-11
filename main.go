@@ -34,7 +34,7 @@ func main() {
 
 	// Define paths
 	const bartModelPath = "gob_models/simplified_bart_model.gob"
-	const trainingDataPath = "trainingdata/tagdata/nlp_training_data.json"
+	const trainingDataPath = "trainingdata/bartdata/explanation_data.json"
 	const vocabPath = "gob_models/vocabulary.gob"
 
 	vocabulary, err := vocabbert.SetupVocabulary(vocabPath, trainingDataPath)
@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Train Word2Vec model first
-	word2vecTrainingDataPath := "trainingdata/tagdata/nlp_training_data.json"
+	word2vecTrainingDataPath := "trainingdata/bartdata/explanation_data.json"
 	word2vecModelSavePath := "gob_models/word2vec_model.gob"
 	word2vecVectorSize := *dimModel
 	word2vecEpochs := 50
@@ -207,4 +207,4 @@ func main() {
 
 
 
-//go run main.go -train-bert -bert-data=trainingdata/bertdata/bert.json -epochs=10 -lr=0.001  
+//go run main.go -train-bert -bert-data=trainingdata/bertdata/bert.json -epochs=10 -lr=0.001

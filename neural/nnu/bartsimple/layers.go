@@ -70,7 +70,7 @@ func (l *Linear) Forward(inputs ...*Tensor) (*Tensor, error) {
 		outputDim := l.Weights.Shape[1]
 
 		// Reshape input for batch matrix multiplication
-		reshapedInputData := make([]float64, inputDim*outputDim)
+		reshapedInputData := make([]float64, batchSize*seqLength*inputDim)
 		copy(reshapedInputData, input.Data) // Create a copy to avoid modifying original
 		reshapedInput := NewTensor(reshapedInputData, []int{batchSize * seqLength, inputDim}, true)
 
@@ -786,26 +786,13 @@ func (mha *MultiHeadAttention) Backward(grad *Tensor) error {
 			}
 		}
 
-		// dLoss/dk = q^T @ dLoss/dAttentionScores
-		// Transpose mha.q: swap last two dimensions (seq_len and depth)
-		qTransposedForGradK, err := mha.q.Transpose(len(mha.q.Shape)-2, len(mha.q.Shape)-1)
-		if err != nil {
-			panic(fmt.Sprintf("failed to transpose q for MHA backward: %v", err))
-		}
-
-		// Need a batched MatMul operation: [b, h, d, s] @ [b, h, s, s] -> [b, h, d, s] ? No, [b, h, s, d]
-		// The result shape should be [b, h, s, d] for gradK.
-		// MatMul(A^T @ C) where A=q, C=attentionScores.Grad
-		// Shape: [b, h, d, s] @ [b, h, s, s] -> [b, h, d, s]
-		// We need [b, h, s, d]. The formula is dLoss/dk = (Q^T @ dLoss/dAttentionScores)^T = dLoss/dAttentionScores^T @ Q.
-		// Let's use the correct formula: dLoss/dk = dLoss/dAttentionScores^T @ q (untransposed)
+		// dLoss/dk = dLoss/dAttentionScores^T @ q
 		attentionScoresGradTransposed, err := mha.attentionScores.Grad.Transpose(len(mha.attentionScores.Grad.Shape)-2, len(mha.attentionScores.Grad.Shape)-1)
 		if err != nil {
 			panic(fmt.Sprintf("failed to transpose attentionScores.Grad for MHA backward: %v", err))
 		}
 
-		// Need a batched MatMul operation: [b, h, s, s] @ [b, h, s, d] -> [b, h, s, d]
-		gradK_per_head, err := qTransposedForGradK.MatMul(attentionScoresGradTransposed) // Use qTransposedForGradK here
+		gradK_per_head, err := attentionScoresGradTransposed.MatMul(mha.q)
 		if err != nil {
 			panic(fmt.Sprintf("failed to calculate gradK in MHA backward: %v", err))
 		}

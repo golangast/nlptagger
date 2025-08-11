@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 )
 
@@ -27,7 +28,6 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 	}
 
 	// Tokenize the input command using the model's tokenizer
-	// Assuming m.Tokenizer has an Encode method that returns []int and error
 	inputTokenIDs, err := m.Tokenizer.Encode(command)
 	if err != nil {
 		return "", fmt.Errorf("input command tokenization failed: %w", err)
@@ -46,107 +46,143 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 	for i, id := range inputTokenIDs {
 		inputTensorData[i] = float64(id)
 	}
-	// Assuming NewTensor function is available
 	inputTensor := NewTensor(inputTensorData, []int{1, len(inputTokenIDs)}, true) // Batch size 1
 
 	// Embed the input tensor
-	// Assuming TokenEmbedding.Forward exists and returns *Tensor
 	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor)
 	if err != nil {
 		return "", fmt.Errorf("encoder token embedding failed: %w", err)
 	}
 
 	// Add positional embeddings
-	// Assuming PositionalEmbedding.Forward exists and returns *Tensor
 	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings)
 	if err != nil {
 		return "", fmt.Errorf("encoder positional embedding failed: %w", err)
 	}
 
-	// Create a dummy encoder mask (for simplicity, assuming no padding mask needed for this basic test)
-	// In a real scenario, you'd create a mask based on padded tokens.
 	var encoderMask *Tensor = nil
 
 	// Pass through the simplified encoder layer
-	// Assuming Encoder.Layer.Forward exists and returns *Tensor
 	encoderOutput, err := m.Encoder.Layer.Forward(encoderInputWithPos, encoderMask)
 	if err != nil {
 		return "", fmt.Errorf("simplified encoder layer forward pass failed: %w", err)
 	}
 
-	// --- Autoregressive Decoding Loop ---
-	summaryTokens := []int{}
-	// Start with the beginning-of-sentence token
-	decoderInputIDs := []float64{float64(m.Tokenizer.BosID)}
+	// --- Beam Search Decoding Loop ---
+	beamWidth := 5 // Example beam width
+	beams := make([]struct {
+		tokenIDs []int
+		score    float64
+	}, 1)
+	beams[0] = struct {
+		tokenIDs []int
+		score    float64
+	}{
+		tokenIDs: []int{m.Tokenizer.BosID},
+		score:    0.0,
+	}
 
-	// Generate tokens one by one up to the max sequence length
 	for i := 0; i < m.MaxSequenceLength; i++ {
-		// Convert current decoder input IDs to a tensor
-		decoderInputTensor := NewTensor(decoderInputIDs, []int{1, len(decoderInputIDs)}, true)
+		allCandidates := make([]struct {
+			tokenIDs []int
+			score    float64
+		}, 0)
 
-		// Embed the decoder input
-		decoderInputEmbeddings, err := m.TokenEmbedding.Forward(decoderInputTensor)
-		if err != nil {
-			return "", fmt.Errorf("decoder token embedding failed: %w", err)
-		}
+		for _, beam := range beams {
+			if beam.tokenIDs[len(beam.tokenIDs)-1] == m.Tokenizer.EosID {
+				allCandidates = append(allCandidates, beam)
+				continue
+			}
 
-		// Add positional embeddings
-		decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
-		if err != nil {
-			return "", fmt.Errorf("decoder positional embedding failed: %w", err)
-		}
+			decoderInputIDs := make([]float64, len(beam.tokenIDs))
+			for j, id := range beam.tokenIDs {
+				decoderInputIDs[j] = float64(id)
+			}
+			decoderInputTensor := NewTensor(decoderInputIDs, []int{1, len(decoderInputIDs)}, true)
 
-		// Create a causal mask for the decoder's self-attention
-		// This prevents the model from looking at future tokens during generation.
-		selfAttentionMask := createCausalMask(1, len(decoderInputIDs))
-		var crossAttentionMask *Tensor = nil // No cross-attention mask for simplicity
+			decoderInputEmbeddings, err := m.TokenEmbedding.Forward(decoderInputTensor)
+			if err != nil {
+				return "", fmt.Errorf("decoder token embedding failed: %w", err)
+			}
 
-		// Pass through the decoder
-		decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
-		if err != nil {
-			return "", fmt.Errorf("decoder layer forward pass failed: %w", err)
-		}
+			decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
+			if err != nil {
+				return "", fmt.Errorf("decoder positional embedding failed: %w", err)
+			}
 
-		// Pass through the final linear layer to get logits
-		outputLogits, err := m.OutputLinear.Forward(decoderOutput)
-		if err != nil {
-			return "", fmt.Errorf("output linear layer failed: %w", err)
-		}
+			selfAttentionMask := createCausalMask(1, len(decoderInputIDs))
+			var crossAttentionMask *Tensor = nil
 
-		// --- Greedy Decoding for the *last* token ---
-		// Get the logits for the last token in the sequence
-		lastTokenLogitsIndex := (outputLogits.Shape[1] - 1) * outputLogits.Shape[2]
-		lastTokenLogits := outputLogits.Data[lastTokenLogitsIndex:]
+			decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
+			if err != nil {
+				return "", fmt.Errorf("decoder layer forward pass failed: %w", err)
+			}
 
-		// Apply Softmax to get probabilities
-		probabilities := Softmax(lastTokenLogits)
+			outputLogits, err := m.OutputLinear.Forward(decoderOutput)
+			if err != nil {
+				return "", fmt.Errorf("output linear layer failed: %w", err)
+			}
 
-		// Greedy decoding: select the token with the highest probability
-		maxProb := -1.0
-		predictedTokenID := -1
-		for j, prob := range probabilities {
-			if prob > maxProb {
-				maxProb = prob
-				predictedTokenID = j
+			lastTokenLogitsIndex := (outputLogits.Shape[1] - 1) * outputLogits.Shape[2]
+			lastTokenLogitsData := outputLogits.Data[lastTokenLogitsIndex:]
+			lastTokenLogitsTensor := NewTensor(lastTokenLogitsData, []int{1, 1, len(lastTokenLogitsData)}, false)
+
+			probabilitiesTensor, err := lastTokenLogitsTensor.Softmax(2)
+			if err != nil {
+				return "", fmt.Errorf("softmax failed: %w", err)
+			}
+
+			// Find top-k tokens
+			topK := findTopK(probabilitiesTensor.Data, beamWidth)
+
+			for _, token := range topK {
+				newCandidate := struct {
+					tokenIDs []int
+					score    float64
+				}{
+					tokenIDs: append(append([]int{}, beam.tokenIDs...), token.tokenID),
+					score:    beam.score - token.probability, // Use log probability
+				}
+				allCandidates = append(allCandidates, newCandidate)
 			}
 		}
 
-		// Stop if we predict the end-of-sequence token
-		if predictedTokenID == m.Tokenizer.EosID {
-			break
+		// Sort candidates by score
+		sort.Slice(allCandidates, func(i, j int) bool {
+			return allCandidates[i].score > allCandidates[j].score
+		})
+
+		// Select top-k candidates for the next iteration
+		if len(allCandidates) > beamWidth {
+			beams = allCandidates[:beamWidth]
+		} else {
+			beams = allCandidates
 		}
 
-		// Add the predicted token to our summary and to the next decoder input
-		summaryTokens = append(summaryTokens, predictedTokenID)
-		decoderInputIDs = append(decoderInputIDs, float64(predictedTokenID))
+		// Check for termination
+		allFinished := true
+		for _, beam := range beams {
+			if beam.tokenIDs[len(beam.tokenIDs)-1] != m.Tokenizer.EosID {
+				allFinished = false
+				break
+			}
+		}
+		if allFinished {
+			break
+		}
+	}
+
+	// Select the best summary
+	bestBeam := beams[0]
+	summaryTokens := bestBeam.tokenIDs[1:] // Exclude BOS token
+	if len(summaryTokens) > 0 && summaryTokens[len(summaryTokens)-1] == m.Tokenizer.EosID {
+		summaryTokens = summaryTokens[:len(summaryTokens)-1] // Exclude EOS token
 	}
 
 	// Convert token IDs to words and join into a string using the model's vocabulary
 	summaryWords := []string{}
-	// We already checked for m.Vocabulary != nil at the beginning of the function, but adding another check here for safety
 	if m.Vocabulary == nil {
 		log.Println("Warning: Vocabulary is unexpectedly nil during word conversion.")
-		// Return token IDs as a fallback
 		wordStrings := make([]string, len(summaryTokens))
 		for i, tokenID := range summaryTokens {
 			wordStrings[i] = fmt.Sprintf("%d", tokenID)
@@ -155,20 +191,21 @@ func (m *SimplifiedBARTModel) BartProcessCommand(command string) (string, error)
 	}
 
 	for _, tokenID := range summaryTokens {
-		// Assuming m.Vocabulary has a GetWordFromTokenID method
 		word, found := m.Vocabulary.GetWordFromTokenID(tokenID)
 		if !found {
-			// Optional: Log a warning here if you want to know which token IDs were not found
 			log.Printf("Warning: Token ID %d not found in vocabulary, mapped to [UNK].", tokenID)
 		}
 		summaryWords = append(summaryWords, word)
 
 	}
 
-	generatedSummary := strings.Join(summaryWords, " ") // Assuming "strings" package imported
+	generatedSummary := strings.Join(summaryWords, " ")
 
 	return generatedSummary, nil
 }
+
+// createCausalMask creates a causal mask for self-attention.
+// The mask is a tensor where future positions are masked out with a large negative number.
 
 // createCausalMask creates a causal mask for self-attention.
 // The mask is a tensor where future positions are masked out with a large negative number.
@@ -192,3 +229,41 @@ func createCausalMask(batchSize, seqLength int) *Tensor {
 	// The mask itself does not require gradients
 	return NewTensor(maskData, maskShape, false)
 }
+
+// findTopK finds the top-k tokens with the highest probabilities.
+func findTopK(probabilities []float64, k int) []struct {
+	tokenID     int
+	probability float64
+} {
+	type tokenProb struct {
+		tokenID     int
+		probability float64
+	}
+
+	probs := make([]tokenProb, len(probabilities))
+	for i, p := range probabilities {
+		probs[i] = tokenProb{tokenID: i, probability: p}
+	}
+
+	sort.Slice(probs, func(i, j int) bool {
+		return probs[i].probability > probs[j].probability
+	})
+
+	if k > len(probs) {
+		k = len(probs)
+	}
+
+	topK := make([]struct {
+		tokenID     int
+		probability float64
+	}, k)
+	for i := 0; i < k; i++ {
+		topK[i] = struct {
+			tokenID     int
+			probability float64
+		}{tokenID: probs[i].tokenID, probability: probs[i].probability}
+	}
+
+	return topK
+}
+

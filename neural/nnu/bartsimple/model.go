@@ -566,7 +566,29 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 			return "", fmt.Errorf("softmax failed: %w", err)
 		}
 
-		k := 5 // Example top-k value
+		// Prevent BOS token from being sampled after the first token
+		bosTokenID := m.Tokenizer.BosID
+		if bosTokenID >= 0 && bosTokenID < len(probabilities.Data) {
+			probabilities.Data[bosTokenID] = 1e-10 // Set probability to a very small number
+		}
+
+		// Apply no-repeat bigram penalty
+		if seqLen > 0 { // Ensure there's at least one token to form a bigram
+			lastTokenID := decoderInputIDs[seqLen-1]
+			for nextCandidateTokenID := 0; nextCandidateTokenID < len(probabilities.Data); nextCandidateTokenID++ {
+				// Check if the bigram (lastTokenID, nextCandidateTokenID) has appeared before
+				// Iterate through the existing sequence to find repetitions
+				for j := 0; j < seqLen-1; j++ { // Iterate up to second to last token
+					if decoderInputIDs[j] == lastTokenID && decoderInputIDs[j+1] == nextCandidateTokenID {
+						// Found a repeated bigram, penalize the probability of nextCandidateTokenID
+						probabilities.Data[nextCandidateTokenID] = 1e-10 // Set probability to a very small number
+						break // No need to check further for this nextCandidateTokenID
+					}
+				}
+			}
+		}
+
+		k := 10 // Increased top-k value for more diversity
 		predictedTokenID, err := TopKSampling(probabilities, k, m.Vocabulary)
 		if err != nil {
 			return "", fmt.Errorf("top-k sampling failed: %w", err)
@@ -612,12 +634,6 @@ func TopKSampling(probabilities *Tensor, k int, vocabulary *Vocabulary) (int, er
 		k = len(probs)
 	}
 	topKProbs := probs[:k]
-
-	// Print the top-k tokens and their probabilities
-	fmt.Println("Top-k probabilities:")
-	for _, p := range topKProbs {
-		fmt.Printf("  Token: %s, Probability: %f\n", vocabulary.TokenToWord[p.ID], p.Prob)
-	}
 
 	// Renormalize the probabilities
 	sum := 0.0

@@ -238,7 +238,7 @@ func (t *Tensor) Softmax(axis int) (*Tensor, error) {
 	return outputTensor, nil
 }
 
-// Reshape changes the shape of the tensor and reorders the underlying data based on standard C-order (row-major) indexing.
+// Reshape changes the shape of the tensor. This implementation simply copies the data.
 func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 	currentSize := 1
 	for _, dim := range t.Shape {
@@ -253,47 +253,10 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 		return nil, fmt.Errorf("cannot reshape tensor of size %d to shape %v (size %d): sizes do not match", currentSize, newShape, newSize)
 	}
 
-	if currentSize == 0 {
-		// Handle empty tensors
-		return NewTensor([]float64{}, newShape, false), nil
-	}
-
-	// Calculate strides for both original and new shapes (C-order/row-major)
-	newStrides := calculateStrides(newShape)
-
-	// Create a new data slice for the reshaped tensor
-	newData := make([]float64, currentSize) // Use currentSize (which equals newSize)
-
-	newIndices := make([]int, len(newShape)) // Slice to hold current indices for new shape
-
-	// Iterate through all elements of the new tensor using their flattened index
-	for newFlatIndex := 0; newFlatIndex < newSize; newFlatIndex++ {
-		// Calculate multi-dimensional indices for the current flattened index in the new tensor
-		tempNewFlatIndex := newFlatIndex
-		for i := 0; i < len(newShape); i++ {
-			if newStrides[i] > 0 {
-				newIndices[i] = tempNewFlatIndex / newStrides[i]
-				tempNewFlatIndex %= newStrides[i]
-			} else {
-				// This case should ideally not happen if newShape is valid and has non-zero dimensions
-				// If a dimension is 0, the size is 0, and the loop for newFlatIndex wouldn't run.
-				// If it does happen, assume index is 0 for a 0-dimension.
-				newIndices[i] = 0
-			}
-		}
-
-		// Reverting to the simple data copy:
-		newData := make([]float64, len(t.Data)) // Still make a copy to avoid modifying original tensor's data slice
-		copy(newData, t.Data)
-
-		return NewTensor(newData, newShape, false), nil // Return new tensor with copied data and new shape
-
-	}
-
-	// Let's ensure this simple data copy version is the one in your tensor.go:
-	newData = make([]float64, len(t.Data))
+	newData := make([]float64, len(t.Data))
 	copy(newData, t.Data)
-	return NewTensor(newData, newShape, false), nil
+
+	return NewTensor(newData, newShape, t.requiresGrad), nil
 }
 
 // calculateBroadcastShape calculates the resulting shape after broadcasting two shapes.
@@ -414,7 +377,7 @@ func (t *Tensor) Transpose(axis1, axis2 int) (*Tensor, error) {
 	initialOriginalIndices := make([]int, len(t.Shape)) // Initialize with zeros
 	copyData(initialNewIndices, initialOriginalIndices, 0)
 
-	return NewTensor(newData, newShape, false), nil
+	return NewTensor(newData, newShape, t.requiresGrad), nil
 }
 
 // calculateStrides calculates the strides for accessing elements in a flattened tensor data slice.

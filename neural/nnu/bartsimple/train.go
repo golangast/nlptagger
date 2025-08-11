@@ -53,6 +53,7 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 	if model.Tokenizer == nil {
 		return errors.New("model tokenizer is not initialized")
 	}
+	// Check if TokenEmbedding is already initialized. If not, initialize it.
 	if model.TokenEmbedding == nil {
 		// Load word2vec model
 		word2vecModel, err := word2vec.LoadModel("gob_models/word2vec_model.gob")
@@ -64,7 +65,7 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 			log.Println("Word2vec model loaded successfully. Initializing BART embeddings with pretrained vectors.")
 			// Convert word2vec.WordVectors to map[string][]float64 for NewEmbeddingWithPretrained
 			pretrainedEmbeddings := word2vec.ConvertToMap(word2vecModel.WordVectors, word2vecModel.Vocabulary)
-			model.TokenEmbedding = NewEmbeddingWithPretrained(model.VocabSize, model.TokenEmbedding.DimModel, model.Vocabulary, pretrainedEmbeddings)
+			model.TokenEmbedding = NewEmbeddingWithPretrained(model.VocabSize, model.Encoder.Layer.SelfAttention.DimModel, model.Vocabulary, pretrainedEmbeddings)
 		}
 	}
 

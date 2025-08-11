@@ -54,7 +54,7 @@
   },
   {
    "input": "generate a webserver named jill",
-   "output": "create webserver jill"
+   "output": "generating a webserver named jill"
   },
   {
    "input": "generate a webserver named jill",
