@@ -2,6 +2,37 @@ package dependencyrelation
 
 import "github.com/golangast/nlptagger/tagger/tag"
 
+var (
+	DRToID = map[string]int{
+		"root":               0,
+		"dobj":               1,
+		"det":                2,
+		"nsubj":              3,
+		"aux":                4,
+		"amod":               5,
+		"case":               6,
+		"handlerName":        7,
+		"NOUN":               8,
+		"nmod:with":          9,
+		"nummod":             10,
+		"nmod":               11,
+		"cc":                 12,
+		"conj":               13,
+		"pobj":               14,
+		"advmod":             15,
+		"integer_field":      16,
+		"command":            17,
+		"compound":           18,
+		"named":              19,
+		"has_data_structure": 20,
+		"string_fields":      21,
+	}
+)
+
+func DRToIDMap() map[string]int {
+	return DRToID
+}
+
 // Dependency represents a dependency relation.
 
 // PredictDependencies predicts the dependency relationships between tokens in a sentence.

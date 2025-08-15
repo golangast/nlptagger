@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -16,15 +17,15 @@ import (
 )
 
 var (
-	trainBart    = flag.Bool("train-bart", false, "Enable BART model training")	
+	trainBart    = flag.Bool("train-bart", false, "Enable BART model training")
 	trainBert    = flag.Bool("train-bert", false, "Enable BERT model training")
 
-	epochs       = flag.Int("epochs", 10, "Number of training epochs")
-	learningRate = flag.Float64("lr", 0.001, "Learning rate for training")
+	epochs       = flag.Int("epochs", 100, "Number of training epochs")
+	learningRate = flag.Float64("lr", 0.0001, "Learning rate for training")
 	bartDataPath = flag.String("bart-data", "trainingdata/bartdata/bartdata.json", "Path to BART training data")
 	bertDataPath = flag.String("bert-data", "trainingdata/bertdata/bert.json", "Path to BERT training data")
 	dimModel     = flag.Int("dim", 100, "Dimension of the model")
-	numHeads     = flag.Int("heads", 4, "Number of attention heads")
+	numHeads     = flag.Int("heads", 1, "Number of attention heads")
 	maxSeqLength = flag.Int("maxlen", 64, "Maximum sequence length")
 	batchSize    = flag.Int("batchsize", 4, "Batch size for training")
 )
@@ -139,70 +140,72 @@ func main() {
 	}
 
 	var bertModel *bert.BertModel
-	
-		bertModel, err = bert.Train(bertConfig, bertTrainingData, *epochs, *learningRate, vocabulary, pretrainedEmbeddings)
-		if err != nil {
+
+	bertModel, err = bert.Train(bertConfig, bertTrainingData, *epochs, *learningRate, vocabulary, pretrainedEmbeddings)
+	if err != nil {
 			log.Fatalf("BERT model training failed: %v", err)
+	}
+	bertModel.TrainingData = bertTrainingData
+	tokenizer, err := bartsimple.NewTokenizer(
+		vocabulary,
+		vocabulary.BeginningOfSentenceID,
+		vocabulary.EndOfSentenceID,
+		vocabulary.PaddingTokenID,
+		vocabulary.UnknownTokenID,
+	)
+	if err != nil {
+		log.Fatalf("Failed to create tokenizer: %v", err)
+	}
+
+	// Make sure tokenizer is initialized before this block!
+	for i := range bertModel.TrainingData {
+		ex := &bertModel.TrainingData[i]
+		if ex.Embedding != nil && len(ex.Embedding) == bertConfig.HiddenSize {
+			continue // Already has a valid embedding
 		}
-		bertModel.TrainingData = bertTrainingData 
-		tokenizer, err := bartsimple.NewTokenizer(
-			vocabulary,
-			vocabulary.BeginningOfSentenceID,
-			vocabulary.EndOfSentenceID,
-			vocabulary.PaddingTokenID,
-			vocabulary.UnknownTokenID,
-		)
-		if err != nil {
-			log.Fatalf("Failed to create tokenizer: %v", err)
+		tokenIDs, _ := tokenizer.Encode(ex.Text)
+		inputTensor := bert.NewTensor(nil, []int{1, len(tokenIDs)}, false)
+		for j, id := range tokenIDs {
+			inputTensor.Data[j] = float64(id)
 		}
+		tokenTypeIDs := bert.NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
 
-		// Make sure tokenizer is initialized before this block!
-		for i := range bertModel.TrainingData {
-			ex := &bertModel.TrainingData[i]
-			if ex.Embedding != nil && len(ex.Embedding) == bertConfig.HiddenSize {
-				continue // Already has a valid embedding
-			}
-			tokenIDs, _ := tokenizer.Encode(ex.Text)
-			inputTensor := bert.NewTensor(nil, []int{1, len(tokenIDs)}, false)
-			for j, id := range tokenIDs {
-				inputTensor.Data[j] = float64(id)
-			}
-			tokenTypeIDs := bert.NewTensor(make([]float64, len(tokenIDs)), []int{1, len(tokenIDs)}, false)
+		// Generate POS and NER tags
+		taggedText := postagger.Postagger(ex.Text)
+		nerTaggedText := nertagger.Nertagger(taggedText)
 
-			// Generate POS and NER tags
-			taggedText := postagger.Postagger(ex.Text)
-			nerTaggedText := nertagger.Nertagger(taggedText)
-
-			posTagIDsData := make([]float64, len(nerTaggedText.PosTag))
-			for j, tag := range nerTaggedText.PosTag {
-				posTagIDsData[j] = float64(postagger.PosTagToIDMap()[tag])
-			}
-			posTagIDs := bert.NewTensor(posTagIDsData, []int{1, len(posTagIDsData)}, false)
-
-			nerTagIDsData := make([]float64, len(nerTaggedText.NerTag))
-			for j, tag := range nerTaggedText.NerTag {
-				nerTagIDsData[j] = float64(nertagger.NerTagToIDMap()[tag])
-			}
-			nerTagIDs := bert.NewTensor(nerTagIDsData, []int{1, len(nerTagIDsData)}, false)
-
-			embeddingOutput := bertModel.Embeddings.Forward(inputTensor, tokenTypeIDs, posTagIDs, nerTagIDs)
-			sequenceOutput, _ := bertModel.Encoder.Forward(embeddingOutput)
-			pooledOutput, _ := bertModel.Pooler.Forward(sequenceOutput)
-			ex.Embedding = make([]float64, len(pooledOutput.Data))
-			copy(ex.Embedding, pooledOutput.Data)
+		posTagIDsData := make([]float64, len(nerTaggedText.PosTag))
+		for j, tag := range nerTaggedText.PosTag {
+			posTagIDsData[j] = float64(postagger.PosTagToIDMap()[tag])
 		}
-	
-		// After precomputing embeddings for all examples:
-		file, err := os.Create(*bertDataPath)
-		if err != nil {
-			log.Fatalf("Could not save training data with embeddings: %v", err)
-		}
-		defer file.Close()
-		if err := json.NewEncoder(file).Encode(bertModel.TrainingData); err != nil {
-			log.Fatalf("Could not encode training data with embeddings: %v", err)
-		}
+		posTagIDs := bert.NewTensor(posTagIDsData, []int{1, len(posTagIDsData)}, false)
 
+		nerTagIDsData := make([]float64, len(nerTaggedText.NerTag))
+		for j, tag := range nerTaggedText.NerTag {
+			nerTagIDsData[j] = float64(nertagger.NerTagToIDMap()[tag])
+		}
+		nerTagIDs := bert.NewTensor(nerTagIDsData, []int{1, len(nerTagIDsData)}, false)
+
+		embeddingOutput := bertModel.Embeddings.Forward(inputTensor, tokenTypeIDs, posTagIDs, nerTagIDs)
+		sequenceOutput, _ := bertModel.Encoder.Forward(embeddingOutput)
+		pooledOutput, _ := bertModel.Pooler.Forward(sequenceOutput)
+		ex.Embedding = make([]float64, len(pooledOutput.Data))
+		copy(ex.Embedding, pooledOutput.Data)
+	}
+
+	// After precomputing embeddings for all examples:
+	file, err := os.Create(*bertDataPath)
+	if err != nil {
+		log.Fatalf("Could not save training data with embeddings: %v", err)
+	}
+	defer file.Close()
+	if err := json.NewEncoder(file).Encode(bertModel.TrainingData); err != nil {
+		log.Fatalf("Could not encode training data with embeddings: %v", err)
+	}
+
+	fmt.Println("Calling cli.RunInference")
 	cli.RunInference(bartModel, bertModel, bertConfig, tokenizer)
+	fmt.Println("cli.RunInference finished")
 }
 
 

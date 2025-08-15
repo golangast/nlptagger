@@ -10,6 +10,9 @@ import (
 	"os"
 
 	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"github.com/golangast/nlptagger/tagger"
+	"github.com/golangast/nlptagger/tagger/nertagger"
+	"github.com/golangast/nlptagger/tagger/postagger"
 )
 
 // BARTTrainingData represents the structure of the training data JSON.
@@ -68,6 +71,12 @@ func TrainBARTModel(model *SimplifiedBARTModel, data *BARTTrainingData, epochs i
 			model.TokenEmbedding = NewEmbeddingWithPretrained(model.VocabSize, model.Encoder.Layer.SelfAttention.DimModel, model.Vocabulary, pretrainedEmbeddings)
 		}
 	}
+	if model.PosTagEmbedding == nil {
+		model.PosTagEmbedding = NewEmbedding(len(postagger.PosTagToIDMap()), model.Encoder.Layer.SelfAttention.DimModel)
+	}
+	if model.NerTagEmbedding == nil {
+		model.NerTagEmbedding = NewEmbedding(len(nertagger.NerTagToIDMap()), model.Encoder.Layer.SelfAttention.DimModel)
+	}
 
 	// Create an optimizer for the model's parameters. This relies on the Parameters() methods you added.
 	optimizer := NewOptimizer(model.Parameters(), learningRate)
@@ -114,6 +123,8 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 	flatInputData := make([]float64, batchSize*seqLen)
 	flatTargetData := make([]float64, batchSize*seqLen)
 	flatTargetIDsForLoss := make([]int, batchSize*seqLen)
+	flatPosTagData := make([]float64, batchSize*seqLen)
+	flatNerTagData := make([]float64, batchSize*seqLen)
 
 	for i, pair := range batch {
 		inputIDs, err := TokenizeAndConvertToIDs(pair.Input, model.Vocabulary, seqLen)
@@ -125,56 +136,63 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 			return 0, fmt.Errorf("batch target tokenization failed for item %d: %w", i, err)
 		}
 
+		tags := tagger.Tagging(pair.Input)
+		posTagToIDMap := postagger.PosTagToIDMap()
+		nerTagToIDMap := nertagger.NerTagToIDMap()
+
+		posTagIDs := make([]int, seqLen)
+		nerTagIDs := make([]int, seqLen)
+
+		for j := 0; j < seqLen; j++ {
+			if j < len(tags.PosTag) {
+				posTagIDs[j] = posTagToIDMap[tags.PosTag[j]]
+			} else {
+				posTagIDs[j] = 0 // Padding
+			}
+			if j < len(tags.NerTag) {
+				nerTagIDs[j] = nerTagToIDMap[tags.NerTag[j]]
+			} else {
+				nerTagIDs[j] = 0 // Padding
+			}
+		}
+
 		// Copy the tokenized data into the flat batch slices
 		for j := 0; j < seqLen; j++ {
 			flatIndex := i*seqLen + j
 			flatInputData[flatIndex] = float64(inputIDs[j])
-			// For teacher forcing, the decoder input is the target sequence
 			flatTargetData[flatIndex] = float64(targetIDs[j])
-			// For loss calculation, we need the integer IDs
 			flatTargetIDsForLoss[flatIndex] = targetIDs[j]
+			flatPosTagData[flatIndex] = float64(posTagIDs[j])
+			flatNerTagData[flatIndex] = float64(nerTagIDs[j])
 		}
 	}
 
 	// Create the final 2D tensors for the batch
 	inputTensor := NewTensor(flatInputData, []int{batchSize, seqLen}, true)
 	targetTensor := NewTensor(flatTargetData, []int{batchSize, seqLen}, true)
+	posTagTensor := NewTensor(flatPosTagData, []int{batchSize, seqLen}, true)
+	nerTagTensor := NewTensor(flatNerTagData, []int{batchSize, seqLen}, true)
 
 	// 2. Forward Pass
-	// Pass both input and target tensors to the model for a full encoder-decoder pass.
-	outputLogits, err := model.ForwardForTraining(inputTensor, targetTensor)
+	outputLogits, err := model.ForwardForTraining(inputTensor, targetTensor, posTagTensor, nerTagTensor)
 	if err != nil {
 		return 0, fmt.Errorf("model forward pass for training failed: %w", err)
 	}
 
 	// 3. Calculate Loss
-	// Compare the model's output logits with the target token IDs.
 	loss, err := CalculateCrossEntropyLoss(outputLogits, flatTargetIDsForLoss, model.Tokenizer.PadID)
 	if err != nil {
 		return 0, fmt.Errorf("loss calculation failed: %w", err)
 	}
 
 	// 4. Backpropagation
-	// Calculate the initial gradient of the loss with respect to the model's output logits.
 	outputGradient, err := CalculateCrossEntropyLossGradient(outputLogits, flatTargetIDsForLoss, model.Tokenizer.PadID)
 	if err != nil {
 		return 0, fmt.Errorf("loss gradient calculation failed: %w", err)
 	}
 
-	// Initialize the gradient of the output logits with the calculated loss gradient.
 	outputLogits.Grad = outputGradient
 
-	fmt.Printf("\n--- trainBARTBatch: outputLogits.requiresGrad: %t ---\n", outputLogits.requiresGrad)
-	fmt.Printf("--- trainBARTBatch: outputLogits.Grad is nil: %t ---\n", outputLogits.Grad == nil)
-	if outputLogits.Grad != nil {
-		fmt.Printf("--- trainBARTBatch: outputLogits.Grad.Shape: %v ---\n", outputLogits.Grad.Shape)
-		for i := 0; i < int(math.Min(float64(len(outputLogits.Grad.Data)), 10)); i++ {
-			fmt.Printf("--- trainBARTBatch: outputLogits.Grad.Data[%d]: %f ---\n", i, outputLogits.Grad.Data[i])
-		}
-	}
-
-	// Start the backward pass from the output tensor. This will propagate gradients
-	// through the entire computation graph.
 	outputLogits.Backward(outputLogits.Grad)
 
 	// 5. Optimizer Step
@@ -182,132 +200,90 @@ func trainBARTBatch(model *SimplifiedBARTModel, optimizer *Optimizer, batch []st
 	return loss, nil
 }
 
+
 // CalculateCrossEntropyLoss calculates the average cross-entropy loss between logits and target token IDs.
 func CalculateCrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, error) {
-	if logits == nil || logits.Data == nil {
-		return 0, errors.New("logits tensor is nil or has no data")
+	if len(logits.Shape) != 2 {
+		return 0, fmt.Errorf("logits tensor must be 2D (batch_size * seq_len, vocab_size), but got %dD", len(logits.Shape))
 	}
-	if len(logits.Shape) != 3 {
-		return 0, fmt.Errorf("expected logits shape [batch_size, sequence_length, vocab_size], but got %v", logits.Shape)
-	}
-
-	batchSize := logits.Shape[0]
-	seqLength := logits.Shape[1]
-	vocabSize := logits.Shape[2]
-
-	if batchSize*seqLength != len(targetIDs) {
-		return 0, fmt.Errorf("total number of logits (%d) does not match total number of target IDs (%d)", batchSize*seqLength, len(targetIDs))
-	}
-
-	// Apply Softmax to get probabilities
-	probabilities, err := logits.Softmax(2) // Softmax along the vocab_size dimension
-	if err != nil {
-		return 0, fmt.Errorf("failed to apply softmax in loss calculation: %w", err)
+	if logits.Shape[0] != len(targetIDs) {
+		return 0, fmt.Errorf("mismatch between logits rows (%d) and target IDs (%d)", logits.Shape[0], len(targetIDs))
 	}
 
 	totalLoss := 0.0
-	numTokens := 0
+	activeTokens := 0
 
-	for b := 0; b < batchSize; b++ {
-		for s := 0; s < seqLength; s++ {
-			flatTargetIndex := b*seqLength + s
-			targetID := targetIDs[flatTargetIndex]
-
-			// Skip padding tokens in loss calculation
-			if targetID == padID {
-				continue
-			}
-
-			if targetID < 0 || targetID >= vocabSize {
-				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d. Skipping for loss calculation.\n", targetID, b, s)
-				continue
-			}
-
-			// Calculate the flat index for the probability of the target token
-			probFlatIndex := b*seqLength*vocabSize + s*vocabSize + targetID
-
-			if probFlatIndex >= len(probabilities.Data) {
-				return 0, fmt.Errorf("probability index out of bounds: %d for data length %d", probFlatIndex, len(probabilities.Data))
-			}
-
-			probability := probabilities.Data[probFlatIndex]
-
-			// Calculate negative log likelihood. Add a small epsilon for numerical stability.
-			if probability <= 0 {
-				probability = 1e-9 // Add a small epsilon to prevent log(0)
-			}
-			totalLoss += -math.Log(probability)
-			numTokens++
+	for i := 0; i < logits.Shape[0]; i++ {
+		targetID := targetIDs[i]
+		if targetID == padID {
+			continue // Ignore padding tokens
 		}
+		activeTokens++
+
+		// Softmax calculation for the current token
+		maxLogit := math.Inf(-1)
+		for j := 0; j < logits.Shape[1]; j++ {
+			if logits.Data[i*logits.Shape[1]+j] > maxLogit {
+				maxLogit = logits.Data[i*logits.Shape[1]+j]
+			}
+		}
+
+		sumExp := 0.0
+		for j := 0; j < logits.Shape[1]; j++ {
+			sumExp += math.Exp(logits.Data[i*logits.Shape[1]+j] - maxLogit)
+		}
+
+		// Cross-entropy loss for the current token
+		probOfCorrectToken := math.Exp(logits.Data[i*logits.Shape[1]+targetID] - maxLogit) / sumExp
+		totalLoss -= math.Log(probOfCorrectToken)
 	}
 
-	if numTokens == 0 {
-		return 0.0, nil // Avoid division by zero if no valid tokens were found
+	if activeTokens == 0 {
+		return 0.0, nil // Avoid division by zero
 	}
-	averageLoss := totalLoss / float64(numTokens)
-	return averageLoss, nil
+
+	return totalLoss / float64(activeTokens), nil
 }
 
 // CalculateCrossEntropyLossGradient calculates the gradient of the cross-entropy loss with respect to the logits.
-// This is typically softmax(logits) - one_hot(target_token_ids).
 func CalculateCrossEntropyLossGradient(logits *Tensor, targetIDs []int, padID int) (*Tensor, error) {
-	if logits == nil || logits.Data == nil {
-		return nil, errors.New("logits tensor is nil or has no data")
+	if len(logits.Shape) != 2 {
+		return nil, fmt.Errorf("logits tensor must be 2D (batch_size * seq_len, vocab_size), but got %dD", len(logits.Shape))
 	}
-	if len(logits.Shape) != 3 {
-		return nil, fmt.Errorf("expected logits shape [batch_size, sequence_length, vocab_size], but got %v", logits.Shape)
-	}
-
-	batchSize := logits.Shape[0]
-	seqLength := logits.Shape[1]
-	vocabSize := logits.Shape[2]
-
-	if batchSize*seqLength != len(targetIDs) {
-		return nil, fmt.Errorf("total number of logits (%d) does not match total number of target IDs (%d)", batchSize*seqLength, len(targetIDs))
+	if logits.Shape[0] != len(targetIDs) {
+		return nil, fmt.Errorf("mismatch between logits rows (%d) and target IDs (%d)", logits.Shape[0], len(targetIDs))
 	}
 
-	// Apply Softmax to get probabilities
-	probabilities, err := logits.Softmax(2)
-	if err != nil {
-		return nil, fmt.Errorf("failed to apply softmax in gradient calculation: %w", err)
-	}
+	grad := NewTensor(make([]float64, len(logits.Data)), logits.Shape, false)
 
-	// The gradient of cross-entropy loss with softmax is `probabilities - one_hot_target`.
-	// We can compute this directly without creating a large one-hot tensor.
-	// The gradient is equal to the probabilities for all incorrect classes,
-	// and `probability - 1` for the correct class.
+	for i := 0; i < logits.Shape[0]; i++ {
+		targetID := targetIDs[i]
+		if targetID == padID {
+			continue // No gradient for padding tokens
+		}
 
-	gradientData := make([]float64, len(logits.Data))
-	copy(gradientData, probabilities.Data) // Start with gradient = probabilities
-
-	// Now, subtract 1 from the positions corresponding to the target IDs.
-	for b := 0; b < batchSize; b++ {
-		for s := 0; s < seqLength; s++ {
-			targetIndexInBatch := b*seqLength + s
-			targetID := targetIDs[targetIndexInBatch]
-
-			// Skip padding tokens in gradient calculation
-			if targetID == padID {
-				// Zero out gradients for all vocabulary tokens at this padded position
-				for v := 0; v < vocabSize; v++ {
-					gradFlatIndex := b*seqLength*vocabSize + s*vocabSize + v
-					gradientData[gradFlatIndex] = 0
-				}
-				continue
+		// Softmax calculation for the current token
+		maxLogit := math.Inf(-1)
+		for j := 0; j < logits.Shape[1]; j++ {
+			if logits.Data[i*logits.Shape[1]+j] > maxLogit {
+				maxLogit = logits.Data[i*logits.Shape[1]+j]
 			}
+		}
+		sumExp := 0.0
+		for j := 0; j < logits.Shape[1]; j++ {
+			sumExp += math.Exp(logits.Data[i*logits.Shape[1]+j] - maxLogit)
+		}
 
-			if targetID < 0 || targetID >= vocabSize {
-				log.Printf("Warning: Invalid target token ID %d at batch %d, position %d for gradient calculation. Skipping.\n", targetID, b, s)
-				continue
+		// Gradient calculation
+		for j := 0; j < logits.Shape[1]; j++ {
+			prob := math.Exp(logits.Data[i*logits.Shape[1]+j] - maxLogit) / sumExp
+			if j == targetID {
+				grad.Data[i*logits.Shape[1]+j] = prob - 1
+			} else {
+				grad.Data[i*logits.Shape[1]+j] = prob
 			}
-
-			// Calculate the flat index in the gradient tensor for the target ID.
-			gradFlatIndex := b*seqLength*vocabSize + s*vocabSize + targetID
-			gradientData[gradFlatIndex] -= 1.0
 		}
 	}
 
-	outputGradient := NewTensor(gradientData, logits.Shape, true)
-
-	return outputGradient, nil
+	return grad, nil
 }

@@ -54,11 +54,19 @@
   },
   {
    "input": "generate a webserver named jill",
-   "output": "generating a webserver named jill"
+   "output": "create webserver jill"
   },
   {
-   "input": "generate a webserver named jill",
-   "output": "generate a webserver named jill"
+   "input": "create a new user named john",
+   "output": "create user john"
+  },
+  {
+   "input": "delete the file named temp.txt",
+   "output": "delete file temp.txt"
+  },
+  {
+   "input": "update the user's email to john.doe@example.com",
+   "output": "update user email to john.doe@example.com"
   }
  ]
 }

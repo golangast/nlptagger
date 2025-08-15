@@ -68,27 +68,23 @@ func (t *Tokenizer) Decode(tokenIDs []int) (string, error) {
 
 	words := []string{}
 	for _, id := range tokenIDs {
-		// Call GetWordFromTokenID on the Vocabulary from tagger/vocab
-		word, found := t.Vocabulary.GetWordFromTokenID(id) // This should now work if tagger/vocab.Vocabulary has GetWordFromTokenID
-		if !found {
-			// Handle unknown or special tokens during decoding if needed
-			// For simplicity, we'll just append the word or a placeholder
-			if id == t.UnkID {
-				words = append(words, "[UNK]")
-			} else if id == t.PadID {
-				// Skip padding tokens in the output string
-				continue
-			} else if id == t.BosID {
-				// Skip BOS token in the output string
-				continue
-			} else if id == t.EosID {
-				// Stop decoding or skip EOS token
-				break // Stop at EOS
-			} else {
-				words = append(words, fmt.Sprintf("[%d]", id)) // Fallback for unknown IDs
-			}
+		// Explicitly handle special tokens first
+		if id == t.BosID {
+			continue // Skip BOS token
+		} else if id == t.EosID {
+			break // Stop at EOS token
+		} else if id == t.PadID {
+			continue // Skip padding tokens
+		} else if id == t.UnkID {
+			words = append(words, "[UNK]") // Add [UNK] for unknown tokens
 		} else {
-			words = append(words, word)
+			// Only attempt to get word from vocabulary if it's not a special token
+			word, found := t.Vocabulary.GetWordFromTokenID(id)
+			if found {
+				words = append(words, word)
+			} else {
+				words = append(words, fmt.Sprintf("[%d]", id)) // Fallback for unmapped IDs
+			}
 		}
 	}
 	return strings.Join(words, " "), nil

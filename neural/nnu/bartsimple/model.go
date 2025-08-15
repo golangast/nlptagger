@@ -4,12 +4,13 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
+
+	"github.com/golangast/nlptagger/tagger"
+	"github.com/golangast/nlptagger/tagger/nertagger"
+	"github.com/golangast/nlptagger/tagger/postagger"
 )
 
 // BARTEncoder represents a simplified encoder.
@@ -37,11 +38,14 @@ func (l *BARTEncoderLayer) Parameters() []*Tensor {
 func (m *SimplifiedBARTModel) Parameters() []*Tensor {
 	params := m.TokenEmbedding.Parameters()
 	params = append(params, m.PositionalEmbedding.Parameters()...)
+	params = append(params, m.PosTagEmbedding.Parameters()...)
+	params = append(params, m.NerTagEmbedding.Parameters()...)
 	params = append(params, m.Encoder.Layer.Parameters()...)
 	params = append(params, m.Decoder.Layer.Parameters()...)
 	params = append(params, m.OutputLinear.Parameters()...)
 	return params
 }
+
 // Parameters returns all learnable parameters of the layer.
 func (l *BARTDecoderLayer) Parameters() []*Tensor {
 	params := l.SelfAttention.Parameters()
@@ -52,6 +56,7 @@ func (l *BARTDecoderLayer) Parameters() []*Tensor {
 	params = append(params, l.Norm3.Parameters()...)
 	return params
 }
+
 // BARTEncoderLayer represents a single simplified encoder layer.
 type BARTEncoderLayer struct {
 	SelfAttention *MultiHeadAttention
@@ -78,7 +83,7 @@ func NewBARTEncoderLayer(dimModel, numHeads int) (*BARTEncoderLayer, error) {
 		Norm1:         norm1,
 		Norm2:         norm2,
 	},
-	nil
+		nil
 }
 
 // Forward performs the forward pass of the simplified encoder layer.
@@ -153,7 +158,7 @@ func NewBARTDecoderLayer(dimModel, numHeads int) (*BARTDecoderLayer, error) {
 		Norm2:          norm2,
 		Norm3:          norm3,
 	},
-	nil
+		nil
 }
 
 // Forward performs the forward pass of the simplified decoder layer.
@@ -218,12 +223,15 @@ type SimplifiedBARTModel struct {
 	Tokenizer           *Tokenizer
 	TokenEmbedding      *Embedding
 	PositionalEmbedding *PositionalEmbedding
+	PosTagEmbedding     *Embedding
+	NerTagEmbedding     *Embedding
 	OutputLinear        *Linear
-	TokenIds            []int // Final linear layer for output
+	TokenIds            []int
 	VocabSize           int
 	MaxSequenceLength   int
 	Vocabulary          *Vocabulary
 }
+
 // NewSimplifiedBARTModel creates a new simplified BART model.
 func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimModel, numHeads, maxSequenceLength int, word2VecEmbeddings map[string][]float64) (*SimplifiedBARTModel, error) {
 	vocabSize := len(vocabulary.WordToToken)
@@ -242,12 +250,11 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 	decoder := &BARTDecoder{Layer: decoderLayer}
 
 	// Initialize embedding layers and output linear layer (simplified)
-	// These will need to be implemented in separate simple files
 	tokenEmbedding := NewEmbeddingWithPretrained(len(vocabulary.WordToToken), dimModel, vocabulary, word2VecEmbeddings)
-
-	// Assuming NewEmbedding exists
-	positionalEmbedding := NewPositionalEmbedding(maxSequenceLength, dimModel) // Assuming NewPositionalEmbedding exists
-	outputLinear, err := NewLinear(dimModel, vocabSize)                        // Assuming NewLinear exists
+	posTagEmbedding := NewEmbedding(len(postagger.PosTagToIDMap()), dimModel)
+	nerTagEmbedding := NewEmbedding(len(nertagger.NerTagToIDMap()), dimModel)
+	positionalEmbedding := NewPositionalEmbedding(maxSequenceLength, dimModel)
+	outputLinear, err := NewLinear(dimModel, vocabSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create output linear layer: %w", err)
 	}
@@ -258,12 +265,14 @@ func NewSimplifiedBARTModel(tokenizer *Tokenizer, vocabulary *Vocabulary, dimMod
 		Tokenizer:           tokenizer,
 		TokenEmbedding:      tokenEmbedding,
 		PositionalEmbedding: positionalEmbedding,
+		PosTagEmbedding:     posTagEmbedding,
+		NerTagEmbedding:     nerTagEmbedding,
 		OutputLinear:        outputLinear,
 		VocabSize:           vocabSize,
 		MaxSequenceLength:   maxSequenceLength,
 		Vocabulary:          vocabulary,
 	},
-	nil
+		nil
 }
 func Reshape(tensor []float64, originalShape, newShape []int) ([]float64, error) {
 	originalSize := 1
@@ -280,72 +289,16 @@ func Reshape(tensor []float64, originalShape, newShape []int) ([]float64, error)
 		return nil, fmt.Errorf("cannot reshape tensor from %v to %v: sizes do not match (%d vs %d)", originalShape, newShape, originalSize, newSize)
 	}
 
-	// In a simple case where the underlying data layout is compatible,
-	// you might just return the original slice with the new shape metadata.
-	// However, for more complex reshapes (e.g., transposing), you might
-	// need to create a new slice and copy/rearrange the data.
-	// This basic implementation just checks for size compatibility.
-	// A more complete tensor library would handle the data rearrangement.
-
-	// If your tensor representation is a struct containing the data slice and shape:
-	// func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
-	//     // ... size check ...
-	//     return &Tensor{Data: t.Data, Shape: newShape}, nil // Or create a new Tensor with reordered data
-	// }
-
-	// Assuming you are working with a simple float64 slice:
-	return tensor, nil // This is a placeholder, you might need to reorder data
+	return tensor, nil
 }
 
 // SaveSimplifiedBARTModelToGOB saves the simplified BART model to a file in Gob format.
 func SaveSimplifiedBARTModelToGOB(model *SimplifiedBARTModel, filePath string) error {
-	// Create the directory if it doesn't exist
-	dir := filepath.Dir(filePath)                  // Need to import "path/filepath"
-	if err := os.MkdirAll(dir, 0755); err != nil { // Need to import "os"
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-
-	// 1. Check if the file exists
-	_, err := os.Stat(filePath)
-	if err == nil {
-		// File exists, proceed to delete
-		fmt.Printf("File '%s' exists. Deleting...\n", filePath)
-		err = os.Remove(filePath)
-		if err != nil {
-			log.Fatalf("Error deleting file '%s': %v\n", filePath, err)
-		}
-		fmt.Printf("File '%s' deleted successfully.\n", filePath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		// Handle other potential errors during Stat
-		log.Fatalf("Error checking file existence for '%s': %v\n", filePath, err)
-	} else {
-		fmt.Printf("File '%s' does not exist. Creating a new one.\n", filePath)
-	}
-
-	// 2. Create a new file (or truncate and open if it existed)
-	file, err := os.Create(filePath) // Need to import "os"
+	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file for saving simplified model: %w", err)
 	}
 	defer file.Close()
-
-	fmt.Printf("File '%s' created/replaced and written successfully.\n", filePath)
-
-	// Register all custom types used in your simplified model
-	// This is crucial for gob encoding/decoding.
-	gob.Register(&SimplifiedBARTModel{}) // Need to import "encoding/gob"
-	gob.Register(&BARTEncoder{})
-	gob.Register(&BARTDecoder{})
-	gob.Register(&BARTEncoderLayer{})
-	gob.Register(&BARTDecoderLayer{})
-	gob.Register(&MultiHeadAttention{})
-	gob.Register(&MultiHeadCrossAttention{})
-	gob.Register(&Linear{})
-	gob.Register(&Embedding{})
-	gob.Register(&PositionalEmbedding{})
-	gob.Register(&FeedForward{})
-	gob.Register(&LayerNormalization{})
-	gob.Register(&Tensor{}) // Make sure Tensor is registered
 
 	encoder := gob.NewEncoder(file)
 	err = encoder.Encode(model)
@@ -358,123 +311,84 @@ func SaveSimplifiedBARTModelToGOB(model *SimplifiedBARTModel, filePath string) e
 
 // LoadSimplifiedBARTModelFromGOB loads a simplified BART model from a file in Gob format.
 func LoadSimplifiedBARTModelFromGOB(filePath string) (*SimplifiedBARTModel, error) {
-	file, err := os.Open(filePath) // Need to import "os"
+	file, err := os.Open(filePath)
 	if err != nil {
-		// If the file doesn't exist, return a specific error
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("simplified BART model gob file not found at %s", filePath)
-		}
-		// For other errors, return the original error
 		return nil, fmt.Errorf("error opening simplified BART model gob file: %w", err)
 	}
 	defer file.Close()
 
 	decoder := gob.NewDecoder(file)
-
-	// Register all custom types used in your simplified model (same as in Save)
-	gob.Register(&SimplifiedBARTModel{})
-	gob.Register(&BARTEncoder{})
-	gob.Register(&BARTDecoder{})
-	gob.Register(&BARTEncoderLayer{})
-	gob.Register(&BARTDecoderLayer{})
-	gob.Register(&MultiHeadAttention{})
-	gob.Register(&MultiHeadCrossAttention{})
-	gob.Register(&Linear{})
-	gob.Register(&Embedding{})
-	gob.Register(&PositionalEmbedding{})
-	gob.Register(&FeedForward{})
-	gob.Register(&LayerNormalization{})
-	gob.Register(&Tensor{})
-
 	var loadedModel SimplifiedBARTModel
 	err = decoder.Decode(&loadedModel)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding simplified BART model from gob: %w", err)
 	}
-	// Debugging: Inspect loaded Embedding weights
-	if loadedModel.TokenEmbedding == nil {
-		fmt.Println("Debug Load: loadedModel.TokenEmbedding is nil after decoding!")
-	} else {
-		if loadedModel.TokenEmbedding.Weights == nil {
-			fmt.Println("Debug Load: loadedModel.TokenEmbedding.Weights is nil after decoding!")
-		}
-	}
-
 	return &loadedModel, nil
 }
 
 // ForwardForTraining performs the forward pass of the BART model for training.
-// It takes input and target tensors and returns the raw output logits.
-func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor *Tensor) (*Tensor, error) {
+func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor, posTagTensor, nerTagTensor *Tensor) (*Tensor, error) {
 	// Ensure necessary components are initialized
-	if m.Encoder == nil {
-		return nil, errors.New("model encoder is not initialized")
-	}
-	if m.Decoder == nil {
-		return nil, errors.New("model decoder is not initialized")
-	}
-	if m.TokenEmbedding == nil {
-		return nil, errors.New("model token embedding is not initialized")
-	}
-	if m.PositionalEmbedding == nil {
-		return nil, errors.New("model positional embedding is not initialized")
-	}
-	if m.OutputLinear == nil {
-		return nil, errors.New("model output linear layer is not initialized")
+	if m.Encoder == nil || m.Decoder == nil || m.TokenEmbedding == nil || m.PositionalEmbedding == nil || m.PosTagEmbedding == nil || m.NerTagEmbedding == nil || m.OutputLinear == nil {
+		return nil, errors.New("model component is not initialized")
 	}
 
 	// --- Encoder Forward Pass ---
-	// Input embeddings
-	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor) // Assuming TokenEmbedding.Forward takes *Tensor and returns *Tensor
+	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor)
 	if err != nil {
 		return nil, fmt.Errorf("encoder token embedding failed: %w", err)
 	}
 
-	// Add positional embeddings
-	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings) // Assuming PositionalEmbedding.Forward takes *Tensor and returns *Tensor
+	posTagEmbeddings, err := m.PosTagEmbedding.Forward(posTagTensor)
+	if err != nil {
+		return nil, fmt.Errorf("encoder pos tag embedding failed: %w", err)
+	}
+
+	nerTagEmbeddings, err := m.NerTagEmbedding.Forward(nerTagTensor)
+	if err != nil {
+		return nil, fmt.Errorf("encoder ner tag embedding failed: %w", err)
+	}
+
+	encoderInputEmbeddings, err = encoderInputEmbeddings.Add(posTagEmbeddings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add pos tag embeddings: %w", err)
+	}
+
+	encoderInputEmbeddings, err = encoderInputEmbeddings.Add(nerTagEmbeddings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add ner tag embeddings: %w", err)
+	}
+
+	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings)
 	if err != nil {
 		return nil, fmt.Errorf("encoder positional embedding failed: %w", err)
 	}
 
-	// TODO: Implement encoder masking if necessary (e.g., padding mask)
 	var encoderMask *Tensor = nil
-
-	// Pass through the encoder layer
-	// Assuming m.Encoder.Layer.Forward takes input tensor and mask, and returns output tensor
 	encoderOutput, err := m.Encoder.Layer.Forward(encoderInputWithPos, encoderMask)
 	if err != nil {
 		return nil, fmt.Errorf("encoder forward pass failed: %w", err)
 	}
 
 	// --- Decoder Forward Pass ---
-	// Target embeddings
-	decoderInputEmbeddings, err := m.TokenEmbedding.Forward(targetTensor) // Assuming TokenEmbedding.Forward takes *Tensor and returns *Tensor
+	decoderInputEmbeddings, err := m.TokenEmbedding.Forward(targetTensor)
 	if err != nil {
 		return nil, fmt.Errorf("decoder token embedding failed: %w", err)
 	}
 
-	// Add positional embeddings to decoder input
-	decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings) // Assuming PositionalEmbedding.Forward takes *Tensor and returns *Tensor
+	decoderInputWithPos, err := m.PositionalEmbedding.Forward(decoderInputEmbeddings)
 	if err != nil {
 		return nil, fmt.Errorf("decoder positional embedding failed: %w", err)
 	}
 
-	// TODO: Implement decoder self-attention mask (causal mask)
 	var selfAttentionMask *Tensor = nil
-
-	// TODO: Implement decoder cross-attention mask (based on encoder padding)
 	var crossAttentionMask *Tensor = nil
-
-	// Pass through the decoder layer
-	// Assuming m.Decoder.Layer.Forward takes decoder input, encoder output, self-attention mask, and cross-attention mask
 	decoderOutput, err := m.Decoder.Layer.Forward(decoderInputWithPos, encoderOutput, selfAttentionMask, crossAttentionMask)
 	if err != nil {
 		return nil, fmt.Errorf("decoder forward pass failed: %w", err)
 	}
 
 	// --- Final Linear Layer ---
-	// Pass decoder output through the final linear layer to get logits
-	// Assuming m.OutputLinear.Forward takes input tensor and returns output tensor (logits)
 	outputLogits, err := m.OutputLinear.Forward(decoderOutput)
 	if err != nil {
 		return nil, fmt.Errorf("output linear layer failed: %w", err)
@@ -485,10 +399,32 @@ func (m *SimplifiedBARTModel) ForwardForTraining(inputTensor, targetTensor *Tens
 
 // Reply generates a response based on the input text.
 func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
-	// 1. Encode the input text
-	inputTokenIDs, err := m.Tokenizer.Encode(inputText)
-	if err != nil {
-		return "", fmt.Errorf("failed to encode input text: %w", err)
+	// 1. Tag the input text
+	taggedInput := tagger.Tagging(inputText)
+
+	// 2. Filter the tags
+	filteredTokens := []string{}
+	filteredPosTags := []string{}
+	filteredNerTags := []string{}
+	filterTags := map[string]bool{
+		"DT": true, "PRP": true, "IN": true, "CC": true, "RP": true, "ADP": true, "WDT": true, "DET": true, "WP": true,
+	}
+	for i, token := range taggedInput.Tokens {
+		if !filterTags[taggedInput.PosTag[i]] {
+			filteredTokens = append(filteredTokens, token)
+			filteredPosTags = append(filteredPosTags, taggedInput.PosTag[i])
+			filteredNerTags = append(filteredNerTags, taggedInput.NerTag[i])
+		}
+	}
+
+	// 3. Encode the input text from the filtered tokens
+	inputTokenIDs := make([]int, len(filteredTokens))
+	for i, token := range filteredTokens {
+		if id, ok := m.Vocabulary.WordToToken[token]; ok {
+			inputTokenIDs[i] = id
+		} else {
+			inputTokenIDs[i] = m.Vocabulary.UnknownTokenID
+		}
 	}
 
 	// Convert inputTokenIDs to a Tensor
@@ -498,11 +434,45 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 	}
 	inputTensor := NewTensor(inputData, []int{1, len(inputTokenIDs)}, false)
 
-	// 2. Pass through the encoder
+	// Create POS and NER tag tensors
+	posTagIDs := make([]float64, len(filteredPosTags))
+	for i, tag := range filteredPosTags {
+		posTagIDs[i] = float64(postagger.PosTagToIDMap()[tag])
+	}
+	posTagTensor := NewTensor(posTagIDs, []int{1, len(posTagIDs)}, false)
+
+	nerTagIDs := make([]float64, len(filteredNerTags))
+	for i, tag := range filteredNerTags {
+		nerTagIDs[i] = float64(nertagger.NerTagToIDMap()[tag])
+	}
+	nerTagTensor := NewTensor(nerTagIDs, []int{1, len(nerTagIDs)}, false)
+
+	// 4. Pass through the encoder
 	encoderInputEmbeddings, err := m.TokenEmbedding.Forward(inputTensor)
 	if err != nil {
 		return "", fmt.Errorf("encoder token embedding failed: %w", err)
 	}
+
+	posTagEmbeddings, err := m.PosTagEmbedding.Forward(posTagTensor)
+	if err != nil {
+		return "", fmt.Errorf("encoder pos tag embedding failed: %w", err)
+	}
+
+	nerTagEmbeddings, err := m.NerTagEmbedding.Forward(nerTagTensor)
+	if err != nil {
+		return "", fmt.Errorf("encoder ner tag embedding failed: %w", err)
+	}
+
+	encoderInputEmbeddings, err = encoderInputEmbeddings.Add(posTagEmbeddings)
+	if err != nil {
+		return "", fmt.Errorf("failed to add pos tag embeddings: %w", err)
+	}
+
+	encoderInputEmbeddings, err = encoderInputEmbeddings.Add(nerTagEmbeddings)
+	if err != nil {
+		return "", fmt.Errorf("failed to add ner tag embeddings: %w", err)
+	}
+
 	encoderInputWithPos, err := m.PositionalEmbedding.Forward(encoderInputEmbeddings)
 	if err != nil {
 		return "", fmt.Errorf("encoder positional embedding failed: %w", err)
@@ -512,11 +482,10 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 		return "", fmt.Errorf("encoder forward pass failed: %w", err)
 	}
 
-	// 3. Initialize decoder input with BOS token
+	// 5. Initialize decoder input with BOS token
 	decoderInputIDs := []int{m.Tokenizer.BosID}
-	generatedResponse := []string{}
 
-	// 4. Iteratively generate tokens
+	// 6. Iteratively generate tokens
 	for i := 0; i < m.MaxSequenceLength; i++ {
 		decoderInputData := make([]float64, len(decoderInputIDs))
 		for j, id := range decoderInputIDs {
@@ -551,7 +520,7 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 		}
 
 		// Get the last token's output for prediction
-		lastTokenOutput, err := decoderOutput.Slice(1, decoderOutput.Shape[1]-1, decoderOutput.Shape[1])
+		lastTokenOutput, err := decoderOutput.Slice(1, len(decoderInputIDs)-1, len(decoderInputIDs))
 		if err != nil {
 			return "", fmt.Errorf("slicing tensor failed: %w", err)
 		}
@@ -560,7 +529,7 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 			return "", fmt.Errorf("output linear layer failed: %w", err)
 		}
 
-	// Apply softmax and sample the next token using top-k sampling
+		// Apply softmax and sample the next token using top-k sampling
 		probabilities, err := logits.Softmax(2)
 		if err != nil {
 			return "", fmt.Errorf("softmax failed: %w", err)
@@ -572,18 +541,22 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 			probabilities.Data[bosTokenID] = 1e-10 // Set probability to a very small number
 		}
 
-		// Apply no-repeat bigram penalty
-		if seqLen > 0 { // Ensure there's at least one token to form a bigram
-			lastTokenID := decoderInputIDs[seqLen-1]
-			for nextCandidateTokenID := 0; nextCandidateTokenID < len(probabilities.Data); nextCandidateTokenID++ {
-				// Check if the bigram (lastTokenID, nextCandidateTokenID) has appeared before
-				// Iterate through the existing sequence to find repetitions
-				for j := 0; j < seqLen-1; j++ { // Iterate up to second to last token
-					if decoderInputIDs[j] == lastTokenID && decoderInputIDs[j+1] == nextCandidateTokenID {
-						// Found a repeated bigram, penalize the probability of nextCandidateTokenID
-						probabilities.Data[nextCandidateTokenID] = 1e-10 // Set probability to a very small number
-						break // No need to check further for this nextCandidateTokenID
-					}
+		// Apply no-repeat n-gram penalty
+		if len(decoderInputIDs) > 1 {
+			// Penalize 2-grams
+			lastToken := decoderInputIDs[len(decoderInputIDs)-1]
+			for i := 0; i < len(decoderInputIDs)-1; i++ {
+				if decoderInputIDs[i] == lastToken {
+					probabilities.Data[decoderInputIDs[i+1]] *= 0.1
+				}
+			}
+		}
+		if len(decoderInputIDs) > 2 {
+			// Penalize 3-grams
+			lastTwoTokens := [2]int{decoderInputIDs[len(decoderInputIDs)-2], decoderInputIDs[len(decoderInputIDs)-1]}
+			for i := 0; i < len(decoderInputIDs)-2; i++ {
+				if decoderInputIDs[i] == lastTwoTokens[0] && decoderInputIDs[i+1] == lastTwoTokens[1] {
+					probabilities.Data[decoderInputIDs[i+2]] *= 0.1
 				}
 			}
 		}
@@ -599,29 +572,41 @@ func (m *SimplifiedBARTModel) Reply(inputText string) (string, error) {
 			break
 		}
 
-		// Append to generated response
-		generatedResponse = append(generatedResponse, m.Vocabulary.TokenToWord[predictedTokenID])
 		decoderInputIDs = append(decoderInputIDs, predictedTokenID)
 	}
 
-	return strings.Join(generatedResponse, " "), nil
+	// Decode the generated token IDs into a string
+	generatedSentence, err := m.Tokenizer.Decode(decoderInputIDs)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode generated tokens: %w", err)
+	}
+
+	return generatedSentence, nil
 }
 
 // TopKSampling performs top-k sampling on a probability distribution.
+type tokenProb struct {
+	ID    int
+	Prob  float64
+	Token string
+}
+
 func TopKSampling(probabilities *Tensor, k int, vocabulary *Vocabulary) (int, error) {
+	if probabilities == nil || len(probabilities.Data) == 0 {
+		return 0, fmt.Errorf("probabilities tensor is empty or nil")
+	}
 	if k <= 0 {
-		return 0, errors.New("k must be positive")
+		return 0, fmt.Errorf("k must be positive")
 	}
 
-	// Create a slice of token-probability pairs
-	type tokenProb struct {
-		ID   int
-		Prob float64
-	}
-
+	// Create a slice of tokenProb structs
 	probs := make([]tokenProb, len(probabilities.Data))
 	for i, p := range probabilities.Data {
-		probs[i] = tokenProb{ID: i, Prob: p}
+		token, ok := vocabulary.TokenToWord[i]
+		if !ok {
+			token = "[UNK]"
+		}
+		probs[i] = tokenProb{ID: i, Prob: p, Token: token}
 	}
 
 	// Sort by probability in descending order
@@ -629,21 +614,28 @@ func TopKSampling(probabilities *Tensor, k int, vocabulary *Vocabulary) (int, er
 		return probs[i].Prob > probs[j].Prob
 	})
 
-	// Take the top-k tokens
+	// Take the top k
 	if k > len(probs) {
 		k = len(probs)
 	}
 	topKProbs := probs[:k]
 
-	// Renormalize the probabilities
-	sum := 0.0
+	// Normalize the probabilities of the top k tokens
+	var sum float64
 	for _, p := range topKProbs {
 		sum += p.Prob
 	}
+	if sum == 0 {
+		// If all top-k probabilities are zero, return the first one (highest prob)
+		if len(topKProbs) > 0 {
+			return topKProbs[0].ID, nil
+		}
+		return 0, fmt.Errorf("no valid tokens to sample from")
+	}
 
-	// Sample from the top-k tokens
+	// Sample from the normalized distribution
 	r := rand.Float64() * sum
-	cumulativeProb := 0.0
+	var cumulativeProb float64
 	for _, p := range topKProbs {
 		cumulativeProb += p.Prob
 		if r < cumulativeProb {
@@ -651,6 +643,10 @@ func TopKSampling(probabilities *Tensor, k int, vocabulary *Vocabulary) (int, er
 		}
 	}
 
-	// Should not happen, but as a fallback, return the most likely token
-	return topKProbs[0].ID, nil
+	// Fallback to the most probable token if something goes wrong
+	if len(topKProbs) > 0 {
+		return topKProbs[0].ID, nil
+	}
+
+	return 0, fmt.Errorf("sampling failed: no tokens in top-k")
 }
