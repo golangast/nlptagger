@@ -1,212 +1,206 @@
-package vocabbert
+package vocab
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
+	"log"
 	"os"
+	"regexp"
 	"strings"
 
-	"golang.org/x/net/html"
-
-	"github.com/golangast/nlptagger/neural/nnu/bartsimple"
-	"github.com/golangast/nlptagger/neural/nnu/vocab"
+	mainvocab "nlptagger/neural/nnu/vocab"
 )
 
-// setupVocabulary loads a vocabulary from vocabPath or builds a new one if loading fails.
-func SetupVocabulary(vocabPath, trainingDataPath string) (*bartsimple.Vocabulary, error) {
-	// Attempt to load the vocabulary first
-	vocabulary, err := bartsimple.LoadVocabulary(vocabPath)
-	if err == nil && vocabulary != nil && vocabulary.WordToToken != nil {
-		// Validate that the loaded vocabulary contains the essential special tokens.
-		// If not, we'll treat it as an invalid vocabulary and rebuild it.
-		_, unkExists := vocabulary.WordToToken["[UNK]"]
-		_, padExists := vocabulary.WordToToken["[PAD]"]
-		_, bosExists := vocabulary.WordToToken["[BOS]"]
-		_, eosExists := vocabulary.WordToToken["[EOS]"]
-
-		if unkExists && padExists && bosExists && eosExists {
-			// All essential tokens exist, set the IDs and return.
-			vocabulary.UnknownTokenID = vocabulary.WordToToken["[UNK]"]
-			vocabulary.PaddingTokenID = vocabulary.WordToToken["[PAD]"]
-			vocabulary.BeginningOfSentenceID = vocabulary.WordToToken["[BOS]"]
-			vocabulary.EndOfSentenceID = vocabulary.WordToToken["[EOS]"]
-			return vocabulary, nil
-		}
-		fmt.Println("Loaded vocabulary is missing one or more special tokens. Rebuilding.")
-	} else if err != nil {
-		// If there was an error loading (e.g., file not found), print it and proceed to build.
-		fmt.Printf("Error loading vocabulary: %v. Building a new one from training data.\n", err)
+// SetupVocabulary attempts to load a vocabulary from vocabPath, and if it fails,
+// builds a new one from the provided dataPaths.
+func SetupVocabulary(vocabPath string, dataPaths []string) (*mainvocab.Vocabulary, error) {
+	vocab, err := mainvocab.LoadVocabulary(vocabPath)
+	if err == nil {
+		log.Printf("Loaded vocabulary from %s", vocabPath)
+		return vocab, nil
 	}
 
-	// If loading fails, build a new one
-
-	trainingData, loadErr := vocab.LoadTrainingDataJSON(trainingDataPath)
-	if loadErr != nil {
-		return nil, fmt.Errorf("error loading training data to build new vocabulary: %w", loadErr)
+	log.Printf("Could not load vocabulary from %s, building new one.", vocabPath)
+	if len(dataPaths) < 2 {
+		return nil, fmt.Errorf("at least two data paths are required to build vocabulary")
+	}
+	vocab = BuildVocabulary(dataPaths[0], dataPaths[1])
+	if vocab == nil {
+		return nil, fmt.Errorf("failed to build vocabulary")
 	}
 
-	fmt.Println("Building new vocabulary...")
-	allWords := make(map[string]bool)
-
-	// Gather words from all sources.
-	addWordsFromJSONTrainingData(trainingData, allWords)
-	addWordsFromRAGDocs("trainingdata/ragdata/ragdocs.txt", allWords)
-	addWordsFromRAGJSON("trainingdata/ragdata/rag_data.json", allWords)
-	addWordsFromHTML("docs/index.html", allWords)
-
-	// 5. Expand vocabulary with words from WikiQA data
-	addWordsFromWikiQA("trainingdata/WikiQA-train.txt", allWords)
-
-
-	newVocab := bartsimple.NewVocabulary()
-
-	// Add special tokens first to ensure they have consistent IDs
-	newVocab.AddToken("[PAD]", 0)
-	newVocab.AddToken("[UNK]", 1)
-	newVocab.AddToken("[BOS]", 2)
-	newVocab.AddToken("[EOS]", 3)
-
-	for word := range allWords {
-		// Avoid re-adding special tokens
-		if _, exists := newVocab.WordToToken[word]; !exists {
-			newVocab.AddToken(word, len(newVocab.TokenToWord))
-		}
+	if err := vocab.Save(vocabPath); err != nil {
+		return nil, fmt.Errorf("failed to save vocabulary: %w", err)
 	}
+	log.Printf("Saved new vocabulary to %s", vocabPath)
 
-	newVocab.PaddingTokenID = newVocab.WordToToken["[PAD]"]
-	newVocab.UnknownTokenID = newVocab.WordToToken["[UNK]"]
-	newVocab.BeginningOfSentenceID = newVocab.WordToToken["[BOS]"]
-	newVocab.EndOfSentenceID = newVocab.WordToToken["[EOS]"]
-
-	// Save the new vocabulary
-	if err := newVocab.Save(vocabPath); err != nil {
-		// Log the error but continue, as we have a functional vocabulary in memory
-		fmt.Printf("Warning: Error saving newly built vocabulary: %v\n", err)
-	} else {
-		fmt.Printf("Saved new vocabulary to %s\n", vocabPath)
-	}
-
-	return newVocab, nil
+	return vocab, nil
 }
 
-// addWordsFromJSONTrainingData extracts words from the primary annotated training data.
-func addWordsFromJSONTrainingData(trainingData *vocab.TrainingDataJSON, wordSet map[string]bool) {
-	fmt.Println("Expanding vocabulary with words from JSON training data...")
-	tokenVocab := vocab.CreateTokenVocab(trainingData.Sentences)
-	for word := range tokenVocab {
-		wordSet[word] = true
-	}
-}
+// BuildVocabulary builds a vocabulary from the provided training data file and additional software commands data.
+func BuildVocabulary(trainingDataPath, softwareCommandsPath string) *mainvocab.Vocabulary {
+	wordSet := make(map[string]bool)
 
-// addWordsFromRAGDocs extracts words from the plain text RAG documents
-func addWordsFromRAGDocs(path string, wordSet map[string]bool) {
-	fmt.Printf("Expanding vocabulary with words from %s\n", path)
-	file, err := os.Open(path)
+	// Read training data and extract words
+	file, err := os.Open(trainingDataPath)
 	if err != nil {
-		fmt.Printf("Warning: could not open RAG docs to expand vocabulary: %v\n", err)
-		return
+		log.Printf("Error opening training data file: %v", err)
+		return nil
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		words := strings.Fields(scanner.Text())
-		for _, word := range words {
-			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
-			if cleanedWord != "" {
-				wordSet[cleanedWord] = true
-			}
-		}
-	}
-}
+	queryRe := regexp.MustCompile(`^Query: "(.*)"$`)
+	intentRe := regexp.MustCompile(`^Intent: (.*)$`)
 
-// addWordsFromWikiQA extracts words from the WikiQA training data.
-func addWordsFromWikiQA(path string, wordSet map[string]bool) {
-	fmt.Printf("Expanding vocabulary with words from %s\n", path)
-	file, err := os.Open(path)
-	if err != nil {
-		fmt.Printf("Warning: could not open WikiQA data to expand vocabulary: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		parts := strings.SplitN(line, "\t", 4) // Split into max 4 parts
-		if len(parts) > 1 {                   // Ensure there's at least a question and answer
-			question := parts[0]             // The question
-			words := strings.Fields(question) // Then process the question
-			for _, word := range words {
-				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
-				if cleanedWord != "" {
-					wordSet[cleanedWord] = true
-				}
-			}
+		if matches := queryRe.FindStringSubmatch(line); matches != nil {
+			tokenizeAndAddWords(matches[1], wordSet)
+		} else if matches := intentRe.FindStringSubmatch(line); matches != nil {
+			tokenizeAndAddWords(matches[1], wordSet)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading training data file: %v", err)
+		return nil
+	}
+
+	// Expand vocabulary with software commands data
+	addWordsFromSoftwareCommands(softwareCommandsPath, wordSet)
+
+	// Convert set to slice and create vocabulary
+	words := make([]string, 0, len(wordSet))
+	for word := range wordSet {
+		words = append(words, word)
+	}
+
+	vocab := mainvocab.NewVocabulary()
+	for _, word := range words {
+		vocab.AddToken(word)
+	}
+
+	log.Printf("Built vocabulary with %d words", len(vocab.TokenToWord))
+	return vocab
+}
+
+// tokenizeAndAddWords tokenizes the input text and adds the tokens to the word set.
+func tokenizeAndAddWords(text string, wordSet map[string]bool) {
+	// Simple whitespace tokenizer; can be replaced with a more sophisticated one if needed
+	tokens := strings.Fields(text)
+	for _, token := range tokens {
+		cleanedToken := strings.Trim(token, ".,!?\"'()[]{}:;`")
+		if cleanedToken != "" {
+			wordSet[cleanedToken] = true
 		}
 	}
 }
 
-// addWordsFromRAGJSON extracts words from the structured RAG JSON data.
-func addWordsFromRAGJSON(path string, wordSet map[string]bool) {
-	fmt.Printf("Expanding vocabulary with words from %s\n", path)
-	file, err := os.Open(path)
+// parseTrainingData reads and parses the training data file into query-intent pairs.
+func parseTrainingData(filePath string) ([]struct {
+	Query  string
+	Intent string
+}, error) {
+	log.Printf("Parsing training data from %s", filePath)
+	file, err := os.Open(filePath)
 	if err != nil {
-		fmt.Printf("Warning: could not open RAG JSON data to expand vocabulary: %v\n", err)
+		return nil, fmt.Errorf("could not open training data file: %w", err)
+	}
+	defer file.Close()
+
+	var data []struct {
+		Query  string
+		Intent string
+	}
+
+	scanner := bufio.NewScanner(file)
+	queryRe := regexp.MustCompile(`^Query: "(.*)"$`)
+	intentRe := regexp.MustCompile(`^Intent: (.*)$`)
+
+	currentQuery := ""
+	currentIntent := ""
+
+	log.Println("Starting to parse training data...")
+	for scanner.Scan() {
+		line := scanner.Text()
+		log.Printf("Read line: %s", line)
+
+		if matches := queryRe.FindStringSubmatch(line); len(matches) > 1 {
+			// If we find a new query, and we have a pending query/intent pair, append it first
+			if currentQuery != "" && currentIntent != "" {
+				data = append(data, struct {
+					Query  string
+					Intent string
+				}{Query: currentQuery, Intent: currentIntent})
+				log.Printf("Appended training example: Query=\"%s\", Intent=\"%s\"", currentQuery, currentIntent)
+			}
+			currentQuery = matches[1]
+			currentIntent = "" // Reset intent for the new query
+			log.Printf("Matched Query: %s", currentQuery)
+		} else if matches := intentRe.FindStringSubmatch(line); len(matches) > 1 {
+			currentIntent = matches[1]
+			log.Printf("Matched Intent: %s", currentIntent)
+			// If we have both query and intent, append the example
+			if currentQuery != "" && currentIntent != "" {
+				data = append(data, struct {
+					Query  string
+					Intent string
+				}{Query: currentQuery, Intent: currentIntent})
+				log.Printf("Appended training example: Query=\"%s\", Intent=\"%s\"", currentQuery, currentIntent)
+				currentQuery = ""  // Reset for next entry
+				currentIntent = "" // Reset for next entry
+			}
+		} else if line == "" {
+			log.Println("Empty line encountered.")
+			// Do not reset currentQuery or currentIntent on blank lines.
+			// They should only be reset after a full example is appended.
+		}
+	}
+
+	// Append any remaining query/intent pair after the loop finishes
+	if currentQuery != "" && currentIntent != "" {
+		data = append(data, struct {
+			Query  string
+			Intent string
+		}{Query: currentQuery, Intent: currentIntent})
+		log.Printf("Appended final training example: Query=\"%%s\", Intent=\"%%s\"", currentQuery, currentIntent)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading training data file: %w", err)
+	}
+
+	log.Printf("Finished parsing training data. Total examples: %d", len(data))
+	return data, nil
+}
+
+// addWordsFromSoftwareCommands extracts words from the software commands JSON data.
+func addWordsFromSoftwareCommands(filePath string, wordSet map[string]bool) {
+	log.Printf("Expanding vocabulary with words from %s", filePath)
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Warning: could not open software commands data to expand vocabulary: %v", err)
 		return
 	}
 	defer file.Close()
 
-	var ragData []struct {
-		Content string `json:"Content"`
+	var data []struct {
+		Query   string            
+		Intent  string            
+		Entities map[string]string 
 	}
-	if err := json.NewDecoder(file).Decode(&ragData); err != nil {
-		fmt.Printf("Warning: could not decode RAG JSON data from %s: %v\n", path, err)
+	if err := json.NewDecoder(file).Decode(&data); err != nil {
+		log.Printf("Warning: could not decode software commands data from %s: %v", filePath, err)
 		return
 	}
 
-	for _, entry := range ragData {
-		words := strings.Fields(entry.Content)
-		for _, word := range words {
-			cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
-			if cleanedWord != "" {
-				wordSet[cleanedWord] = true
-			}
+	for _, entry := range data {
+		tokenizeAndAddWords(entry.Query, wordSet)
+		tokenizeAndAddWords(entry.Intent, wordSet)
+		for _, value := range entry.Entities {
+			tokenizeAndAddWords(value, wordSet)
 		}
 	}
 }
-
-// addWordsFromHTML extracts text content from an HTML file to expand the vocabulary.
-func addWordsFromHTML(path string, wordSet map[string]bool) {
-	fmt.Printf("Expanding vocabulary with words from %s\n", path)
-	file, err := os.Open(path)
-	if err != nil {
-		fmt.Printf("Warning: could not open docs file to expand vocabulary: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	tokenizer := html.NewTokenizer(file)
-htmlLoop:
-	for {
-		tt := tokenizer.Next()
-		switch tt {
-		case html.ErrorToken:
-			if tokenizer.Err() != io.EOF {
-				fmt.Printf("Warning: error parsing HTML from %s: %v\n", path, tokenizer.Err())
-			}
-			break htmlLoop // End of the document
-		case html.TextToken:
-			words := strings.Fields(string(tokenizer.Text()))
-			for _, word := range words {
-				cleanedWord := strings.ToLower(strings.Trim(word, ".,!?;:\"'()[]{}-_"))
-				if cleanedWord != "" {
-					wordSet[cleanedWord] = true
-				}
-			}
-		}
-	}
-}
-

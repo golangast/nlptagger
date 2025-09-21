@@ -9,25 +9,111 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
-	"github.com/golangast/nlptagger/neural/nn/dr"
-	"github.com/golangast/nlptagger/neural/nn/ner"
-	"github.com/golangast/nlptagger/neural/nn/phrase"
-	"github.com/golangast/nlptagger/neural/nn/pos"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/neural/nn/dr"
+	"nlptagger/neural/nn/ner"
+	"nlptagger/neural/nn/phrase"
+	"nlptagger/neural/nn/pos"
+	"nlptagger/tagger/tag"
 )
+
+// Vocabulary represents a mapping from words to integer IDs.
+type Vocabulary struct {
+	WordToToken    map[string]int
+	TokenToWord    []string
+	PaddingTokenID int
+	BosID          int
+	EosID          int
+	UnkID          int
+}
 
 type TrainingDataJSON struct {
 	Sentences []tag.Tag `json:"sentences"`
 }
 
-func CreateVocab(modeldirectory string) (map[string]int, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
+// NewVocabulary creates a new Vocabulary instance.
+func NewVocabulary() *Vocabulary {
+	v := &Vocabulary{
+		WordToToken: make(map[string]int),
+		TokenToWord: []string{},
+	}
+	// Initialize special tokens
+	v.AddToken("<pad>") // ID 0
+	v.PaddingTokenID = v.GetTokenID("<pad>")
+	v.AddToken("UNK") // ID 1
+	v.UnkID = v.GetTokenID("UNK")
+	v.BosID = -1 // No BOS token by default
+	v.EosID = -1 // No EOS token by default
+
+	if v.PaddingTokenID == -1 || v.UnkID == -1 {
+		panic("NewVocabulary: PaddingTokenID or UnkID is -1 after initialization")
+	}
+
+	return v
+}
+
+// AddToken adds a word to the vocabulary if it doesn't already exist.
+func (v *Vocabulary) AddToken(word string) int {
+	if id, ok := v.WordToToken[word]; ok {
+		return id
+	}
+	id := len(v.TokenToWord)
+	v.WordToToken[word] = id
+	v.TokenToWord = append(v.TokenToWord, word)
+	return id
+}
+
+// GetTokenID returns the token ID for a given word, or -1 if not found.
+func (v *Vocabulary) GetTokenID(word string) int {
+	if id, ok := v.WordToToken[word]; ok {
+		return id
+	}
+	return v.UnkID // Return UNK token ID if not found
+}
+
+// GetWord returns the word for a given token ID, or an empty string if not found.
+func (v *Vocabulary) GetWord(id int) string {
+	if id >= 0 && id < len(v.TokenToWord) {
+		return v.TokenToWord[id]
+	}
+	return "" // Or return UNK word
+}
+
+// Size returns the number of unique tokens in the vocabulary.
+func (v *Vocabulary) Size() int {
+	return len(v.TokenToWord)
+}
+
+// Decode converts a slice of token IDs back to a string.
+func (v *Vocabulary) Decode(tokenIDs []int) string {
+	words := make([]string, 0, len(tokenIDs))
+	for _, id := range tokenIDs {
+		if id == v.EosID {
+			break // Stop decoding at EOS token
+		}
+		if id == v.PaddingTokenID {
+			continue // Skip padding tokens
+		}
+		words = append(words, v.GetWord(id))
+	}
+	return strings.Join(words, " ")
+}
+
+func CreateVocab(modeldirectory string) (*Vocabulary, map[string]int, map[string]int, map[string]int, map[string]int, *TrainingDataJSON) {
 	trainingData, err := LoadTrainingDataJSON(modeldirectory)
 	if err != nil {
 		fmt.Println("error loading training data: %w", err)
 	}
 	// Create vocabularies
-	tokenVocab := CreateTokenVocab(trainingData.Sentences)
+	tokenVocab := NewVocabulary()
+	tokenVocab.AddToken("UNK") // Add "UNK" token initially
+	for _, sentence := range trainingData.Sentences {
+		for _, token := range sentence.Tokens {
+			tokenVocab.AddToken(token)
+		}
+	}
+
 	posTagVocab := pos.CreatePosTagVocab(trainingData.Sentences)
 	nerTagVocab := ner.CreateTagVocabNer(trainingData.Sentences)
 	phraseTagVocab := phrase.CreatePhraseTagVocab(trainingData.Sentences)
@@ -36,45 +122,70 @@ func CreateVocab(modeldirectory string) (map[string]int, map[string]int, map[str
 	return tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab, trainingData
 }
 
-func CreateTokenVocab(trainingData []tag.Tag) map[string]int {
-	tokenVocab := make(map[string]int)
-	tokenVocab["UNK"] = 0 // Add "UNK" token initially
-	index := 1
-	for _, sentence := range trainingData { // Iterate through tag.Tag slice
+// CreateAndSaveVocab creates a vocabulary from training data and saves it as a GOB file.
+func CreateAndSaveVocab(sentences []tag.Tag, vocabPath string) (*Vocabulary, error) {
+	tokenVocab := NewVocabulary()
+	for _, sentence := range sentences {
 		for _, token := range sentence.Tokens {
-			if _, ok := tokenVocab[token]; !ok {
-				tokenVocab[token] = index
-				index++
-			}
+			tokenVocab.AddToken(token)
 		}
 	}
 
-	return tokenVocab
+	err := tokenVocab.Save(vocabPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save vocabulary: %w", err)
+	}
+
+	return tokenVocab, nil
 }
 
-// CreateAndSaveVocab creates a vocabulary from training data and saves it as a GOB file.
-func CreateAndSaveVocab(trainingData []tag.Tag, filePath string) (map[string]int, error) {
-	vocabulary := make(map[string]int)
-	vocabulary["UNK"] = 0 // Add "UNK" token with index 0
-	index := 1
-
-	for _, sentence := range trainingData {
-		for _, token := range sentence.Tokens {
-			if _, ok := vocabulary[token]; !ok {
-				vocabulary[token] = index
-				index++
-			}
-		}
-	}
-
+// Save saves a Vocabulary to a GOB file.
+func (v *Vocabulary) Save(filePath string) error {
 	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	return encoder.Encode(v)
+}
+
+// LoadVocabulary loads a Vocabulary from a GOB file.
+func LoadVocabulary(filePath string) (*Vocabulary, error) {
+	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	return vocabulary, encoder.Encode(vocabulary)
+	decoder := gob.NewDecoder(file)
+	var vocabulary Vocabulary
+	err = decoder.Decode(&vocabulary)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure special tokens are correctly added and their IDs are set after loading
+	if vocabulary.GetTokenID("<pad>") == -1 {
+		vocabulary.AddToken("<pad>")
+	}
+	vocabulary.PaddingTokenID = vocabulary.GetTokenID("<pad>")
+
+	if vocabulary.GetTokenID("UNK") == -1 {
+		vocabulary.AddToken("UNK")
+	}
+	vocabulary.UnkID = vocabulary.GetTokenID("UNK")
+
+	vocabulary.BosID = vocabulary.GetTokenID("<s>")
+	vocabulary.EosID = vocabulary.GetTokenID("</s>")
+
+	if vocabulary.PaddingTokenID == -1 || vocabulary.UnkID == -1 {
+		panic("LoadVocabulary: PaddingTokenID or UnkID is -1 after loading")
+	}
+	fmt.Printf("Loaded vocabulary with %d tokens\n", vocabulary.Size())
+
+	return &vocabulary, nil
 }
 
 // Function to load training data from a JSON file

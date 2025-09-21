@@ -9,11 +9,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golangast/nlptagger/commands"
-	"github.com/golangast/nlptagger/neural/nn/g"
-	"github.com/golangast/nlptagger/neural/nn/semanticrole"
-	"github.com/golangast/nlptagger/neural/nnu/train"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/commands"
+	"nlptagger/neural/nn/g"
+	"nlptagger/neural/nn/semanticrole"
+	"nlptagger/neural/nnu/train"
+	"nlptagger/tagger/tag"
 )
 
 // TrainingData struct

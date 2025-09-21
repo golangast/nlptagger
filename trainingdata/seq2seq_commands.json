@@ -1,0 +1,110 @@
+[
+  {
+    "input": "create a new API endpoint named 'products' with the path '/api/v1/products'",
+    "target_output": {
+      "intent": "create_api_endpoint",
+      "entities": {
+        "object": "api_endpoint",
+        "name": "products",
+        "path": "/api/v1/products"
+      }
+    }
+  },
+  {
+    "input": "delete the 'user_photos' database",
+    "target_output": {
+      "intent": "delete_database",
+      "entities": {
+        "object": "database",
+        "name": "user_photos"
+      }
+    }
+  },
+  {
+    "input": "list all files in the 'documents' folder",
+    "target_output": {
+      "intent": "list_files",
+      "entities": {
+        "object": "files",
+        "location_type": "folder",
+        "location_name": "documents"
+      }
+    }
+  },
+  {
+    "input": "open the 'main.go' file in the 'src' directory",
+    "target_output": {
+      "intent": "open_file",
+      "entities": {
+        "object": "file",
+        "name": "main.go",
+        "location_type": "directory",
+        "location_name": "src"
+      }
+    }
+  },
+  {
+    "input": "clone the git repository located at 'https://github.com/user/myproject.git' into the 'projects' folder",
+    "target_output": {
+      "intent": "clone_repository",
+      "entities": {
+        "object": "git_repository",
+        "source_url": "https://github.com/user/myproject.git",
+        "location_type": "folder",
+        "location_name": "projects"
+      }
+    }
+  },
+  {
+    "input": "show me the status of the 'database_service' service",
+    "target_output": {
+      "intent": "get_service_status",
+      "entities": {
+        "object": "service",
+        "name": "database_service"
+      }
+    }
+  },
+  {
+    "input": "create a new user named 'alex' with an email of 'alex@example.com'",
+    "target_output": {
+      "intent": "create_user",
+      "entities": {
+        "object": "user",
+        "name": "alex",
+        "email": "alex@example.com"
+      }
+    }
+  },
+  {
+    "input": "what is the current weather in New York City",
+    "target_output": {
+      "intent": "get_weather",
+      "entities": {
+        "location": "New York City"
+      }
+    }
+  },
+  {
+    "input": "set the 'PORT' environment variable to '8080'",
+    "target_output": {
+      "intent": "set_environment_variable",
+      "entities": {
+        "object": "environment_variable",
+        "name": "PORT",
+        "value": "8080"
+      }
+    }
+  },
+  {
+    "input": "run the build script for the 'frontend' project",
+    "target_output": {
+      "intent": "run_script",
+      "entities": {
+        "object": "script",
+        "name": "build",
+        "project": "frontend"
+      }
+    }
+  }
+]

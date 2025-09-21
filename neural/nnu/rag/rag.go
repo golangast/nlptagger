@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/golangast/nlptagger/neural/nnu"
-	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"nlptagger/neural/nnu"
+	"nlptagger/neural/nnu/word2vec"
 )
 
 // common English stop words

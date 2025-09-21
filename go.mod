@@ -1,5 +1,5 @@
-module github.com/golangast/nlptagger
+module nlptagger
 
-go 1.24.2
+go 1.24.5
 
-require golang.org/x/net v0.42.0
+require github.com/golangast/nlptagger v0.0.0-20250824051539-724d1f0d6855

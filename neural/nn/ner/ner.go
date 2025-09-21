@@ -5,8 +5,8 @@ package ner
 import (
 	"fmt"
 
-	"github.com/golangast/nlptagger/neural/nnu"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/neural/nnu"
+	"nlptagger/tagger/tag"
 )
 
 // Forward pass https://wiki.pathmind.com/neural-network

@@ -1,10 +1,9 @@
 package word2vec
 
 import (
+	"bufio" // Add this import
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -13,7 +12,7 @@ import (
 
 	// Package word2vec implements a basic Word2Vec model for creating word embeddings.
 
-	"github.com/golangast/nlptagger/neural/nn/g"
+	"nlptagger/neural/nn/g"
 )
 
 // SimpleWord2Vec is a basic Word2Vec implementation in Go.
@@ -69,40 +68,28 @@ func ConvertToMap(wv WordVectors, vocab map[string]int) map[string][]float64 {
 	return result
 }
 
-// TrainingData represents the structure of the training data JSON.
-type TrainingData struct {
-	Sentences []struct {
-		Tokens []string `json:"tokens"`
-	} `json:"sentences"`
-}
-
-// ReadTrainingData reads the training data from a JSON file.
+// ReadTrainingData reads the training data from a plain text file, one sentence per line.
 func ReadTrainingData(filePath string) ([]string, error) {
-	// Open the JSON file
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening training data file: %w", err)
 	}
 	defer file.Close()
 
-	// Read the file content
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
+	scanner := bufio.NewScanner(file)
+	var sentences []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) > 0 {
+			sentences = append(sentences, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading training data file: %w", err)
 	}
 
-	// Unmarshal the JSON data
-	var trainingData TrainingData
-	err = json.Unmarshal(data, &trainingData)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling training data: %w", err)
-	}
-
-	var sentenceTexts []string
-	for _, item := range trainingData.Sentences {
-		sentenceTexts = append(sentenceTexts, strings.Join(item.Tokens, " "))
-	}
-	return sentenceTexts, nil
+	return sentences, nil
 }
 
 func (sw2v *SimpleWord2Vec) TrainSentenceContext(sentences []string) map[string][]float64 {
@@ -326,7 +313,7 @@ func LoadModel(filename string) (*SimpleWord2Vec, error) {
 func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 	// Initialize default hyperparameters if not set
 	if sw2v.Epochs == 0 {
-		sw2v.Epochs = 100 // Reduced for demonstration
+		sw2v.Epochs = 10 // Reduced for demonstration
 	}
 	if sw2v.LearningRate == 0.0 {
 		sw2v.LearningRate = 0.01
@@ -399,8 +386,8 @@ func (sw2v *SimpleWord2Vec) Train(trainingData []string) {
 		wordIndices[i] = i
 	}
 
-	// var totalLoss float64
-	// var iterationCount int
+	//var totalLoss float64
+	//var iterationCount int
 
 	// Main training loop
 	for i := 0; i < sw2v.Epochs; i++ {
@@ -496,7 +483,7 @@ func TrainWord2VecModel(trainingDataPath, modelSavePath string, vectorSize, epoc
 	sw2v := &SimpleWord2Vec{
 		VectorSize:       vectorSize,
 		HiddenSize:       vectorSize, // Initialize HiddenSize with vectorSize
-		LearningRate:     0.01, // Default learning rate
+		LearningRate:     0.01,       // Default learning rate
 		Window:           window,
 		Epochs:           epochs,
 		NegativeSamples:  negativeSamples,

@@ -199,7 +199,7 @@
      {"sentence": "We are generating some training data."},
      {"sentence": "The quick brown fox jumps over the lazy dog."},
      {"sentence": "Natural language processing is an interesting field."},
-     {"sentence": "Word embeddings capture semantic relationships."},
+     {"sentence": "Word embeddings capture semantic relationships.", "context": "NLP Techniques"},
      {"sentence": "Machine learning models require data for training."},
      {"sentence": "Example data helps illustrate the format."},
      {"sentence": "You should replace this with your own relevant data."},

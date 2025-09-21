@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golangast/nlptagger/neural/nn/semanticrole/bilstm_model"
-	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"nlptagger/neural/nn/semanticrole/bilstm_model"
+	"nlptagger/neural/nnu/word2vec"
 )
 
 // CreateRoleMap creates a role map from training data
@@ -106,7 +106,6 @@ func (m *SemanticRoleModel) PredictRoles(tokens []string) ([]string, error) {
 	}
 	// Comparison (if we found a matching training example)
 	if matchingExample != nil {
-		fmt.Printf("Input Tokens: %v\n", tokens)
 		fmt.Printf("Predicted Roles: %v\n", roleNames)
 		fmt.Printf("Expected Roles: %v\n", matchingExample.Roles)
 		// You could add more detailed comparison logic here, e.g.,

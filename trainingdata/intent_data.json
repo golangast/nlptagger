@@ -1,0 +1,1127 @@
+[
+  {
+    "query": "create a webserver",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "generate a webserver",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "generate a web service",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "build a web server",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "generate a new http endpoint",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete the user database",
+    "parent_intent": "database",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove the customer table",
+    "parent_intent": "database",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update the product prices",
+    "parent_intent": "database",
+    "child_intent": "update"
+  },
+  {
+    "query": "refactor the authentication logic",
+    "parent_intent": "code",
+    "child_intent": "refactor"
+  },
+  {
+    "query": "improve performance of the search function",
+    "parent_intent": "code",
+    "child_intent": "refactor"
+  },
+  {
+    "query": "deploy the application to production",
+    "parent_intent": "deployment",
+    "child_intent": "deploy"
+  },
+  {
+    "query": "release the new version",
+    "parent_intent": "deployment",
+    "child_intent": "deploy"
+  },
+  {
+    "query": "start a new web server",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "initialize a http service",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "get the status of the web service",
+    "parent_intent": "service",
+    "child_intent": "get"
+  },
+  {
+    "query": "delete the web server",
+    "parent_intent": "service",
+    "child_intent": "delete"
+  },
+    {
+    "query": "create a new user account",
+    "parent_intent": "user_management",
+    "child_intent": "create"
+  },
+  {
+    "query": "add a new administrator",
+    "parent_intent": "user_management",
+    "child_intent": "create"
+  },
+  {
+    "query": "remove a user from the system",
+    "parent_intent": "user_management",
+    "child_intent": "delete"
+  },
+  {
+    "query": "deactivate a user profile",
+    "parent_intent": "user_management",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update user permissions",
+    "parent_intent": "user_management",
+    "child_intent": "update"
+  },
+  {
+    "query": "change a user's password",
+    "parent_intent": "user_management",
+    "child_intent": "update"
+  },
+  {
+    "query": "list all active users",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "retrieve a user's details",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "get the number of active users",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "check the current user session",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "back up the application database",
+    "parent_intent": "database",
+    "child_intent": "backup"
+  },
+  {
+    "query": "create a snapshot of the database",
+    "parent_intent": "database",
+    "child_intent": "backup"
+  },
+  {
+    "query": "restore the database from backup",
+    "parent_intent": "database",
+    "child_intent": "restore"
+  },
+  {
+    "query": "revert the database to a previous state",
+    "parent_intent": "database",
+    "child_intent": "restore"
+  },
+  {
+    "query": "run a new migration",
+    "parent_intent": "database",
+    "child_intent": "migration"
+  },
+  {
+    "query": "execute a database schema change",
+    "parent_intent": "database",
+    "child_intent": "migration"
+  },
+  {
+    "query": "read a file from the server",
+    "parent_intent": "file_system",
+    "child_intent": "read"
+  },
+  {
+    "query": "get the content of the log file",
+    "parent_intent": "file_system",
+    "child_intent": "read"
+  },
+  {
+    "query": "create a new directory",
+    "parent_intent": "file_system",
+    "child_intent": "create"
+  },
+  {
+    "query": "make a new folder",
+    "parent_intent": "file_system",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete a file",
+    "parent_intent": "file_system",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove a directory",
+    "parent_intent": "file_system",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update the configuration file",
+    "parent_intent": "file_system",
+    "child_intent": "update"
+  },
+  {
+    "query": "modify the settings file",
+    "parent_intent": "file_system",
+    "child_intent": "update"
+  },
+  {
+    "query": "start the production server",
+    "parent_intent": "deployment",
+    "child_intent": "start"
+  },
+  {
+    "query": "bring up the application server",
+    "parent_intent": "deployment",
+    "child_intent": "start"
+  },
+  {
+    "query": "stop the web service",
+    "parent_intent": "deployment",
+    "child_intent": "stop"
+  },
+  {
+    "query": "shut down the application",
+    "parent_intent": "deployment",
+    "child_intent": "stop"
+  },
+  {
+    "query": "restart the backend service",
+    "parent_intent": "deployment",
+    "child_intent": "restart"
+  },
+  {
+    "query": "reboot the server",
+    "parent_intent": "deployment",
+    "child_intent": "restart"
+  },
+  {
+    "query": "get the status of the deployment",
+    "parent_intent": "deployment",
+    "child_intent": "get"
+  },
+  {
+    "query": "check if the application is running",
+    "parent_intent": "deployment",
+    "child_intent": "get"
+  },
+  {
+    "query": "create a new function",
+    "parent_intent": "code",
+    "child_intent": "create"
+  },
+  {
+    "query": "write a new module",
+    "parent_intent": "code",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete a line of code",
+    "parent_intent": "code",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove a class",
+    "parent_intent": "code",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update a variable declaration",
+    "parent_intent": "code",
+    "child_intent": "update"
+  },
+  {
+    "query": "change the logic of the login function",
+    "parent_intent": "code",
+    "child_intent": "update"
+  },
+  {
+    "query": "get a code snippet for a loop",
+    "parent_intent": "code",
+    "child_intent": "get"
+  },
+  {
+    "query": "retrieve the definition of the 'main' function",
+    "parent_intent": "code",
+    "child_intent": "get"
+  },
+  {
+    "query": "debug the authentication flow",
+    "parent_intent": "code",
+    "child_intent": "debug"
+  },
+  {
+    "query": "find the bug in the payment gateway",
+    "parent_intent": "code",
+    "child_intent": "debug"
+  },
+  {
+    "query": "create a new git branch",
+    "parent_intent": "version_control",
+    "child_intent": "create"
+  },
+  {
+    "query": "branch off from master",
+    "parent_intent": "version_control",
+    "child_intent": "create"
+  },
+  {
+    "query": "commit changes",
+    "parent_intent": "version_control",
+    "child_intent": "commit"
+  },
+  {
+    "query": "push the code to the remote repository",
+    "parent_intent": "version_control",
+    "child_intent": "push"
+  },
+  {
+    "query": "pull the latest changes",
+    "parent_intent": "version_control",
+    "child_intent": "pull"
+  },
+  {
+    "query": "clone a repository",
+    "parent_intent": "version_control",
+    "child_intent": "clone"
+  },
+  {
+    "query": "merge branch 'feature' into 'develop'",
+    "parent_intent": "version_control",
+    "child_intent": "merge"
+  },
+  {
+    "query": "deploy the application to staging",
+    "parent_intent": "deployment",
+    "child_intent": "deploy"
+  },
+  {
+    "query": "delete the product database",
+    "parent_intent": "database",
+    "child_intent": "delete"
+  },
+   {
+    "query": "create a webserver named Apollo with handler named Artemis",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "generate a new http endpoint named /products with method POST",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete the user database named 'auth_db'",
+    "parent_intent": "database",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove the customer table named 'customer_data'",
+    "parent_intent": "database",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update the product prices in 'inventory' database",
+    "parent_intent": "database",
+    "child_intent": "update"
+  },
+  {
+    "query": "refactor the authentication logic in module 'auth_service.py'",
+    "parent_intent": "code",
+    "child_intent": "refactor"
+  },
+  {
+    "query": "improve performance of the search function 'find_items_by_name'",
+    "parent_intent": "code",
+    "child_intent": "refactor"
+  },
+  {
+    "query": "deploy the application named 'e-commerce-app' to production",
+    "parent_intent": "deployment",
+    "child_intent": "deploy"
+  },
+  {
+    "query": "release the new version '2.1.0' to production",
+    "parent_intent": "deployment",
+    "child_intent": "deploy"
+  },
+  {
+    "query": "start a new web server named 'api-gateway'",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "initialize a http service named 'metrics-collector'",
+    "parent_intent": "service",
+    "child_intent": "create"
+  },
+  {
+    "query": "get the status of the web service 'user-service'",
+    "parent_intent": "service",
+    "child_intent": "get"
+  },
+  {
+    "query": "delete the web server named 'legacy-server'",
+    "parent_intent": "service",
+    "child_intent": "delete"
+  },
+  {
+    "query": "create a new user account for 'jane.doe@example.com'",
+    "parent_intent": "user_management",
+    "child_intent": "create"
+  },
+  {
+    "query": "add a new administrator named 'admin_user'",
+    "parent_intent": "user_management",
+    "child_intent": "create"
+  },
+  {
+    "query": "remove a user from the system with ID 'U12345'",
+    "parent_intent": "user_management",
+    "child_intent": "delete"
+  },
+  {
+    "query": "deactivate a user profile for 'john.smith'",
+    "parent_intent": "user_management",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update user permissions for 'marketing_team'",
+    "parent_intent": "user_management",
+    "child_intent": "update"
+  },
+  {
+    "query": "change a user's password for 'test_user'",
+    "parent_intent": "user_management",
+    "child_intent": "update"
+  },
+  {
+    "query": "list all active users in the 'production' environment",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "retrieve a user's details for 'api_user'",
+    "parent_intent": "user_management",
+    "child_intent": "get"
+  },
+  {
+    "query": "back up the application database 'app_db_prod'",
+    "parent_intent": "database",
+    "child_intent": "backup"
+  },
+  {
+    "query": "create a snapshot of the database 'analytics_db'",
+    "parent_intent": "database",
+    "child_intent": "backup"
+  },
+  {
+    "query": "restore the database 'app_db_staging' from backup 'backup_20231027'",
+    "parent_intent": "database",
+    "child_intent": "restore"
+  },
+  {
+    "query": "run a new migration named 'add_user_timestamps'",
+    "parent_intent": "database",
+    "child_intent": "migration"
+  },
+  {
+    "query": "execute a database schema change on 'users' table",
+    "parent_intent": "database",
+    "child_intent": "migration"
+  },
+  {
+    "query": "read a file named 'config.json' from the server",
+    "parent_intent": "file_system",
+    "child_intent": "read"
+  },
+  {
+    "query": "get the content of the log file '/var/log/app.log'",
+    "parent_intent": "file_system",
+    "child_intent": "read"
+  },
+  {
+    "query": "create a new directory named 'temp_files'",
+    "parent_intent": "file_system",
+    "child_intent": "create"
+  },
+  {
+    "query": "make a new folder named 'uploads'",
+    "parent_intent": "file_system",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete a file named 'old_report.csv'",
+    "parent_intent": "file_system",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove a directory named 'temp_cache'",
+    "parent_intent": "file_system",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update the configuration file named 'settings.yaml'",
+    "parent_intent": "file_system",
+    "child_intent": "update"
+  },
+  {
+    "query": "modify the settings file to set 'debug' to false",
+    "parent_intent": "file_system",
+    "child_intent": "update"
+  },
+  {
+    "query": "start the production server 'web-server-01'",
+    "parent_intent": "deployment",
+    "child_intent": "start"
+  },
+  {
+    "query": "bring up the application server 'frontend-app-02'",
+    "parent_intent": "deployment",
+    "child_intent": "start"
+  },
+  {
+    "query": "stop the web service 'payment-service'",
+    "parent_intent": "deployment",
+    "child_intent": "stop"
+  },
+  {
+    "query": "shut down the application 'data-processor'",
+    "parent_intent": "deployment",
+    "child_intent": "stop"
+  },
+  {
+    "query": "restart the backend service 'auth-service'",
+    "parent_intent": "deployment",
+    "child_intent": "restart"
+  },
+  {
+    "query": "reboot the server 'database-server-01'",
+    "parent_intent": "deployment",
+    "child_intent": "restart"
+  },
+  {
+    "query": "get the status of the deployment for 'notification-service'",
+    "parent_intent": "deployment",
+    "child_intent": "get"
+  },
+  {
+    "query": "create a new function named 'calculate_tax'",
+    "parent_intent": "code",
+    "child_intent": "create"
+  },
+  {
+    "query": "write a new module named 'data_validation.py'",
+    "parent_intent": "code",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete a line of code from 'utils.js'",
+    "parent_intent": "code",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove a class named 'ShoppingCart' from 'models.py'",
+    "parent_intent": "code",
+    "child_intent": "delete"
+  },
+  {
+    "query": "update a variable declaration named 'API_KEY' in 'config.env'",
+    "parent_intent": "code",
+    "child_intent": "update"
+  },
+  {
+    "query": "change the logic of the 'login' function in 'auth.py'",
+    "parent_intent": "code",
+    "child_intent": "update"
+  },
+  {
+    "query": "debug the 'authentication' flow in 'app.js'",
+    "parent_intent": "code",
+    "child_intent": "debug"
+  },
+  {
+    "query": "find the bug in the 'payment' gateway module",
+    "parent_intent": "code",
+    "child_intent": "debug"
+  },
+  {
+    "query": "create a new git branch named 'feature/user-profiles'",
+    "parent_intent": "version_control",
+    "child_intent": "create"
+  },
+  {
+    "query": "commit changes to repository 'project-x'",
+    "parent_intent": "version_control",
+    "child_intent": "commit"
+  },
+  {
+    "query": "push the code to the remote repository 'origin'",
+    "parent_intent": "version_control",
+    "child_intent": "push"
+  },
+    {
+    "query": "generate a webserver named Alex with handler named Anna",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server called 'my_app_server' with a handler named 'main_handler'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a new server called 'API_gateway' with handler 'auth_handler'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a web service named 'data_service' with a handler function named 'process_data'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a server named 'proxy_server' and a handler named 'request_handler'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver named 'secure_server' and its handler 'validate_session'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a server named 'file_server' with handler 'serve_file'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a webserver 'user_manager' with a handler 'add_user'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a server 'shopping_cart' and a handler 'checkout_process'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a new web server called 'reporting_tool' with a handler 'generate_report'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver called 'media_streamer' with a handler 'stream_video'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'game_backend' with handler 'handle_game_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a server named 'scheduler' with handler 'run_task'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'notification_service' and handler 'send_notification'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up webserver 'payment_gateway' with handler 'process_payment'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver named 'content_api' and a handler named 'fetch_content'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a server 'analytics_service' with handler 'log_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create webserver 'user_profile' and handler 'update_profile'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold server 'search_engine' with handler 'search_query'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'weather_api' with handler 'get_weather'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server named 'blog_post' and handler 'create_post'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'photo_gallery' with handler 'upload_photo'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a server 'e-commerce' with handler 'add_to_cart'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'social_network' and handler 'post_status'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up webserver 'booking_system' with handler 'book_appointment'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'chat_app' and handler 'send_message'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'todo_list' with handler 'add_task'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create server 'survey_tool' and handler 'submit_response'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'inventory_manager' with handler 'update_stock'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'email_service' with handler 'send_email'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'queue_manager' and handler 'process_item'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a webserver 'image_processor' with handler 'process_image'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a server 'health_check' with handler 'check_status'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'stock_tracker' and handler 'get_stock_price'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'customer_support' with handler 'open_ticket'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'voting_app' and handler 'cast_vote'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'translation_service' with handler 'translate_text'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'url_shortener' and handler 'shorten_url'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'recipe_finder' with handler 'find_recipe'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'map_service' with handler 'get_directions'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'file_converter' and handler 'convert_file'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'currency_converter' with handler 'convert_currency'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'event_tracker' with handler 'track_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'resource_monitor' and handler 'check_resource'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'voice_assistant' with handler 'listen_command'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'device_manager' and handler 'manage_device'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'subscription_service' with handler 'subscribe_user'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'forum_backend' and handler 'create_thread'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'report_generator' with handler 'generate_report'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'security_service' with handler 'check_security'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'loan_calculator' and handler 'calculate_loan'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'fitness_tracker' with handler 'log_workout'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'document_signer' with handler 'sign_document'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'project_management' and handler 'create_task'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'music_streaming' with handler 'play_song'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'delivery_service' and handler 'track_delivery'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'finance_app' with handler 'track_expense'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'customer_database' and handler 'get_customer_info'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'telemetry_service' with handler 'collect_telemetry'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'feedback_form' with handler 'submit_feedback'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'time_tracker' and handler 'log_time'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'reservation_system' with handler 'make_reservation'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'voting_platform' with handler 'record_vote'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'health_data_api' and handler 'get_health_data'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'task_manager' with handler 'complete_task'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'traffic_monitor' and handler 'get_traffic'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'event_booking' with handler 'book_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'podcast_manager' and handler 'add_podcast'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'inventory_tracking' with handler 'track_inventory'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'calendar_service' with handler 'create_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'recipe_manager' and handler 'add_recipe'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'library_system' with handler 'borrow_book'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'real_estate_listings' with handler 'search_listing'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'job_board' and handler 'apply_for_job'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'fitness_app' with handler 'log_exercise'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'crm_tool' and handler 'add_contact'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'file_sharing' with handler 'share_file'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'expense_tracker' and handler 'add_expense'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'user_authentication' with handler 'login_user'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'feedback_system' with handler 'receive_feedback'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'dashboard_api' and handler 'get_dashboard_data'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'content_management' with handler 'edit_content'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'user_management' with handler 'delete_user'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'shipping_service' and handler 'calculate_shipping'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'payment_service' with handler 'process_refund'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'email_marketing' and handler 'send_newsletter'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'code_editor' with handler 'save_file'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'online_store' and handler 'view_product'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'teleconference_app' with handler 'join_call'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'news_aggregator' with handler 'fetch_news'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'data_pipeline' and handler 'ingest_data'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'forum_app' with handler 'create_post'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'travel_planner' with handler 'find_route'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'task_scheduler' and handler 'schedule_task'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'contact_book' with handler 'add_contact'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'event_management' and handler 'register_for_event'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "produce a webserver 'streaming_service' with handler 'start_stream'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'project_tracker' and handler 'update_status'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "scaffold a webserver 'help_desk' with handler 'open_ticket'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "instantiate a server 'recipe_database' with handler 'get_recipe'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a webserver 'bug_tracker' and handler 'report_bug'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "build a server 'health_monitoring' with handler 'check_health'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "make a webserver 'job_scheduler' with handler 'add_job'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "create a server 'file_manager' and handler 'delete_file'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "set up a webserver 'user_directory' with handler 'list_users'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a server 'log_aggregator' and handler 'aggregate_logs'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler"
+  }
+]

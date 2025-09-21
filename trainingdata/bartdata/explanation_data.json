@@ -1,60 +1,15 @@
-{
- "sentences": [
+
+[
   {
-   "input": "generate a webserver named jim and handler named jill",
-   "output": "This command creates a web server named jim and sets up a handler named jill to manage requests."
+    "Query": "build the application",
+    "Description": "Compiles all source code and dependencies to create an executable application."
   },
   {
-   "input": "create a database named accounting",
-   "output": "This command initializes a new database specifically for accounting records."
+    "Query": "run the tests",
+    "Description": "Executes the automated test suite to verify functionality and catch regressions."
   },
   {
-   "input": "generate a rest api named userapi",
-   "output": "This command scaffolds a RESTful API for user-related operations, named userapi."
-  },
-  {
-   "input": "scaffold a react component named user",
-   "output": "This command generates the basic file structure and code for a React component named user."
-  },
-  {
-   "input": "add a new route to the webserver",
-   "output": "This command configures a new URL path or endpoint within the existing web server."
-  },
-  {
-   "input": "delete the user table from the database",
-   "output": "This command removes the user table and its data from the specified database."
-  },
-  {
-   "input": "update the handler to return JSON",
-   "output": "This command modifies an existing handler to format its responses as JSON."
-  },
-  {
-   "input": "list all available APIs",
-   "output": "This command displays a list of all accessible Application Programming Interfaces."
-  },
-  {
-   "input": "restart the webserver",
-   "output": "This command stops and then starts the web server, applying any new configurations."
-  },
-  {
-   "input": "deploy the application to production",
-   "output": "This command publishes the application to the live production environment, making it accessible to users."
-  },
-  {
-   "input": "generate a database",
-   "output": "This command creates a new, unnamed database."
-  },
-  {
-   "input": "generate a database named sales",
-   "output": "This command creates a new database specifically for sales data."
-  },
-  {
-   "input": "create a database called orders",
-   "output": "This command establishes a new database designated for managing order information."
-  },
-  {
-   "input": "generate a webserver named jill",
-   "output": "This command creates a web server named jill."
+    "Query": "deploy to production",
+    "Description": "Deploys the latest stable version of the application to the production environment."
   }
- ]
-}
+]

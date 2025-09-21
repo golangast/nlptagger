@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger"
+	"nlptagger/tagger"
 )
 
 type ANN struct {

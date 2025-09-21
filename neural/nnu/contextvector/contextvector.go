@@ -6,9 +6,9 @@ package contextvector
 import (
 	"strings"
 
-	"github.com/golangast/nlptagger/neural/nn/g"
-	"github.com/golangast/nlptagger/neural/nnu"
-	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"nlptagger/neural/nn/g"
+	"nlptagger/neural/nnu"
+	"nlptagger/neural/nnu/word2vec"
 )
 
 // GetContextVector calculates the context vector for a sentence.
