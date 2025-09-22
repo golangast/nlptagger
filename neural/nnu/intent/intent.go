@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"nlptagger/commands"
 	"nlptagger/neural/nn/g"
 	"nlptagger/neural/nn/semanticrole"
 	"nlptagger/neural/nnu/train"
@@ -201,7 +200,6 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 					extractedObject = "webserver"
 				}
 				if intent == "create a file" {
-					commands.Createfile([]string{})
 				}
 				continue // Skip other checks if a phrase is matched
 			} else {
@@ -230,12 +228,10 @@ func (i *IntentClassifier) InterpretIntent(dependencyAnalysis tag.Tag, trainingD
 			}
 			intent = fmt.Sprintf("%s the %s", actionMap[extractedAction], extractedObject) // Example: create the file
 			if intent == "create the file" {
-				commands.Createfile([]string{})
 			}
 		} else if extractedAction != "" {
 			intent = fmt.Sprintf("%s", actionMap[extractedAction]) // Example: create
 			if intent == "create" {
-				commands.Createfile([]string{})
 			}
 
 			verbToken = token

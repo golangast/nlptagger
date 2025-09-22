@@ -1123,5 +1123,255 @@
     "query": "generate a server 'log_aggregator' and handler 'aggregate_logs'",
     "parent_intent": "webserver_creation",
     "child_intent": "create_server_and_handler"
+  },
+  {
+    "query": "generate a data structure 'Jack' in webserver 'Jill'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a queue 'task_queue' in webserver 'worker'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a hash map 'user_sessions' in webserver 'auth_server'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create an array 'product_list' in webserver 'store_api'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a stack 'call_stack' in webserver 'interpreter'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a tree 'file_system' in webserver 'file_manager'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a linked list 'recent_activity' in webserver 'feed_service'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a graph 'social_network' in webserver 'social_media_app'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a set 'unique_visitors' in webserver 'analytics_engine'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a circular buffer 'log_history' in webserver 'monitoring_service'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a priority queue 'job_queue' in webserver 'scheduler'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a binary search tree 'user_data' in webserver 'database_proxy'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a trie 'word_dictionary' in webserver 'search_engine'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a deque 'command_history' in webserver 'cli_tool'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a heap 'min_heap_of_tasks' in webserver 'task_manager'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a bloom filter 'seen_items' in webserver 'cache_service'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a suffix tree 'dna_sequences' in webserver 'bioinformatics_tool'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a skip list 'sorted_users' in webserver 'leaderboard_api'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a B-tree 'index_data' in webserver 'db_engine'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a hash set 'blacklisted_ips' in webserver 'firewall'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate an AVL tree 'user_ratings' in webserver 'review_platform'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a red-black tree 'sorted_jobs' in webserver 'batch_processor'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a disjoint set 'user_groups' in webserver 'community_finder'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a dictionary 'config_settings' in webserver 'configuration_manager'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a doubly linked list 'navigation_history' in webserver 'browser_service'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'Cache' in webserver 'API_Gateway'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'SessionStore' in webserver 'AuthService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'ShoppingCart' in webserver 'ECommerceAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'Leaderboard' in webserver 'GameServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'UserProfiles' in webserver 'ProfileService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'FileSystem' in webserver 'FileManager'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'JobQueue' in webserver 'TaskExecutor'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'EventLog' in webserver 'Logger'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'SearchIndex' in webserver 'SearchService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'Graph' in webserver 'SocialNetworkAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'MetricStore' in webserver 'MonitoringServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'Inventory' in webserver 'SupplyChainAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'TransactionLedger' in webserver 'FinancialAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'MessageBroker' in webserver 'ChatServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'DocumentStore' in webserver 'CMS'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'Playlist' in webserver 'MusicService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'RouteTable' in webserver 'Router'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'ImageGallery' in webserver 'MediaServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'FeedbackQueue' in webserver 'SupportAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'NotificationList' in webserver 'PushNotificationServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'CacheManager' in webserver 'ProxyServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'Configuration' in webserver 'ConfigService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'TokenStore' in webserver 'OAuthServer'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure 'SubscriptionList' in webserver 'BillingService'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
+  },
+  {
+    "query": "create a data structure 'ReservationSystem' in webserver 'BookingAPI'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure"
   }
 ]

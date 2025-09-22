@@ -223,25 +223,11 @@ func main() {
 	descriptionVocabularySavePath := "gob_models/description_vocabulary.gob"
 
 	// Define paths for training data
-	const seq2seqTrainingDataPath = "./trainingdata/software_commands.json" // Using software_commands.json for descriptions
+	const seq2seqTrainingDataPath = "./trainingdata/wikiqa_seq2seq_training.json" // Using transformed WikiQA data
 
-	var queryVocabulary *mainvocab.Vocabulary
-	var descriptionVocabulary *mainvocab.Vocabulary
-	// var err error // Removed redeclaration
-
-	// Try to load query vocabulary from file
-	queryVocabulary, err = mainvocab.LoadVocabulary(queryVocabularySavePath)
-	if err != nil {
-		log.Printf("Could not load query vocabulary from %s, building new one: %v", queryVocabularySavePath, err)
-		queryVocabulary = mainvocab.NewVocabulary()
-	}
-
-	// Try to load description vocabulary from file
-	descriptionVocabulary, err = mainvocab.LoadVocabulary(descriptionVocabularySavePath)
-	if err != nil {
-		log.Printf("Could not load description vocabulary from %s, building new one: %v", descriptionVocabularySavePath, err)
-		descriptionVocabulary = mainvocab.NewVocabulary()
-	}
+	// Always create new vocabularies and populate them from current training data
+	queryVocabulary := mainvocab.NewVocabulary()
+	descriptionVocabulary := mainvocab.NewVocabulary()
 
 	// Load Seq2Seq training data
 	seq2seqTrainingData, err := LoadSeq2SeqTrainingData(seq2seqTrainingDataPath)
@@ -274,6 +260,9 @@ func main() {
 	maxAttentionHeads := 8 // Added this line
 	// k := 2 // k is for top-k experts, not directly used in Seq2SeqMoE New function
 	maxSequenceLength := 64 // Max length for input query and output description
+
+	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
+	log.Printf("Description Vocabulary Size: %d", outputVocabSize)
 
 	var seq2seqMoEModel *moe.Seq2SeqMoE // Declare seq2seqMoEModel here
 
