@@ -1,0 +1,186 @@
+--- DEBUG: Query vocabulary size: 546 ---
+--- DEBUG: Parent intent vocabulary size: 10 ---
+--- DEBUG: Child intent vocabulary size: 24 ---
+--- DEBUG: Parent intent vocabulary: [<pad> UNK service database code deployment user_management file_system version_control webserver_creation] ---
+--- DEBUG: Child intent vocabulary: [<pad> UNK create delete update refactor deploy get backup restore migration read start stop restart debug commit push pull clone merge create_server_and_handler create_data_structure create_data_structure_in_handler] ---
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 0, Loss: 7.260861
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 1, Loss: 6.856092
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 2, Loss: 6.464804
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 3, Loss: 9.365568
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 4, Loss: 7.542363
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 5, Loss: 6.718034
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 6, Loss: 6.658841
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 7, Loss: 6.518710
+BertEncoder.Backward: initial grad.Shape=[22 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 0, Batch: 8, Loss: 6.302940
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 0, Loss: 6.116318
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 1, Loss: 6.068096
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 2, Loss: 5.901541
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 3, Loss: 6.256690
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 4, Loss: 6.209049
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 5, Loss: 6.279499
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 6, Loss: 6.472197
+BertEncoder.Backward: initial grad.Shape=[32 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[32 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 7, Loss: 6.732138
+BertEncoder.Backward: initial grad.Shape=[22 16 64]
+BertEncoder.Backward: calling layer 3 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 2 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 1 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+BertEncoder.Backward: calling layer 0 Backward with currentGrad.Shape=[22 16 64]
+BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.
+Epoch: 1, Batch: 8, Loss: 7.062327
+Training complete.

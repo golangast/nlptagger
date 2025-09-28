@@ -528,8 +528,9 @@ func (l *LayerNormalization) Forward(inputs ...*Tensor) (*Tensor, error) {
 	}
 
 	outputTensor := NewTensor(input.Shape, outputData, false)
+	outputTensor.RequiresGrad = input.RequiresGrad || l.Gamma.RequiresGrad || l.Beta.RequiresGrad
 	if outputTensor.RequiresGrad {
-		outputTensor.Creator = l // Set creator to the layer itself
+		outputTensor.Creator = l
 	}
 
 	return outputTensor, nil

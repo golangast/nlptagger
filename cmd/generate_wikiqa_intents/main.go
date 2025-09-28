@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/tagger"
+	"nlptagger/tagger/tag"
 )
 
 // IntentExample represents a single intent training example

@@ -1,0 +1,82 @@
+Attempting to create cpu.prof file...
+Starting CPU profile...
+CPU profiling started.
+Loaded 20360 training examples.
+Description Vocabulary TokenToWord: [<pad> UNK process_create definition_get general_explain process_explain general_query general_get history_event definition_explain]
+Query Vocabulary Size: 555
+Description Vocabulary Size: 10
+Failed to load Seq2SeqMoE model, creating a new one: error opening Seq2SeqMoE model gob file: open gob_models/moe_model.gob: no such file or directory
+Epoch 1/3
+Starting batch 1/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 2/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 3/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 4/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 5/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 6/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Completed forward pass.
+Starting loss calculation.
+Loss calculation completed.
+Completed backward pass.
+Optimizer step completed.
+Starting batch 7/637 in Epoch 1
+Starting trainSeq2SeqMoEBatch
+ZeroGrad completed.
+Starting tokenization and ID conversion.
+Tokenization and ID conversion completed.
+Tensors created.
+Received interrupt signal. Stopping CPU profile and closing file.

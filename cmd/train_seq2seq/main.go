@@ -28,12 +28,12 @@ var (
 	inputVocabPath   = flag.String("input_vocab_path", "gob_models/seq2seq_input_vocab.gob", "Path to save the input vocabulary")
 	outputVocabPath  = flag.String("output_vocab_path", "gob_models/seq2seq_output_vocab.gob", "Path to save the output vocabulary")
 
-	embeddingDim = flag.Int("embedding_dim", 128, "Dimension of word embeddings")
-	hiddenDim    = flag.Int("hidden_dim", 256, "Dimension of LSTM hidden states")
+	embeddingDim = flag.Int("embedding_dim", 64, "Dimension of word embeddings")
+	hiddenDim    = flag.Int("hidden_dim", 128, "Dimension of LSTM hidden states")
 	learningRate = flag.Float64("learning_rate", 0.001, "Learning rate for the optimizer")
-	epochs       = flag.Int("epochs", 10, "Number of training epochs")
+	epochs       = flag.Int("epochs", 2, "Number of training epochs")
 	batchSize    = flag.Int("batch_size", 32, "Batch size for training")
-	maxSeqLen    = flag.Int("max_seq_len", 50, "Maximum sequence length for padding")
+	maxSeqLen    = flag.Int("max_seq_len", 16, "Maximum sequence length for padding")
 )
 
 func main() {

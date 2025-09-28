@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"runtime/pprof" // Added for profiling
 	"strings"
+	"syscall"
 
 	"nlptagger/neural/moe" // Import the MoE package for Seq2SeqMoE
 	. "nlptagger/neural/nn"
@@ -50,11 +52,7 @@ func LoadSeq2SeqTrainingData(filePath string) (*Seq2SeqTrainingData, error) {
 }
 
 // TokenizeAndConvertToIDs tokenizes a text and converts tokens to their corresponding IDs, handling padding/truncation.
-func TokenizeAndConvertToIDs(text string, vocabulary *mainvocab.Vocabulary, maxLen int) ([]int, error) {
-	tokenizer, err := tokenizer.NewTokenizer(vocabulary)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tokenizer: %w", err)
-	}
+func TokenizeAndConvertToIDs(text string, tokenizer *tokenizer.Tokenizer, vocabulary *mainvocab.Vocabulary, maxLen int) ([]int, error) {
 
 	tokenIDs, err := tokenizer.Encode(text)
 	if err != nil {
@@ -88,7 +86,7 @@ func TokenizeAndConvertToIDs(text string, vocabulary *mainvocab.Vocabulary, maxL
 }
 
 // TrainMoEModel trains the MoEClassificationModel.
-func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, descriptionVocab *mainvocab.Vocabulary, maxSequenceLength int, profileFile *os.File) error {
+func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, descriptionVocab *mainvocab.Vocabulary, queryTokenizer, descriptionTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
 
 	if model == nil {
 		return errors.New("cannot train a nil model")
@@ -110,8 +108,9 @@ func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epoc
 				end = len(*data)
 			}
 			batch := (*data)[i:end]
+			log.Printf("Starting batch %d/%d in Epoch %d", numBatches+1, (len(*data)+batchSize-1)/batchSize, epoch+1) // Added log
 
-			loss, err := trainSeq2SeqMoEBatch(model, optimizer, batch, queryVocab, descriptionVocab, maxSequenceLength)
+			loss, err := trainSeq2SeqMoEBatch(model, optimizer, batch, queryVocab, descriptionVocab, queryTokenizer, descriptionTokenizer, maxSequenceLength)
 			if err != nil {
 				log.Printf("Error training batch: %v", err)
 				continue // Or handle error more strictly
@@ -122,58 +121,57 @@ func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epoc
 		if numBatches > 0 {
 			log.Printf("Epoch %d, Average Loss: %f", epoch+1, totalLoss/float64(numBatches))
 		}
-		// Stop profiling after the first epoch to get initial data
-		if epoch == 0 {
-			pprof.StopCPUProfile()
-			profileFile.Close() // Close the file explicitly
-			log.Println("CPU profiling stopped after first epoch.")
-			// Optionally, exit here if we only want the profile for the first epoch
-			// os.Exit(0)
-		}
 	}
 
 	return nil
 }
 
 // trainSeq2SeqMoEBatch performs a single training step on a batch of data.
-func trainSeq2SeqMoEBatch(seq2seqMoEModel *moe.Seq2SeqMoE, optimizer Optimizer, batch Seq2SeqTrainingData, queryVocab, descriptionVocab *mainvocab.Vocabulary, maxSequenceLength int) (float64, error) {
+func trainSeq2SeqMoEBatch(seq2seqMoEModel *moe.Seq2SeqMoE, optimizer Optimizer, batch Seq2SeqTrainingData, queryVocab, descriptionVocab *mainvocab.Vocabulary, queryTokenizer, descriptionTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
+	log.Println("Starting trainSeq2SeqMoEBatch")
 	optimizer.ZeroGrad()
+	log.Println("ZeroGrad completed.")
 
 	batchSize := len(batch)
 
 	inputIDsBatch := make([]int, batchSize*maxSequenceLength)
 	targetDescriptionIDsBatch := make([]int, batchSize*maxSequenceLength)
 
+	log.Println("Starting tokenization and ID conversion.")
 	for i, example := range batch {
 		// Tokenize and pad query
-		queryTokens, err := TokenizeAndConvertToIDs(example.Query, queryVocab, maxSequenceLength)
+		queryTokens, err := TokenizeAndConvertToIDs(example.Query, queryTokenizer, queryVocab, maxSequenceLength)
 		if err != nil {
 			return 0, fmt.Errorf("query tokenization failed for item %d: %w", i, err)
 		}
 		copy(inputIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], queryTokens)
 
 		// Tokenize and pad description
-		descriptionTokens, err := TokenizeAndConvertToIDs(example.Description, descriptionVocab, maxSequenceLength)
+		descriptionTokens, err := TokenizeAndConvertToIDs(example.Description, descriptionTokenizer, descriptionVocab, maxSequenceLength)
 		if err != nil {
 			return 0, fmt.Errorf("description tokenization failed for item %d: %w", i, err)
 		}
 		copy(targetDescriptionIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], descriptionTokens)
 	}
+	log.Println("Tokenization and ID conversion completed.")
 
 	// Convert input IDs to a Tensor (embeddings will be handled by the model)
 	inputTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(inputIDsBatch), false)
 	targetTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(targetDescriptionIDsBatch), false)
+	log.Println("Tensors created.")
 
 	// Forward pass through the Seq2SeqMoE model
 	descriptionLogitsSequence, err := seq2seqMoEModel.Forward(inputTensor, targetTensor)
 	if err != nil {
 		return 0, fmt.Errorf("Seq2SeqMoE model forward pass failed: %w", err)
 	}
+	log.Println("Completed forward pass.")
 
 	// Calculate loss for the generated description sequence
 	totalLoss := 0.0
 	var allGrads []*Tensor
 
+	log.Println("Starting loss calculation.")
 	for t, logitsTensorForTimeStep := range descriptionLogitsSequence {
 		// Extract target IDs for the current time step across the batch
 		targetIDsForTimeStep := make([]int, batchSize)
@@ -185,14 +183,17 @@ func trainSeq2SeqMoEBatch(seq2seqMoEModel *moe.Seq2SeqMoE, optimizer Optimizer, 
 		totalLoss += loss
 		allGrads = append(allGrads, grad)
 	}
+	log.Println("Loss calculation completed.")
 
 	// Backward pass
 	err = seq2seqMoEModel.Backward(allGrads)
 	if err != nil {
 		return 0, fmt.Errorf("Seq2SeqMoE model backward pass failed: %w", err)
 	}
+	log.Println("Completed backward pass.")
 
 	optimizer.Step()
+	log.Println("Optimizer step completed.")
 
 	return totalLoss, nil
 }
@@ -207,16 +208,32 @@ func convertIntsToFloat64s(input []int) []float64 {
 
 func main() {
 	// Start CPU profiling
+	log.Println("Attempting to create cpu.prof file...")
 	f, err := os.Create("cpu.prof")
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
 	}
+	log.Println("Starting CPU profile...")
 	if err := pprof.StartCPUProfile(f); err != nil {
 		log.Fatal("could not start CPU profile: ", err)
 	}
+	log.Println("CPU profiling started.")
+
+	// Set up a channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Goroutine to handle graceful shutdown on signal
+	go func() {
+		<-sigChan // Block until a signal is received
+		log.Println("Received interrupt signal. Stopping CPU profile and closing file.")
+		pprof.StopCPUProfile()
+		f.Close()
+		os.Exit(0) // Exit gracefully
+	}()
 
 	// Define training parameters
-	epochs := 5
+	epochs := 1
 	learningRate := 0.001
 	batchSize := 32
 	queryVocabularySavePath := "gob_models/query_vocabulary.gob"
@@ -225,28 +242,43 @@ func main() {
 	// Define paths for training data
 	const seq2seqTrainingDataPath = "./trainingdata/wikiqa_seq2seq_training.json" // Using transformed WikiQA data
 
-	// Always create new vocabularies and populate them from current training data
-	queryVocabulary := mainvocab.NewVocabulary()
-	descriptionVocabulary := mainvocab.NewVocabulary()
+	// Try to load vocabularies first
+	queryVocabulary, err := mainvocab.LoadVocabulary(queryVocabularySavePath)
+	if err != nil {
+		log.Println("Failed to load query vocabulary, creating a new one.")
+		queryVocabulary = mainvocab.NewVocabulary()
+	}
+
+	descriptionVocabulary, err := mainvocab.LoadVocabulary(descriptionVocabularySavePath)
+	if err != nil {
+		log.Println("Failed to load description vocabulary, creating a new one.")
+		descriptionVocabulary = mainvocab.NewVocabulary()
+	}
 
 	// Load Seq2Seq training data
 	seq2seqTrainingData, err := LoadSeq2SeqTrainingData(seq2seqTrainingDataPath)
 	if err != nil {
 		log.Fatalf("Failed to load Seq2Seq training data from %s: %v", seq2seqTrainingDataPath, err)
 	}
+	log.Printf("Loaded %d training examples.", len(*seq2seqTrainingData))
 
-	// Populate vocabularies with tokens from training data
-	for _, pair := range *seq2seqTrainingData {
-		// Add query tokens to query vocabulary
-		queryWords := strings.Fields(strings.ToLower(pair.Query))
-		for _, word := range queryWords {
-			queryVocabulary.AddToken(word)
-		}
+	// If vocabularies are empty, populate them from training data
+	if len(queryVocabulary.TokenToWord) <= 2 || len(descriptionVocabulary.TokenToWord) <= 2 { // <= 2 to account for pad and unk
+		log.Println("Populating vocabularies from training data...")
 
-		// Add description tokens to description vocabulary
-		descriptionWords := strings.Fields(strings.ToLower(pair.Description))
-		for _, word := range descriptionWords {
-			descriptionVocabulary.AddToken(word)
+		// Populate vocabularies with tokens from training data
+		for _, pair := range *seq2seqTrainingData {
+			// Add query tokens to query vocabulary
+			queryWords := strings.Fields(strings.ToLower(pair.Query))
+			for _, word := range queryWords {
+				queryVocabulary.AddToken(word)
+			}
+
+			// Add description tokens to description vocabulary
+			descriptionWords := strings.Fields(strings.ToLower(pair.Description))
+			for _, word := range descriptionWords {
+				descriptionVocabulary.AddToken(word)
+			}
 		}
 	}
 
@@ -255,11 +287,11 @@ func main() {
 	// After vocabularies are fully populated, determine vocab sizes and create/load model
 	inputVocabSize := len(queryVocabulary.TokenToWord)
 	outputVocabSize := len(descriptionVocabulary.TokenToWord)
-	embeddingDim := 256
-	numExperts := 4
-	maxAttentionHeads := 8 // Added this line
+	embeddingDim := 128
+	numExperts := 2
+	maxAttentionHeads := 4 // Added this line
 	// k := 2 // k is for top-k experts, not directly used in Seq2SeqMoE New function
-	maxSequenceLength := 64 // Max length for input query and output description
+	maxSequenceLength := 32 // Max length for input query and output description
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
 	log.Printf("Description Vocabulary Size: %d", outputVocabSize)
@@ -280,11 +312,18 @@ func main() {
 		log.Printf("Loaded Seq2SeqMoE model from %s", modelSavePath)
 	}
 
-	// Train the model
-	err = TrainSeq2SeqMoEModel(seq2seqMoEModel, seq2seqTrainingData, epochs, learningRate, batchSize, queryVocabulary, descriptionVocabulary, maxSequenceLength, f)
+	// Create tokenizers once after vocabularies are loaded/created
+	queryTokenizer, err := tokenizer.NewTokenizer(queryVocabulary)
 	if err != nil {
-		log.Fatalf("Failed to train Seq2SeqMoE model: %v", err)
+		log.Fatalf("Failed to create query tokenizer: %v", err)
 	}
+	descriptionTokenizer, err := tokenizer.NewTokenizer(descriptionVocabulary)
+	if err != nil {
+		log.Fatalf("Failed to create description tokenizer: %v", err)
+	}
+
+	// Train the model
+	err = TrainSeq2SeqMoEModel(seq2seqMoEModel, seq2seqTrainingData, epochs, learningRate, batchSize, queryVocabulary, descriptionVocabulary, queryTokenizer, descriptionTokenizer, maxSequenceLength, f)
 	if err != nil {
 		log.Fatalf("Failed to train Seq2SeqMoE model: %v", err)
 	}

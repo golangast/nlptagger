@@ -585,6 +585,11 @@
     "child_intent": "create"
   },
   {
+    "query": "branch off from master",
+    "parent_intent": "version_control",
+    "child_intent": "create"
+  },
+  {
     "query": "commit changes to repository 'project-x'",
     "parent_intent": "version_control",
     "child_intent": "commit"
@@ -1373,5 +1378,120 @@
     "query": "create a data structure 'ReservationSystem' in webserver 'BookingAPI'",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure"
+  },
+  {
+    "query": "generate a data structure named my_struct in webserver my_server in handler my_handler",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "create a data structure my_data in webserver my_webserver in handler my_handler",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "build a data structure new_struct in webserver server1 in handler handler1",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+    {
+        "query": "create a new data structure called my_struct",
+        "parent_intent": "code",
+        "child_intent": "create_data_structure"
+    },
+    {
+        "query": "I want to define a new data structure",
+        "parent_intent": "code",
+        "child_intent": "create_data_structure"
+    },
+    {
+        "query": "make a new struct in the handler named my_handler",
+        "parent_intent": "webserver_creation",
+        "child_intent": "create_data_structure_in_handler"
+    },
+    {
+        "query": "create a data structure my_struct in my_handler",
+        "parent_intent": "webserver_creation",
+        "child_intent": "create_data_structure_in_handler"
+    },
+  {
+    "query": "generate a data structure named app_state in webserver named main_server in handler named state_handler",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "build a data structure named user_data in webserver named user_service in handler named user_handler",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named 'foo' in webserver named 'bar' in handler named 'baz'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "create a data structure named 'my_ds' in webserver named 'my_ws' in handler named 'my_hdl'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "build a data structure named 'temp_ds' in webserver named 'temp_ws' in handler named 'temp_hdl'",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
+  },
+  {
+    "query": "generate a data structure named jim in webserver named jill in handler named jack",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure_in_handler"
   }
 ]

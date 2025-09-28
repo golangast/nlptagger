@@ -183,7 +183,6 @@ func LoadVocabulary(filePath string) (*Vocabulary, error) {
 	if vocabulary.PaddingTokenID == -1 || vocabulary.UnkID == -1 {
 		panic("LoadVocabulary: PaddingTokenID or UnkID is -1 after loading")
 	}
-	fmt.Printf("Loaded vocabulary with %d tokens\n", vocabulary.Size())
 
 	return &vocabulary, nil
 }

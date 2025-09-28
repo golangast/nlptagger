@@ -4,6 +4,67 @@
 package intent
 
 import (
+	"encoding/gob"
+	"fmt"
+	"os"
+
+	"nlptagger/neural/nnu/vocab"
+)
+
+// Intent represents a command intent with a parent and child category.
+// It is used for classifying user commands into a hierarchical structure.
+type Intent struct {
+	Parent string `json:"parent"`
+	Child  string `json:"child"`
+}
+
+// IntentData holds a slice of intents for training purposes.
+type IntentData struct {
+	Intents []Intent `json:"intents"`
+}
+
+// CreateIntentVocabularies creates parent and child intent vocabularies from a slice of intents.
+// It returns two vocabularies: one for parent intents and one for child intents.
+func CreateIntentVocabularies(intents []Intent) (*vocab.Vocabulary, *vocab.Vocabulary) {
+	parentVocab := vocab.NewVocabulary()
+	childVocab := vocab.NewVocabulary()
+
+	for _, intent := range intents {
+		parentVocab.AddToken(intent.Parent)
+		childVocab.AddToken(intent.Child)
+	}
+
+	return parentVocab, childVocab
+}
+
+// SaveIntentVocabularies saves the parent and child vocabularies to separate GOB files.
+func SaveIntentVocabularies(parentVocab, childVocab *vocab.Vocabulary, parentPath, childPath string) error {
+	if err := parentVocab.Save(parentPath); err != nil {
+		return fmt.Errorf("failed to save parent vocabulary: %w", err)
+	}
+	if err := childVocab.Save(childPath); err != nil {
+		return fmt.Errorf("failed to save child vocabulary: %w", err)
+	}
+	return nil
+}
+
+// LoadIntentVocabularies loads the parent and child vocabularies from separate GOB files.
+func LoadIntentVocabularies(parentPath, childPath string) (*vocab.Vocabulary, *vocab.Vocabulary, error) {
+	parentVocab, err := vocab.LoadVocabulary(parentPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load parent vocabulary: %w", err)
+	}
+
+	childVocab, err := vocab.LoadVocabulary(childPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load child vocabulary: %w", err)
+	}
+
+	return parentVocab, childVocab, nil
+}
+
+
+import (
 	"fmt"
 	"math"
 	"regexp"

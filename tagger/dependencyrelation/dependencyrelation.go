@@ -1,6 +1,6 @@
 package dependencyrelation
 
-import "github.com/golangast/nlptagger/tagger/tag"
+import "nlptagger/tagger/tag"
 
 var (
 	DRToID = map[string]int{

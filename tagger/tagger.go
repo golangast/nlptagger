@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger/dependencyrelation"
-	"github.com/golangast/nlptagger/tagger/nertagger"
-	"github.com/golangast/nlptagger/tagger/phrasetagger"
-	"github.com/golangast/nlptagger/tagger/postagger"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/tagger/dependencyrelation"
+	"nlptagger/tagger/nertagger"
+	"nlptagger/tagger/phrasetagger"
+	"nlptagger/tagger/postagger"
+	"nlptagger/tagger/tag"
 )
 
 const (

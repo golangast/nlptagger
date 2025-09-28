@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/tagger/tag"
 )
 
 var nerTags = map[string]string{
@@ -145,14 +145,14 @@ func Nertagger(t tag.Tag) tag.Tag {
 
 			}
 
-			if i > 2 && i < len(t.Tokens)-2 {
-				switch {
+		if i > 2 && i < len(t.Tokens)-2 {
+			switch {
 
-				case t.NerTag[i-2] == "OBJECT_TYPE" && t.NerTag[i-1] == "ACTION" || t.NerTag[i-1] == "NAME_PREFIX":
-					t.NerTag[i] = "DATA_STRUCTURE_TYPE"
-				}
-
+			case t.NerTag[i-2] == "OBJECT_TYPE" && t.NerTag[i-1] == "ACTION" || t.NerTag[i-1] == "NAME_PREFIX":
+				t.NerTag[i] = "DATA_STRUCTURE_TYPE"
 			}
+
+		}
 
 			// Utilize POS tags for better tagging
 			switch t.PosTag[i] {
@@ -214,15 +214,15 @@ func NerNounCheck(t tag.Tag) tag.Tag {
 				prevToken = strings.ToLower(t.Tokens[i-1])
 			}
 			if nextToken == "structure" && t.NerTag[i] == "DATA" {
-				t.NerTag[i] = "DATA_STRUCTURE"
-				token += " " + nextToken
-				nextToken = ""
+					t.NerTag[i] = "DATA_STRUCTURE"
+					token += " " + nextToken
+					nextToken = ""
 			} else if nextToken == "name" && tag == "OBJECT" {
-				tag = "OBJECT_NAME"
-				token += " " + nextToken
-				nextToken = ""
+					tag = "OBJECT_NAME"
+					token += " " + nextToken
+					nextToken = ""
 			} else if tag == "PERSON" && (nextToken == "said" || nextToken == "says") {
-				tag = "PERSON_SPEAKER"
+					tag = "PERSON_SPEAKER"
 			} else if prevToken == "a" || prevToken == "an" || prevToken == "the" {
 				if nextToken == "of" {
 					tag = "OBJECT_TYPE"
@@ -230,7 +230,7 @@ func NerNounCheck(t tag.Tag) tag.Tag {
 					tag = "OBJECT_NAME"
 				}
 			} else if prevToken == "named" {
-				tag = "NAME" // Directly tag as "NAME" after "named"
+					tag = "NAME" // Directly tag as "NAME" after "named"
 			} else if prevToken == "with" {
 				if nextToken == "handler" || nextToken == "handlers" {
 					tag = "HANDLER_TYPE"
@@ -240,17 +240,17 @@ func NerNounCheck(t tag.Tag) tag.Tag {
 					tag = "OBJECT_PROPERTY"
 				}
 			} else if nextToken == "handler" || nextToken == "handlers" {
-				tag = "HANDLER_TYPE"
+					tag = "HANDLER_TYPE"
 			} else if i > 1 && t.Tokens[i-2] == "data" && prevToken == "structure" {
-				tag = "DATA_STRUCTURE_TYPE"
+					tag = "DATA_STRUCTURE_TYPE"
 			} else if strings.HasPrefix(token, "-") {
-				tag = "FLAG"
+					tag = "FLAG"
 			} else if _, err := strconv.Atoi(token); err == nil {
-				tag = "NUMBER"
+					tag = "NUMBER"
 			} else if i > 1 && t.Tokens[i-2] == "the" && prevToken == "handler" {
-				tag = "HANDLER_NAME"
+					tag = "HANDLER_NAME"
 			} else if i > 2 && t.Tokens[i-3] == "the" && t.Tokens[i-2] == "data" && prevToken == "structure" {
-				tag = "DATA_STRUCTURE_NAME"
+					tag = "DATA_STRUCTURE_NAME"
 			}
 		}
 	}

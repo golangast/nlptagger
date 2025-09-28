@@ -89,19 +89,19 @@ func main() {
 	// Create model
 	model, err := moemodel.NewMoEClassificationModel(
 		queryVocab.Size(),
-		256, // embeddingDim
+		64, // embeddingDim
 		parentIntentVocab.Size(),
 		childIntentVocab.Size(),
-		8, // numExperts
-		2, // k
-		64, // maxSeqLength
+		2, // numExperts
+		1, // k
+		32, // maxSeqLength
 	)
 	if err != nil {
 		log.Fatalf("Failed to create new MoE model: %v", err)
 	}
 
 	// Train the model
-	TrainIntentModel(model, trainingData, queryVocab, parentIntentVocab, childIntentVocab, 10, 0.001, 4, 64)
+	TrainIntentModel(model, trainingData, queryVocab, parentIntentVocab, childIntentVocab, 10, 0.001, 32, 32)
 
 	// Save the trained model
 	log.Printf("Saving MoE Classification model to %s", modelSavePath)
@@ -181,7 +181,7 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 
 	inputTensor := NewTensor([]int{batchSize, maxSeqLength}, convertIntsToFloat64s(inputIDsBatch), false)
 
-	parentLogits, childLogits, err := model.Forward(inputTensor)
+	parentLogits, childLogits, err := model.Forward(inputTensor, nil, nil, nil)
 	if err != nil {
 		return 0, fmt.Errorf("model forward pass failed: %w", err)
 	}
@@ -192,6 +192,10 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 	totalLoss := parentLoss + childLoss
 
 	// Backward pass
+	if parentGrad == nil || childGrad == nil {
+		log.Printf("Skipping backward pass due to nil gradient")
+		return totalLoss, nil
+	}
 	err = model.Backward(parentGrad, childGrad)
 	if err != nil {
 		return 0, fmt.Errorf("model backward pass failed: %w", err)

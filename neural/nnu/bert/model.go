@@ -171,7 +171,6 @@ type BertEmbeddings struct {
 
 // NewBertEmbeddings creates a new BertEmbeddings layer.
 func NewBertEmbeddings(config BertConfig, initializerStdDev float64, word2vecEmbeddings map[string][]float64) *BertEmbeddings {
-	log.Printf("NewBertEmbeddings: Received config.VocabSize: %d", config.VocabSize)
 	wordEmbeddings := NewEmbedding(config.VocabSize, config.HiddenSize, initializerStdDev)
 	if word2vecEmbeddings != nil {
 		// Initialize with Word2Vec embeddings
@@ -185,11 +184,9 @@ func NewBertEmbeddings(config BertConfig, initializerStdDev float64, word2vecEmb
 	tokenTypeEmbeddings := NewEmbedding(config.TypeVocabSize, config.HiddenSize, initializerStdDev)
 
 	posTagMapLen := len(postagger.PosTagToIDMap())
-	log.Printf("NewBertEmbeddings: PosTagToIDMap length: %d", posTagMapLen)
 	posTagEmbeddings := NewEmbedding(posTagMapLen, config.HiddenSize, initializerStdDev)
 
 	nerTagMapLen := len(nertagger.NerTagToIDMap())
-	log.Printf("NewBertEmbeddings: NerTagToIDMap length: %d", nerTagMapLen)
 	nerTagEmbeddings := NewEmbedding(nerTagMapLen, config.HiddenSize, initializerStdDev)
 	layerNorm := nn.NewLayerNormalization(config.HiddenSize)
 
@@ -717,12 +714,10 @@ func (o *BertOutput) Backward(grad *tensor.Tensor) error {
 	}
 
 	if o.originalInputTensor.Grad == nil {
-		log.Printf("BertOutput.Backward: o.originalInputTensor.Grad is NIL. Initializing and assigning addedTensorGrad.")
 		// Initialize Grad if it's nil
 		o.originalInputTensor.Grad = tensor.NewTensor(addedTensorGrad.Shape, make([]float64, TensorSize(addedTensorGrad.Shape)), false)
 		copy(o.originalInputTensor.Grad.Data, addedTensorGrad.Data) // Copy the data
 	} else {
-		log.Printf("BertOutput.Backward: o.originalInputTensor.Grad is NOT NIL. Its shape is %v. Calling Add with addedTensorGrad (shape %v).", o.originalInputTensor.Grad.Shape, addedTensorGrad.Shape)
 		// Ensure addedTensorGrad is not nil before adding
 		if addedTensorGrad != nil {
 			o.originalInputTensor.Grad, err = o.originalInputTensor.Grad.Add(addedTensorGrad)
@@ -887,12 +882,10 @@ func (e *BertEncoder) Inputs() []*tensor.Tensor {
 }
 
 func (e *BertEncoder) Backward(grad *tensor.Tensor) error {
-	log.Printf("BertEncoder.Backward: initial grad.Shape=%v", grad.Shape)
 	var err error
 	currentGrad := grad
 	for i := len(e.Layers) - 1; i >= 0; i-- {
 		layer := e.Layers[i]
-		log.Printf("BertEncoder.Backward: calling layer %d Backward with currentGrad.Shape=%v", i, currentGrad.Shape)
 		err = layer.Backward(currentGrad)
 		if err != nil {
 			return err
@@ -902,7 +895,6 @@ func (e *BertEncoder) Backward(grad *tensor.Tensor) error {
 		if len(layer.Inputs()) > 0 && layer.Inputs()[0].Grad != nil {
 			currentGrad = layer.Inputs()[0].Grad
 		} else {
-			log.Printf("WARNING: BertEncoder.Backward: layer %d Inputs()[0].Grad is NIL. currentGrad.Shape=%v", i, currentGrad.Shape)
 			// This case needs careful handling if layer.Backward doesn't set input grad.
 			// For now, to avoid compilation errors, we'll assume it does or that the grad is passed through.
 			// This is a potential source of runtime errors or incorrect gradients.
@@ -945,7 +937,6 @@ func (p *Pooler) Forward(hiddenStates *tensor.Tensor) (*tensor.Tensor, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Input shape to pooler: %v\n", clsHiddenState.Shape)
 	poolerOutput = p.Activation(poolerOutput)
 
 	return poolerOutput, nil
@@ -986,7 +977,6 @@ type BertModel struct {
 }
 
 func NewBertModel(config BertConfig, word2vecEmbeddings map[string][]float64) *BertModel {
-	log.Printf("NewBertModel: Received config.VocabSize: %d", config.VocabSize)
 	return &BertModel{
 		Config:         config, // Initialize Config
 		BertEmbeddings: NewBertEmbeddings(config, config.InitializerRange, word2vecEmbeddings),

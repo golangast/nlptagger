@@ -1,0 +1,7 @@
+[
+    {
+        "query": "generate a data structure named jim in webserver named jill in handler named jack",
+        "parent_intent": "webserver_creation",
+        "child_intent": "create_data_structure_in_handler"
+    }
+]

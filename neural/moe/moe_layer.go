@@ -3,6 +3,7 @@ package moe
 import (
 	"encoding/gob"
 	"fmt"
+	"math/rand"
 	"sort"
 
 	. "nlptagger/neural/tensor"
@@ -25,6 +26,8 @@ type MoELayer struct {
 	expertActivations []*Tensor // Output of experts before combining
 	selectedExperts   [][]int   // Indices of selected experts for each input in the batch
 	gateOutputs       *Tensor   // Output of the gating network (probabilities)
+	LoadBalancingLoss float64   // Load balancing loss
+	training          bool      // training mode
 }
 
 // NewMoELayer creates a new MoELayer.
@@ -96,10 +99,29 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 		return nil, fmt.Errorf("failed to reshape input for gating network: %w", err)
 	}
 
-	// 1. Gating Network (Router) forward pass
-	gateOutputsReshaped, err := moe.GatingNetwork.Forward(reshapedInput)
+	// 1. Gating Network (Router) forward pass to get logits
+	gateLogitsReshaped, err := moe.GatingNetwork.Forward(reshapedInput)
 	if err != nil {
 		return nil, fmt.Errorf("moe layer gating network forward failed: %w", err)
+	}
+
+	// Add noise for soft selection during training
+	if moe.training {
+		noise := make([]float64, len(gateLogitsReshaped.Data))
+		for i := range noise {
+			noise[i] = rand.NormFloat64()
+		}
+		noiseTensor := NewTensor(gateLogitsReshaped.Shape, noise, false)
+		gateLogitsReshaped, err = gateLogitsReshaped.Add(noiseTensor)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add noise to gate logits: %w", err)
+		}
+	}
+
+	// Apply softmax to get probabilities
+	gateOutputsReshaped, err := gateLogitsReshaped.Softmax(len(gateLogitsReshaped.Shape) - 1)
+	if err != nil {
+		return nil, fmt.Errorf("gating network softmax failed: %w", err)
 	}
 
 	// Reshape gateOutputs back to [batchSize, seqLength, numExperts]
@@ -115,9 +137,9 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 	}
 
 	// Prepare to store expert outputs and selected expert indices
-	moe.expertOutputs = make([]*Tensor, numExperts)          // This should be numExperts, not len(moe.Experts)
-	moe.expertActivations = make([]*Tensor, numExperts)      // This should be numExperts
-	moe.selectedExperts = make([][]int, batchSize*seqLength) // Store selected expert indices for each token in the batch
+	moe.expertOutputs = make([]*Tensor, numExperts)
+	moe.expertActivations = make([]*Tensor, numExperts)
+	moe.selectedExperts = make([][]int, batchSize*seqLength)
 
 	// Output tensor will have the same shape as input
 	outputShape := input.Shape
@@ -126,6 +148,10 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 	if input.RequiresGrad {
 		combinedOutput.RequiresGrad = true
 	}
+
+	// Load balancing loss calculation
+	tokensPerExpert := make([]float64, numExperts)
+	routerProbPerExpert := make([]float64, numExperts)
 
 	// Process each token in the batch
 	for b := 0; b < batchSize; b++ {
@@ -136,6 +162,7 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 			scores := make([]float64, numExperts)
 			for e := 0; e < numExperts; e++ {
 				scores[e] = moe.gateOutputs.Data[tokenIdx*numExperts+e]
+				routerProbPerExpert[e] += scores[e]
 			}
 
 			// Select top-K experts
@@ -150,22 +177,6 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 
 			moe.selectedExperts[tokenIdx] = topKIndices[:moe.K]
 
-			// Normalize weights of selected experts
-			sumSelectedScores := 0.0
-			for _, idx := range moe.selectedExperts[tokenIdx] {
-				sumSelectedScores += scores[idx]
-			}
-
-			if sumSelectedScores == 0 {
-				for _, idx := range moe.selectedExperts[tokenIdx] {
-					scores[idx] = 1.0 / float64(moe.K)
-				}
-			} else {
-				for _, idx := range moe.selectedExperts[tokenIdx] {
-					scores[idx] /= sumSelectedScores
-				}
-			}
-
 			// Extract input for the current token
 			inputForExpertData := make([]float64, embeddingDim)
 			copy(inputForExpertData, input.Data[tokenIdx*embeddingDim:(tokenIdx+1)*embeddingDim])
@@ -176,6 +187,7 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 
 			// Run selected experts and combine their outputs
 			for _, expertIdx := range moe.selectedExperts[tokenIdx] {
+				tokensPerExpert[expertIdx]++
 				expert := moe.Experts[expertIdx]
 
 				expertOutput, err := expert.Forward(inputForExpert)
@@ -190,6 +202,17 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 				}
 			}
 		}
+	}
+
+	// Finalize load balancing loss
+	if moe.training {
+		totalTokens := float64(batchSize * seqLength)
+		for e := 0; e < numExperts; e++ {
+			fractionTokens := tokensPerExpert[e] / totalTokens
+			fractionRouterProb := routerProbPerExpert[e] / totalTokens
+			moe.LoadBalancingLoss += fractionTokens * fractionRouterProb
+		}
+		moe.LoadBalancingLoss *= float64(numExperts)
 	}
 
 	combinedOutput.Creator = moe
@@ -262,26 +285,10 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 				scores[e] = moe.gateOutputs.Data[tokenIdx*numExperts+e]
 			}
 
-			// Normalize weights of selected experts (same as in forward pass)
-			sumSelectedScores := 0.0
-			for _, idx := range moe.selectedExperts[tokenIdx] {
-				sumSelectedScores += scores[idx]
-			}
-
-			if sumSelectedScores == 0 {
-				for _, idx := range moe.selectedExperts[tokenIdx] {
-					scores[idx] = 1.0 / float64(moe.K)
-				}
-			} else {
-				for _, idx := range moe.selectedExperts[tokenIdx] {
-					scores[idx] /= sumSelectedScores
-				}
-			}
-
 			// Distribute gradients to selected experts and accumulate gating network gradients
 			for _, expertIdx := range moe.selectedExperts[tokenIdx] {
 				expert := moe.Experts[expertIdx]
-				weight := scores[expertIdx] // Normalized weight
+				weight := scores[expertIdx]
 
 				// 1. Gradient for expert output: dL/dExpertOutput = dL/dCombinedOutput * weight
 				gradForExpertOutputData := make([]float64, embeddingDim)
@@ -325,4 +332,16 @@ func (moe *MoELayer) Inputs() []*Tensor {
 		return []*Tensor{moe.inputTensor}
 	}
 	return []*Tensor{}
+}
+
+// SetMode sets the mode for the MoELayer and all its experts.
+func (moe *MoELayer) SetMode(training bool) {
+	moe.training = training
+	for _, expert := range moe.Experts {
+		expert.SetMode(training)
+	}
+}
+
+func (moe *MoELayer) GetOutputShape() []int {
+	return moe.inputTensor.Shape
 }

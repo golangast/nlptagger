@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golangast/nlptagger/tagger/stem"
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/tagger/stem"
+	"nlptagger/tagger/tag"
 )
 
 var posTags = map[string]string{

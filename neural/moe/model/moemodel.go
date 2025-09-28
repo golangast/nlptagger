@@ -70,6 +70,10 @@ func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChi
 	}, nil
 }
 
+func (m *MoEClassificationModel) SetMode(training bool) {
+	m.MoELayer.SetMode(training)
+}
+
 func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tensor, *tensor.Tensor, error) {
 	inputIDs := inputs[0]
 
@@ -87,24 +91,28 @@ func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tens
 		return nil, nil, fmt.Errorf("bert model forward failed: %w", err)
 	}
 
-	// Use the pooler to get a fixed-size representation from the Bert output
-	pooledOutput, err := m.BertModel.Pooler.Forward(bertOutput)
-	if err != nil {
-		return nil, nil, fmt.Errorf("bert pooler forward failed: %w", err)
-	}
-	m.pooledOutput = pooledOutput // Store pooledOutput
-
-	moeOutput, err := m.MoELayer.Forward(pooledOutput)
+	moeOutput, err := m.MoELayer.Forward(bertOutput)
 	if err != nil {
 		return nil, nil, fmt.Errorf("moe forward failed: %w", err)
 	}
 
-	parentLogits, err := m.ParentClassifier.Forward(moeOutput)
+	// Extract the output of the first token (CLS token) for classification
+	clsTokenOutput, err := moeOutput.Slice(1, 0, 1) // Slice along the sequence length dimension
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to slice CLS token output: %w", err)
+	}
+
+	clsTokenOutputReshaped, err := clsTokenOutput.Reshape([]int{batchSize, m.BertConfig.HiddenSize})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to reshape CLS token output: %w", err)
+	}
+
+	parentLogits, err := m.ParentClassifier.Forward(clsTokenOutputReshaped)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parent classifier forward failed: %w", err)
 	}
 
-	childLogits, err := m.ChildClassifier.Forward(moeOutput)
+	childLogits, err := m.ChildClassifier.Forward(clsTokenOutputReshaped)
 	if err != nil {
 		return nil, nil, fmt.Errorf("child classifier forward failed: %w", err)
 	}
@@ -123,25 +131,29 @@ func (m *MoEClassificationModel) Backward(parentGrad, childGrad *tensor.Tensor) 
 		return fmt.Errorf("child classifier backward failed: %w", err)
 	}
 
-	moeOutputGrad := m.ParentClassifier.Input().Grad
-	if m.ChildClassifier.Input().Grad != nil {
-		moeOutputGrad, err = moeOutputGrad.Add(m.ChildClassifier.Input().Grad)
-		if err != nil {
-			return fmt.Errorf("failed to add gradients: %w", err)
-		}
+	// Since ParentClassifier and ChildClassifier share the same input tensor,
+	// and Linear.Backward accumulates gradients, the gradient is already summed
+	// in the input tensor's Grad field.
+	clsTokenGrad := m.ParentClassifier.Input().Grad
+
+	moeLayerGrad := tensor.NewTensor(m.MoELayer.GetOutputShape(), make([]float64, m.MoELayer.GetOutputShape()[0]*m.MoELayer.GetOutputShape()[1]*m.MoELayer.GetOutputShape()[2]), false)
+
+	batchSize := clsTokenGrad.Shape[0]
+	hiddenSize := clsTokenGrad.Shape[1]
+	seqLength := moeLayerGrad.Shape[1]
+
+	for i := 0; i < batchSize; i++ {
+		copy(moeLayerGrad.Data[i*seqLength*hiddenSize:i*seqLength*hiddenSize+hiddenSize], clsTokenGrad.Data[i*hiddenSize:(i+1)*hiddenSize])
 	}
 
-	err = m.MoELayer.Backward(moeOutputGrad)
+	err = m.MoELayer.Backward(moeLayerGrad)
 	if err != nil {
 		return fmt.Errorf("moe layer backward failed: %w", err)
 	}
 
-	// Get the gradient from the MoE layer's input
-	moeInputGrad := m.MoELayer.Inputs()[0].Grad
+	bertGrad := m.MoELayer.Inputs()[0].Grad
 
-	// Backpropagate through the BERT model
-	// The moeInputGrad is the gradient of the pooledOutput, which is the output of the BertModel.
-	err = m.BertModel.Backward(moeInputGrad)
+	err = m.BertModel.Backward(bertGrad)
 	if err != nil {
 		return fmt.Errorf("bert model backward failed: %w", err)
 	}
@@ -196,22 +208,12 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 		return nil, fmt.Errorf("error decoding MoE model from gob: %w", err)
 	}
 
-	log.Printf("LoadMoE: After decode - loadedModel.BertConfig.VocabSize: %d", loadedModel.BertConfig.VocabSize)
-	if loadedModel.BertModel != nil && loadedModel.BertModel.BertEmbeddings != nil && loadedModel.BertModel.BertEmbeddings.WordEmbeddings != nil && loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight != nil {
-		log.Printf("LoadMoE: After decode - loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape: %v", loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape)
-	} else {
-		log.Printf("LoadMoE: After decode - BertModel or its embeddings are nil after decode.")
-	}
-
-	log.Printf("LoadMoE: Before updating BertConfig.VocabSize - loadedModel.BertConfig.VocabSize: %d", loadedModel.BertConfig.VocabSize)
 	// --- Start of explicit BertModel re-creation and weight copying ---
 	// Update BertConfig's VocabSize with the provided vocabSize
 	loadedModel.BertConfig.VocabSize = vocabSize
 	loadedModel.BertConfig.MaxPositionEmbeddings = maxSeqLength // Add this line
-	log.Printf("LoadMoE: Before NewBertModel - loadedModel.BertConfig.VocabSize: %d", loadedModel.BertConfig.VocabSize)
 	// Create a new BertModel using the loaded BertConfig
 	newBertModel := bert.NewBertModel(loadedModel.BertConfig, nil)
-	log.Printf("LoadMoE: After NewBertModel creation - newBertModel.BertEmbeddings.WordEmbeddings.Weight.Shape: %v", newBertModel.BertEmbeddings.WordEmbeddings.Weight.Shape)
 
 	// Copy WordEmbeddings weights
 	if loadedModel.BertModel != nil && loadedModel.BertModel.BertEmbeddings != nil && loadedModel.BertModel.BertEmbeddings.WordEmbeddings != nil && loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight != nil {
@@ -235,9 +237,6 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 			minLen = len(newBertModel.BertEmbeddings.PositionEmbeddings.Weight.Data)
 		}
 		copy(newBertModel.BertEmbeddings.PositionEmbeddings.Weight.Data[:minLen], loadedModel.BertModel.BertEmbeddings.PositionEmbeddings.Weight.Data[:minLen])
-		if len(newBertModel.BertEmbeddings.PositionEmbeddings.Weight.Data) > minLen {
-			log.Printf("WARNING: New PositionEmbeddings size (%d) is larger than loaded size (%d). New embeddings will be randomly initialized for new positions.", len(newBertModel.BertEmbeddings.PositionEmbeddings.Weight.Data), minLen)
-		}
 	} else {
 		log.Printf("WARNING: PositionEmbeddings not found in loaded model, using newly initialized weights.")
 	}
@@ -258,7 +257,6 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 
 	// Assign the newly created and weight-copied BertModel
 	loadedModel.BertModel = newBertModel
-	log.Printf("LoadMoE: After BertModel re-creation - loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape: %v", loadedModel.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape)
 	// --- End of explicit BertModel re-creation and weight copying ---
 
 	// Re-initialize the MoELayer (this part seems necessary due to interface serialization issues)
@@ -303,24 +301,34 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 		parentWeightsData := loadedModel.ParentClassifier.Weights.Data
 		parentBiasesData := loadedModel.ParentClassifier.Biases.Data
 		parentInputDim := loadedModel.ParentClassifier.Weights.Shape[0]
-		parentOutputDim := loadedModel.ParentClassifier.Weights.Shape[1]
 
 		// Create new Linear layer
-		newParentClassifier, err := nn.NewLinear(parentInputDim, parentOutputDim)
+		newParentClassifier, err := nn.NewLinear(parentInputDim, numParentClasses) // Use numParentClasses
 		if err != nil {
-			return nil, fmt.Errorf("failed to re-initialize parent classifier: %w", err)
+			return nil, fmt.Errorf("failed to re-initialize parent classifier: %%w", err)
 		}
 
 		// Copy deserialized data to new Linear layer
-		newParentClassifier.Weights.Data = parentWeightsData
-		newParentClassifier.Biases.Data = parentBiasesData
+		var minLen int
+		minLen = len(parentWeightsData)
+		if len(newParentClassifier.Weights.Data) < minLen {
+			minLen = len(newParentClassifier.Weights.Data)
+		}
+		copy(newParentClassifier.Weights.Data[:minLen], parentWeightsData[:minLen])
+
+		minLen = len(parentBiasesData)
+		if len(newParentClassifier.Biases.Data) < minLen {
+			minLen = len(newParentClassifier.Biases.Data)
+		}
+		copy(newParentClassifier.Biases.Data[:minLen], parentBiasesData[:minLen])
+
 		loadedModel.ParentClassifier = newParentClassifier
 	}
 
 	if loadedModel.ChildClassifier == nil {
 		childClassifier, err := nn.NewLinear(loadedModel.BertConfig.HiddenSize, numChildClasses)
 		if err != nil {
-			return nil, fmt.Errorf("failed to re-initialize child classifier: %w", err)
+			return nil, fmt.Errorf("failed to re-initialize child classifier: %%w", err)
 		}
 		loadedModel.ChildClassifier = childClassifier
 	} else if loadedModel.ChildClassifier != nil {
@@ -328,17 +336,27 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 		childWeightsData := loadedModel.ChildClassifier.Weights.Data
 		childBiasesData := loadedModel.ChildClassifier.Biases.Data
 		childInputDim := loadedModel.ChildClassifier.Weights.Shape[0]
-		childOutputDim := loadedModel.ChildClassifier.Weights.Shape[1]
 
 		// Create new Linear layer
-		newChildClassifier, err := nn.NewLinear(childInputDim, childOutputDim)
+		newChildClassifier, err := nn.NewLinear(childInputDim, numChildClasses) // Use numChildClasses
 		if err != nil {
-			return nil, fmt.Errorf("failed to re-initialize child classifier: %w", err)
+			return nil, fmt.Errorf("failed to re-initialize child classifier: %%w", err)
 		}
 
 		// Copy deserialized data to new Linear layer
-		newChildClassifier.Weights.Data = childWeightsData
-		newChildClassifier.Biases.Data = childBiasesData
+		var minLen int
+		minLen = len(childWeightsData)
+		if len(newChildClassifier.Weights.Data) < minLen {
+			minLen = len(newChildClassifier.Weights.Data)
+		}
+		copy(newChildClassifier.Weights.Data[:minLen], childWeightsData[:minLen])
+
+		minLen = len(childBiasesData)
+		if len(newChildClassifier.Biases.Data) < minLen {
+			minLen = len(newChildClassifier.Biases.Data)
+		}
+		copy(newChildClassifier.Biases.Data[:minLen], childBiasesData[:minLen])
+
 		loadedModel.ChildClassifier = newChildClassifier
 	}
 

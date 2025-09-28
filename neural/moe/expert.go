@@ -1,23 +1,28 @@
 package moe
 
 import (
-	. "nlptagger/neural/tensor"
+	"nlptagger/neural/tensor"
 )
 
-// Expert defines the interface for an expert network within an MoE layer.
-// An expert typically processes a portion of the input and contributes to the final output.
+// Expert is an interface for an expert network in a Mixture of Experts model.
 type Expert interface {
-	// Forward performs the forward pass of the expert.
-	// It takes an input tensor and returns an output tensor.
-	Forward(inputs ...*Tensor) (*Tensor, error)
+	// Forward performs the forward pass of the expert network.
+	// It takes a tensor of shape (batch_size, input_dim) and returns a tensor of shape (batch_size, output_dim).
+	Forward(input *tensor.Tensor) (*tensor.Tensor, error)
 
-	// Backward performs the backward pass of the expert.
-	// It takes a gradient tensor from the output and propagates it backward.
-	Backward(grad *Tensor) error
+	// Backward performs the backward pass of the expert network.
+	Backward(grad *tensor.Tensor) error
 
 	// Parameters returns all learnable parameters of the expert.
-	Parameters() []*Tensor
+	Parameters() []*tensor.Tensor
 
 	// Inputs returns the input tensors of the expert's last forward operation.
-	Inputs() []*Tensor
+	Inputs() []*tensor.Tensor
+
+	// Description returns a string description of the expert.
+	Description() string
+
+	// SetMode sets the mode of the expert (training or inference).
+	SetMode(training bool)
 }
+

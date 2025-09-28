@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/golangast/nlptagger/neural/nnu/word2vec"
+	"nlptagger/neural/nnu/word2vec"
 )
 
 var (

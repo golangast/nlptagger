@@ -27,8 +27,8 @@ type Embedding struct {
 
 // PositionalEmbedding represents a simple positional embedding layer.
 type PositionalEmbedding struct {
-	MaxSequenceLength int
-	DimModel          int
+	MaxSequenceLength  int
+	DimModel           int
 	PositionEmbeddings *Tensor // Positional embeddings (typically not learnable)
 
 	// Stored values from forward pass for backward calculation
@@ -53,8 +53,6 @@ func NewEmbedding(vocabSize, dimModel int) *Embedding {
 	}
 }
 
-
-
 // Parameters returns all learnable parameters of the layer.
 func (e *Embedding) Parameters() []*Tensor {
 	return []*Tensor{e.Weight}
@@ -63,13 +61,11 @@ func (e *Embedding) Parameters() []*Tensor {
 // Backward performs the backward pass for the token embedding layer.
 // grad is the gradient from the subsequent layer.
 func (e *Embedding) Backward(grad *Tensor) error {
-	log.Printf("Embedding.Backward called.\n")
 	if grad == nil || grad.Data == nil {
 		log.Printf("Embedding.Backward: Incoming grad is nil or has no data. Returning.\n")
 		// No gradient to propagate
 		return nil
 	}
-	log.Printf("Embedding.Backward: Incoming grad shape: %v, first 5 data: %v\n", grad.Shape, grad.Data[:min(5, len(grad.Data))])
 
 	if e.Weight == nil || !e.Weight.RequiresGrad {
 		log.Printf("Embedding.Backward: Embedding weights do not require gradients. Returning.\n")

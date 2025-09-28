@@ -122,6 +122,23 @@ func NewTensor(shape []int, data []float64, requiresGrad bool) *Tensor {
 	}
 }
 
+// Clone creates a deep copy of the tensor.
+func (t *Tensor) Clone() *Tensor {
+	newData := make([]float64, len(t.Data))
+	copy(newData, t.Data)
+	newShape := make([]int, len(t.Shape))
+	copy(newShape, t.Shape)
+
+	// The new tensor should not share gradient information or creator
+	return &Tensor{
+		Data:         newData,
+		Shape:        newShape,
+		RequiresGrad: t.RequiresGrad, // The clone's grad requirement should be the same
+		Grad:         nil,            // Do not copy gradient
+		Creator:      nil,            // The clone is a new leaf in the graph
+	}
+}
+
 // ZeroGrad resets the gradient of the tensor to zeros.
 func (t *Tensor) ZeroGrad() {
 	if t.RequiresGrad {
@@ -778,8 +795,9 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 	// Create a new tensor with the new shape, sharing the underlying data array.
 	// This is efficient as it avoids copying large amounts of data.
 	return &Tensor{
-		Data:  t.Data, // Share the underlying data array
-		Shape: newShape,
+		Data:         t.Data, // Share the underlying data array
+		Shape:        newShape,
+		RequiresGrad: t.RequiresGrad,
 		// Grad, Mask, Creator, RequiresGrad, Operation fields will be nil/default for the new tensor
 	}, nil
 }

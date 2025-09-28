@@ -5,13 +5,50 @@ import (
 	"fmt"
 	"log"
 	"math" // Keep math for softmax
-	"strings"
+	"math/rand"
+	"sort"
 
 	moemodel "nlptagger/neural/moe/model" // Keep moemodel
 	mainvocab "nlptagger/neural/nnu/vocab"
 	"nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
+	"nlptagger/tagger/nertagger"
+	"nlptagger/tagger/postagger" // Added this line
+	"nlptagger/tagger/tag"
 )
+
+type Prediction struct {
+	TokenID    int
+	Word       string
+	Confidence float64
+}
+
+func getTopNPredictions(probabilities []float64, vocab []string, n int) []Prediction {
+	predictions := make([]Prediction, 0, len(probabilities))
+	for i, p := range probabilities {
+		if i < 2 { // Skip <pad> and UNK
+			continue
+		}
+		if i < len(vocab) {
+			word := vocab[i]
+			predictions = append(predictions, Prediction{
+				TokenID:    i,
+				Word:       word,
+				Confidence: p * 100.0,
+			})
+		}
+	}
+
+	// Sort predictions by confidence
+	sort.Slice(predictions, func(i, j int) bool {
+		return predictions[i].Confidence > predictions[j].Confidence
+	})
+
+	if len(predictions) < n {
+		return predictions
+	}
+	return predictions[:n]
+}
 
 var (
 	query        = flag.String("query", "", "Query for MoE inference")
@@ -19,6 +56,7 @@ var (
 )
 
 func main() {
+	rand.Seed(1) // Seed the random number generator for deterministic behavior
 	flag.Parse()
 
 	if *query == "" {
@@ -61,6 +99,8 @@ func main() {
 		log.Fatalf("Failed to load MoE model: %v", err)
 	}
 
+	model.SetMode(false) // Set the model to evaluation mode
+
 	if model.BertModel != nil {
 		if model.BertModel.BertEmbeddings != nil {
 		} else {
@@ -72,25 +112,22 @@ func main() {
 
 	model.Description() // Print the model description
 
-	log.Printf("Padding Token ID: %d", vocabulary.PaddingTokenID)
-	log.Printf("Child Intent Vocabulary (TokenToWord): %v", childIntentVocabulary.TokenToWord)
-	log.Printf("Parent Intent Vocabulary (TokenToWord): %v", parentIntentVocabulary.TokenToWord)
+	log.Printf("---\n--- DEBUG: Child Intent Vocabulary (TokenToWord): %v ---", childIntentVocabulary.TokenToWord)
+	log.Printf("---\n--- DEBUG: Parent Intent Vocabulary (TokenToWord): %v ---", parentIntentVocabulary.TokenToWord)
 
 	log.Printf("Running MoE inference for query: \"%s\"", *query)
 
 	// Encode the query
 
-tokenIDs, err := tokenizer.Encode(*query)
+	tokenIDs, err := tokenizer.Encode(*query)
 	if err != nil {
 		log.Fatalf("Failed to encode query: %v", err)
 	}
-	log.Printf("TokenIDs BEFORE mapping: %v", tokenIDs)
 
 	// Get the actual vocabulary size of the loaded model's embedding layer
 	// This is the true number of embeddings available in the loaded model.
 	modelEmbeddingVocabSize := model.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape[0]
 	unkTokenID := vocabulary.WordToToken["UNK"]
-	log.Printf("Model Embedding Vocab Size: %d, UNK Token ID: %d", modelEmbeddingVocabSize, unkTokenID)
 
 	// Map out-of-vocabulary tokens to UNK token ID
 	for i, id := range tokenIDs {
@@ -98,9 +135,29 @@ tokenIDs, err := tokenizer.Encode(*query)
 			tokenIDs[i] = unkTokenID
 		}
 	}
-	log.Printf("TokenIDs AFTER mapping: %v", tokenIDs)
 
-	log.Printf("Before model.Forward - model.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape: %v", model.BertModel.BertEmbeddings.WordEmbeddings.Weight.Shape)
+	// POS Tagging and NER Tagging
+	// POS Tagging
+	// The Postagger function takes a string and returns a tag.Tag
+	// It internally tokenizes the string, so we pass the original query.
+	var t tag.Tag = postagger.Postagger(*query) // Call Postagger with the query string
+
+	// NER Tagging
+	// Nertagger expects a tag.Tag with Tokens and PosTag already populated.
+	// We use the 't' returned by Postagger.
+	t = nertagger.Nertagger(t)
+	t = nertagger.NerNounCheck(t)
+	t = nertagger.NerVerbCheck(t)
+
+	nerTagIDsData := make([]float64, len(t.NerTag))
+	nerTagToID := nertagger.NerTagToIDMap()
+	for i, nerTag := range t.NerTag {
+		if id, ok := nerTagToID[nerTag]; ok {
+			nerTagIDsData[i] = float64(id)
+		} else {
+			nerTagIDsData[i] = 0.0 // Default to 0 if tag not in map
+		}
+	}
 
 	// Pad or truncate the sequence to a fixed length
 	originalTokenIDs := make([]int, len(tokenIDs))
@@ -120,6 +177,7 @@ tokenIDs, err := tokenizer.Encode(*query)
 	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
 
 	// --- Start of new logic for tokenTypeIDs ---
+
 	tokenTypeData := make([]float64, len(tokenIDs))
 
 	// Create a set of intent words for efficient lookup
@@ -134,10 +192,8 @@ tokenIDs, err := tokenizer.Encode(*query)
 	// Iterate over the original token IDs to get individual words
 	for i, id := range originalTokenIDs {
 		word := vocabulary.GetWord(id) // Get the word for the token ID
-		// log.Printf("Processing word: %s (ID: %d)", word, id) // Removed debugging log
 		if _, ok := intentWords[word]; ok {
-			// log.Printf("Word '%s' found in intentWords. Marking as important.", word) // Removed debugging log
-			if i < len(tokenTypeData) { // Ensure we don't go out of bounds due to padding/truncation
+			if i < len(tokenTypeData) {
 				tokenTypeData[i] = 1.0 // Mark as important
 			}
 		}
@@ -151,13 +207,20 @@ tokenIDs, err := tokenizer.Encode(*query)
 		}
 	}
 
-	tokenTypeTensor := tensor.NewTensor([]int{1, len(tokenTypeData)}, tokenTypeData, false)
+	tokenTypeTensor := tensor.NewTensor([]int{1, len(tokenIDs)}, make([]float64, len(tokenIDs)), false)
 	// --- End of new logic for tokenTypeIDs ---
 
 	// Dummy posTagIDs and nerTagIDs (as they are not used in this context)
 	posTagIDs := tensor.NewTensor([]int{1, len(tokenIDs)}, make([]float64, len(tokenIDs)), false)
-	nerTagIDs := tensor.NewTensor([]int{1, len(tokenIDs)}, make([]float64, len(tokenIDs)), false)
 
+	if len(nerTagIDsData) > *maxSeqLength {
+		nerTagIDsData = nerTagIDsData[:*maxSeqLength]
+	} else {
+		for len(nerTagIDsData) < *maxSeqLength {
+			nerTagIDsData = append(nerTagIDsData, 0.0)
+		}
+	}
+	nerTagIDs := tensor.NewTensor([]int{1, len(nerTagIDsData)}, nerTagIDsData, false)
 
 	// Forward pass
 	parentLogits, childLogits, err := model.Forward(inputTensor, tokenTypeTensor, posTagIDs, nerTagIDs)
@@ -166,64 +229,59 @@ tokenIDs, err := tokenizer.Encode(*query)
 	}
 
 	// Interpret parent intent output
-	predictedParentTokenID := -1
-	maxParentLogit := -1e9
-	for i, logit := range parentLogits.Data {
-		if logit > maxParentLogit {
-			maxParentLogit = logit
-			predictedParentTokenID = i
-		}
-	}
-	if predictedParentTokenID == -1 {
-		log.Fatalf("Could not determine predicted parent token ID.")
-	}
 	parentProbabilities := softmax(parentLogits.Data)
-	parentConfidence := parentProbabilities[predictedParentTokenID] * 100.0
-	predictedParentWord := parentIntentVocabulary.TokenToWord[predictedParentTokenID]
+	topParentPredictions := getTopNPredictions(parentProbabilities, parentIntentVocabulary.TokenToWord, 3)
+
+	fmt.Println("--- Top 3 Parent Intent Predictions ---")
+	for _, p := range topParentPredictions {
+		importance := ""
+		if p.Confidence > 50.0 {
+			importance = " (Important)"
+		}
+		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
+	}
+	fmt.Println("------------------------------------")
 
 	// Interpret child intent output
-	predictedChildTokenID := -1
-	maxChildLogit := -1e9
-	for i, logit := range childLogits.Data {
-		if logit > maxChildLogit {
-			maxChildLogit = logit
-			predictedChildTokenID = i
-		}
-	}
-	if predictedChildTokenID == -1 {
-		log.Fatalf("Could not determine predicted child token ID.")
-	}
 	childProbabilities := softmax(childLogits.Data)
-	childConfidence := childProbabilities[predictedChildTokenID] * 100.0
-	predictedChildWord := childIntentVocabulary.TokenToWord[predictedChildTokenID]
+	topChildPredictions := getTopNPredictions(childProbabilities, childIntentVocabulary.TokenToWord, 3)
 
-	// --- Start of hard-coded override for specific queries ---
-	if strings.Contains(*query, "generate") && strings.Contains(*query, "webserver") {
-		log.Printf("Overriding prediction for query: \"%s\"", *query)
-		predictedParentWord = "webserver_creation"
-		predictedChildWord = "create_server_and_handler"
-		parentConfidence = 100.0
-		childConfidence = 100.0
+	fmt.Println("--- Top 3 Child Intent Predictions ---")
+	for _, p := range topChildPredictions {
+		importance := ""
+		if p.Confidence > 50.0 {
+			importance = " (Important)"
+		}
+		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
 	}
-	// --- End of hard-coded override ---
+	fmt.Println("-----------------------------------")
 
-	fmt.Printf("\n--- MoE Inference Output ---\n")
-	fmt.Printf("Predicted Parent Intent (from Parent Intent Vocabulary): Token ID %d, Word: %s (Confidence: %.2f%%)\n", predictedParentTokenID, predictedParentWord, parentConfidence)
-	fmt.Printf("Predicted Child Intent (from Child Intent Vocabulary): Token ID %d, Word: %s (Confidence: %.2f%%)\n", predictedChildTokenID, predictedChildWord, childConfidence)
-	fmt.Printf("Description: The model predicts an action related to %s, specifically to %s.\n", predictedParentWord, predictedChildWord)
-	fmt.Printf("-----------------------------\n")
+	if len(topParentPredictions) > 0 && len(topChildPredictions) > 0 {
+		predictedParentWord := topParentPredictions[0].Word
+		predictedChildWord := topChildPredictions[0].Word
+		fmt.Printf("\nDescription: The model's top prediction is an action related to %s, specifically to %s.\n", predictedParentWord, predictedChildWord)
+	}
 }
 
 // softmax applies the softmax function to a slice of float64.
 func softmax(logits []float64) []float64 {
+	if len(logits) == 0 {
+		return []float64{}
+	}
+	maxLogit := logits[0]
+	for _, logit := range logits {
+		if logit > maxLogit {
+			maxLogit = logit
+		}
+	}
 	expSum := 0.0
 	for _, logit := range logits {
-		expSum += math.Exp(logit)
+		expSum += math.Exp(logit - maxLogit)
 	}
 
 	probabilities := make([]float64, len(logits))
 	for i, logit := range logits {
-		probabilities[i] = math.Exp(logit) / expSum
+		probabilities[i] = math.Exp(logit-maxLogit) / expSum
 	}
 	return probabilities
 }

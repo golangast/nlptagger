@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"sort"
+	"strings"
 
 	"nlptagger/neural/nn/dr"
 	"nlptagger/neural/nn/ner"
@@ -23,13 +24,26 @@ import (
 	"nlptagger/tagger/tag"
 )
 
+// VocabConfidence holds the vocabularies and the average confidence score.
+type VocabConfidence struct {
+	TokenVocab     map[string]int
+	PosTagVocab    map[string]int
+	NerTagVocab    map[string]int
+	PhraseTagVocab map[string]int
+	DrTagVocab     map[string]int
+	Confidence     float64
+}
+
+// vocabCache stores vocabularies for sentences.
+var vocabCache = make(map[string]VocabConfidence)
+
 // Structure to represent training data in JSON
 type TrainingDataJSON struct {
 	Sentences []tag.Tag `json:"sentences"`
 }
 
 // predictTag predicts a tag based on the provided forward pass function and vocabulary.
-func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab map[string]int) (string, string, string, string) {
+func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab map[string]int) (string, string, string, string, float64) {
 	//fmt.Println("istagged: ", posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
 
 	// Create a slice of probability-tag pairs for sorting
@@ -39,10 +53,10 @@ func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, ph
 	}
 
 	// Function to predict and select tag
-	predictAndSelectTag := func(vocab map[string]int, predictedOutput []float64, tagType string) string {
+	predictAndSelectTag := func(vocab map[string]int, predictedOutput []float64, tagType string) (string, float64) {
 		if vocab == nil {
 			log.Printf("Error: Nil tag vocabulary for %s.", tagType)
-			return ""
+			return "", 0.0
 		}
 
 		var probabilityTagPairs []ProbabilityTagPair
@@ -55,24 +69,23 @@ func PredictTag(nn *nnu.SimpleNN, inputs []float64, posTagVocab, nerTagVocab, ph
 			return probabilityTagPairs[i].Probability > probabilityTagPairs[j].Probability
 		})
 		if len(probabilityTagPairs) > 0 {
-			return probabilityTagPairs[0].Tag
+			return probabilityTagPairs[0].Tag, probabilityTagPairs[0].Probability
 		} else {
 			log.Printf("Error: Empty tag vocabulary for %s.", tagType)
-			return ""
+			return "", 0.0
 		}
 	}
 	nnOutput := nn.ForwardPass(inputs)
 
 	// Predict each tag
-	predictedPos := predictAndSelectTag(posTagVocab, nnOutput, "POS")
+	predictedPos, posConfidence := predictAndSelectTag(posTagVocab, nnOutput, "POS")
+	predictedNer, nerConfidence := predictAndSelectTag(nerTagVocab, nnOutput, "NER")
+	predictedPhrase, phraseConfidence := predictAndSelectTag(phraseTagVocab, nnOutput, "Phrase")
+	predictedDR, drConfidence := predictAndSelectTag(drTagVocab, nnOutput, "DR")
 
-	predictedNer := predictAndSelectTag(nerTagVocab, nnOutput, "NER")
+	avgConfidence := (posConfidence + nerConfidence + phraseConfidence + drConfidence) / 4.0
 
-	predictedPhrase := predictAndSelectTag(phraseTagVocab, nnOutput, "Phrase")
-
-	predictedDR := predictAndSelectTag(drTagVocab, nnOutput, "DR")
-
-	return predictedPos, predictedNer, predictedPhrase, predictedDR
+	return predictedPos, predictedNer, predictedPhrase, predictedDR, avgConfidence
 }
 
 func ForwardPassPos(nn *nnu.SimpleNN, inputs []float64) []float64 {
@@ -236,19 +249,25 @@ func CalculateMLMLoss(nn *nnu.SimpleNN, maskedInputs []float64, originalInputs [
 }
 
 func PredictTags(nn *nnu.SimpleNN, sentence []string) ([]string, []string, []string, []string) {
-	tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab, _ := CreateVocab()
+	sentenceKey := strings.Join(sentence, " ")
+	var tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab map[string]int
+
+	if cached, found := vocabCache[sentenceKey]; found {
+		tokenVocab = cached.TokenVocab
+		posTagVocab = cached.PosTagVocab
+		nerTagVocab = cached.NerTagVocab
+		phraseTagVocab = cached.PhraseTagVocab
+		drTagVocab = cached.DrTagVocab
+	} else {
+		tokenVocab, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab, _ = CreateVocab()
+	}
 	// Create a slice to store the predicted POS tags.
 	var predictedPosTags, predictedNerTags, predictedPhraseTags, predictedDRTags []string
+	var totalConfidence float64
 	// Iterate over each token in the sentence.
 	for _, token := range sentence {
 		// Get the index of the token in the vocabulary.
 		tokenIndex, ok := tokenVocab[token]
-		inputs := make([]float64, nn.InputSize)
-		//Set all values to zero
-		for i := range inputs {
-			inputs[i] = 0
-		}
-
 		if !ok {
 			// Add new token to vocabulary and update the model.gob file
 			tokenVocab = AddNewTokenToVocab(token, tokenVocab)
@@ -257,22 +276,43 @@ func PredictTags(nn *nnu.SimpleNN, sentence []string) ([]string, []string, []str
 				log.Printf("Error saving vocabulary to GOB: %v", err)
 				// Handle error appropriately, e.g., return an error or a default value
 			}
+		}
 
-			if tokenIndex >= 0 && tokenIndex < nn.InputSize {
-				inputs[tokenIndex] = 1 // Set the corresponding input to 1
-			} else {
-				inputs[tokenVocab["UNK"]] = 1
-				// No need for inputs[0] = 1 here
+		inputs := make([]float64, nn.InputSize)
+		//Set all values to zero
+		for i := range inputs {
+			inputs[i] = 0
+		}
+
+		if tokenIndex >= 0 && tokenIndex < nn.InputSize {
+			inputs[tokenIndex] = 1 // Set the corresponding input to 1
+		} else {
+			if unkIndex, unkOk := tokenVocab["UNK"]; unkOk {
+				inputs[unkIndex] = 1
 			}
 		}
 
 		// Predict tags using the neural network
-		predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
-
+		predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag, confidence := PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
+		totalConfidence += confidence
 		predictedPosTags = append(predictedPosTags, predictedPosTag)
 		predictedNerTags = append(predictedNerTags, predictedNerTag)
 		predictedPhraseTags = append(predictedPhraseTags, predictedPhraseTag)
 		predictedDRTags = append(predictedDRTags, predictedDRTag)
+	}
+
+	avgConfidence := totalConfidence / float64(len(sentence))
+	if avgConfidence > 0.5 {
+		if _, found := vocabCache[sentenceKey]; !found {
+			vocabCache[sentenceKey] = VocabConfidence{
+				TokenVocab:     tokenVocab,
+				PosTagVocab:    posTagVocab,
+				NerTagVocab:    nerTagVocab,
+				PhraseTagVocab: phraseTagVocab,
+				DrTagVocab:     drTagVocab,
+				Confidence:     avgConfidence,
+			}
+		}
 	}
 	// Return the list of predicted POS and NER tags.
 	return predictedPosTags, predictedNerTags, predictedPhraseTags, predictedDRTags

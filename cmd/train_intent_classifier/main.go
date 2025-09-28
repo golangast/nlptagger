@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -48,6 +49,8 @@ func LoadTrainingData(filePath string) (*TrainingData, error) {
 }
 
 func main() {
+	rand.Seed(1) // For reproducibility
+	log.Printf("Random number after seeding: %f", rand.Float64())
 	// Define paths
 	const trainingDataPath = "trainingdata/intent_data.json"
 	const queryVocabPath = "gob_models/query_vocabulary.gob"
@@ -91,12 +94,12 @@ func main() {
 	// Create the model
 	model, err := moemodel.NewMoEClassificationModel(
 		queryVocabulary.Size(),
-		128, // embeddingDim (reduced from 256)
+		256, // embeddingDim (increased from 128)
 		parentIntentVocabulary.Size(),
 		childIntentVocabulary.Size(),
-		4,  // numExperts (reduced from 8)
-		1,  // k (reduced from 2)
-		32, // maxSeqLength (reduced from 64)
+		4,  // numExperts (increased from 2)
+		2,  // k (increased from 1)
+		32, // maxSeqLength (increased to match inference)
 	)
 	if err != nil {
 		log.Fatalf("Failed to create model: %v", err)
@@ -108,7 +111,7 @@ func main() {
 
 	const batchSize = 32 // Define batch size
 
-	for epoch := 0; epoch < 3; epoch++ { // Reduced epochs from 10 to 3
+	for epoch := 0; epoch < 100; epoch++ { // Increased epochs for better learning
 		// Shuffle training data for each epoch (optional but good practice)
 		// rand.Shuffle(len(*trainingData), func(i, j int) {
 		// 	(*trainingData)[i], (*trainingData)[j] = (*trainingData)[j], (*trainingData)[i]

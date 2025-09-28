@@ -1,7 +1,7 @@
 package phrasetagger
 
 import (
-	"github.com/golangast/nlptagger/tagger/tag"
+	"nlptagger/tagger/tag"
 )
 
 // ParseCommand parses a command string and extracts relevant information.

@@ -43,6 +43,7 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 	probs := Softmax(logits)
 	loss := 0.0
 	activeTokens := 0
+	epsilon := 1e-9 // Small value to avoid log(0)
 
 	grad := NewTensor(logits.Shape, make([]float64, len(logits.Data)), false)
 
@@ -53,7 +54,8 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 		}
 		activeTokens++
 
-		loss -= math.Log(probs.Data[i*logits.Shape[1]+targetID])
+		// Add epsilon to the probability to avoid log(0)
+		loss -= math.Log(probs.Data[i*logits.Shape[1]+targetID] + epsilon)
 
 		for j := 0; j < logits.Shape[1]; j++ {
 			if j == targetID {

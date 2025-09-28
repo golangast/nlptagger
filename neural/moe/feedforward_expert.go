@@ -3,8 +3,8 @@ package moe
 import (
 	"encoding/gob"
 	"fmt"
-	. "nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
+	"nlptagger/neural/nn"
+	"nlptagger/neural/tensor"
 )
 
 func init() {
@@ -13,11 +13,11 @@ func init() {
 
 // FeedForwardExpert is a simple feed-forward neural network that implements the Expert interface.
 type FeedForwardExpert struct {
-	Layer1 *Linear
-	Layer2 *Linear
+	Layer1 *nn.Linear
+	Layer2 *nn.Linear
 	// Stored for backward pass
-	inputTensor *Tensor
-	intermediateOutput *Tensor
+	inputTensor *tensor.Tensor
+	intermediateOutput *tensor.Tensor
 }
 
 // NewFeedForwardExpert creates a new FeedForwardExpert.
@@ -25,11 +25,11 @@ type FeedForwardExpert struct {
 // hiddenDim is the dimension of the hidden layer.
 // outputDim is the dimension of the output from the expert.
 func NewFeedForwardExpert(inputDim, hiddenDim, outputDim int) (*FeedForwardExpert, error) {
-	layer1, err := NewLinear(inputDim, hiddenDim)
+	layer1, err := nn.NewLinear(inputDim, hiddenDim)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create first linear layer for expert: %w", err)
 	}
-	layer2, err := NewLinear(hiddenDim, outputDim)
+	layer2, err := nn.NewLinear(hiddenDim, outputDim)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create second linear layer for expert: %w", err)
 	}
@@ -41,11 +41,7 @@ func NewFeedForwardExpert(inputDim, hiddenDim, outputDim int) (*FeedForwardExper
 }
 
 // Forward performs the forward pass of the FeedForwardExpert.
-func (e *FeedForwardExpert) Forward(inputs ...*Tensor) (*Tensor, error) {
-	if len(inputs) != 1 {
-		return nil, fmt.Errorf("FeedForwardExpert.Forward expects 1 input, got %d", len(inputs))
-	}
-	input := inputs[0]
+func (e *FeedForwardExpert) Forward(input *tensor.Tensor) (*tensor.Tensor, error) {
 	e.inputTensor = input
 
 	// Layer 1: Linear -> ReLU (assuming ReLU is applied implicitly or as part of a custom activation)
@@ -66,7 +62,7 @@ func (e *FeedForwardExpert) Forward(inputs ...*Tensor) (*Tensor, error) {
 }
 
 // Backward performs the backward pass of the FeedForwardExpert.
-func (e *FeedForwardExpert) Backward(grad *Tensor) error {
+func (e *FeedForwardExpert) Backward(grad *tensor.Tensor) error {
 	if grad == nil || grad.Data == nil {
 		return nil
 	}
@@ -91,16 +87,26 @@ func (e *FeedForwardExpert) Backward(grad *Tensor) error {
 }
 
 // Parameters returns all learnable parameters of the FeedForwardExpert.
-func (e *FeedForwardExpert) Parameters() []*Tensor {
+func (e *FeedForwardExpert) Parameters() []*tensor.Tensor {
 	params := e.Layer1.Parameters()
 	params = append(params, e.Layer2.Parameters()...)
 	return params
 }
 
 // Inputs returns the input tensors of the FeedForwardExpert's last forward operation.
-func (e *FeedForwardExpert) Inputs() []*Tensor {
+func (e *FeedForwardExpert) Inputs() []*tensor.Tensor {
 	if e.inputTensor != nil {
-		return []*Tensor{e.inputTensor}
+		return []*tensor.Tensor{e.inputTensor}
 	}
-	return []*Tensor{}
+	return []*tensor.Tensor{}
+}
+
+// Description returns a string description of the expert.
+func (e *FeedForwardExpert) Description() string {
+	return "FeedForwardExpert"
+}
+
+// SetMode sets the mode for the expert.
+func (e *FeedForwardExpert) SetMode(training bool) {
+	// No specific behavior for training/inference in this simple expert
 }
