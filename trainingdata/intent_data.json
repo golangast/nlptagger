@@ -211,13 +211,13 @@
   },
   {
     "query": "generate a data structure named foo in webserver named bar in handler named baz",
-    "parent_intent": "webserver_creation",
+    "parent_intent": "code",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure in a web server."
   },
   {
     "query": "create a data structure named my_struct in handler my_handler",
-    "parent_intent": "webserver_creation",
+    "parent_intent": "code",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server."
   },
@@ -232,5 +232,17 @@
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure in a web server."
+  },
+  {
+    "query": "in handler qux create a data structure named my_model",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure",
+    "description": "Creates a data structure within a specified handler."
+  },
+  {
+    "query": "in webserver my_server, create a data structure named my_variable in handler my_handler",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_data_structure",
+    "description": "Creates a data structure within a specified handler in a web server."
   }
 ]

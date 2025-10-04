@@ -23,6 +23,7 @@ type Embedding struct {
 	// Stored values from forward pass for backward calculation
 	inputTokenIDs []int // Store input token IDs
 	inputShape    []int // Store input shape
+	inputTensor   *Tensor // Store the input tensor for backward pass
 }
 
 // PositionalEmbedding represents a simple positional embedding layer.
@@ -157,6 +158,9 @@ func (pe *PositionalEmbedding) Parameters() []*Tensor {
 // Inputs returns the input tensors of the Embedding operation.
 // Assuming the input tensor is stored in the struct.
 func (e *Embedding) Inputs() []*Tensor {
+	if e.inputTensor != nil {
+		return []*Tensor{e.inputTensor}
+	}
 	return []*Tensor{} // Embedding input is not a tensor for backprop graph traversal
 }
 
@@ -175,6 +179,7 @@ func (e *Embedding) Forward(inputIDs *Tensor) (*Tensor, error) {
 
 	// Store input shape and token IDs for the backward pass
 	e.inputShape = inputIDs.Shape
+	e.inputTensor = inputIDs // Store the input tensor
 	if e.inputTokenIDs == nil || len(e.inputTokenIDs) != len(inputIDs.Data) {
 		e.inputTokenIDs = make([]int, len(inputIDs.Data))
 	}

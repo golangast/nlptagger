@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	"nlptagger/neural/moe"
 	"nlptagger/neural/nn"
 	"nlptagger/neural/nnu/bert"
 	"nlptagger/neural/tensor"
@@ -20,7 +19,6 @@ func init() {
 type MoEClassificationModel struct {
 	Embedding        *nn.Embedding
 	BertModel        *bert.BertModel
-	MoELayer         *moe.MoELayer
 	ParentClassifier *nn.Linear
 	ChildClassifier  *nn.Linear
 	BertConfig       bert.BertConfig
@@ -42,15 +40,6 @@ func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChi
 	}
 	bertModel := bert.NewBertModel(bertConfig, nil)
 
-	expertBuilder := func(expertIdx int) (moe.Expert, error) {
-		return moe.NewFeedForwardExpert(embeddingDim, embeddingDim*2, embeddingDim)
-	}
-
-	moeLayer, err := moe.NewMoELayer(embeddingDim, numExperts, k, expertBuilder)
-	if err != nil {
-		return nil, err
-	}
-
 	parentClassifier, err := nn.NewLinear(embeddingDim, numParentClasses)
 	if err != nil {
 		return nil, err
@@ -63,7 +52,6 @@ func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChi
 	return &MoEClassificationModel{
 		Embedding:        embedding,
 		BertModel:        bertModel,
-		MoELayer:         moeLayer,
 		ParentClassifier: parentClassifier,
 		ChildClassifier:  childClassifier,
 		BertConfig:       bertConfig,
@@ -71,7 +59,6 @@ func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChi
 }
 
 func (m *MoEClassificationModel) SetMode(training bool) {
-	m.MoELayer.SetMode(training)
 }
 
 func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tensor, *tensor.Tensor, error) {
@@ -91,13 +78,8 @@ func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tens
 		return nil, nil, fmt.Errorf("bert model forward failed: %w", err)
 	}
 
-	moeOutput, err := m.MoELayer.Forward(bertOutput)
-	if err != nil {
-		return nil, nil, fmt.Errorf("moe forward failed: %w", err)
-	}
-
 	// Extract the output of the first token (CLS token) for classification
-	clsTokenOutput, err := moeOutput.Slice(1, 0, 1) // Slice along the sequence length dimension
+	clsTokenOutput, err := bertOutput.Slice(1, 0, 1) // Slice along the sequence length dimension
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to slice CLS token output: %w", err)
 	}
@@ -136,22 +118,14 @@ func (m *MoEClassificationModel) Backward(parentGrad, childGrad *tensor.Tensor) 
 	// in the input tensor's Grad field.
 	clsTokenGrad := m.ParentClassifier.Input().Grad
 
-	moeLayerGrad := tensor.NewTensor(m.MoELayer.GetOutputShape(), make([]float64, m.MoELayer.GetOutputShape()[0]*m.MoELayer.GetOutputShape()[1]*m.MoELayer.GetOutputShape()[2]), false)
+	bertGrad := tensor.NewTensor([]int{clsTokenGrad.Shape[0], m.BertConfig.MaxPositionEmbeddings, m.BertConfig.HiddenSize}, make([]float64, clsTokenGrad.Shape[0]*m.BertConfig.MaxPositionEmbeddings*m.BertConfig.HiddenSize), false)
 
 	batchSize := clsTokenGrad.Shape[0]
 	hiddenSize := clsTokenGrad.Shape[1]
-	seqLength := moeLayerGrad.Shape[1]
 
 	for i := 0; i < batchSize; i++ {
-		copy(moeLayerGrad.Data[i*seqLength*hiddenSize:i*seqLength*hiddenSize+hiddenSize], clsTokenGrad.Data[i*hiddenSize:(i+1)*hiddenSize])
+		copy(bertGrad.Data[i*m.BertConfig.MaxPositionEmbeddings*hiddenSize:i*m.BertConfig.MaxPositionEmbeddings*hiddenSize+hiddenSize], clsTokenGrad.Data[i*hiddenSize:(i+1)*hiddenSize])
 	}
-
-	err = m.MoELayer.Backward(moeLayerGrad)
-	if err != nil {
-		return fmt.Errorf("moe layer backward failed: %w", err)
-	}
-
-	bertGrad := m.MoELayer.Inputs()[0].Grad
 
 	err = m.BertModel.Backward(bertGrad)
 	if err != nil {
@@ -167,11 +141,11 @@ func (m *MoEClassificationModel) Parameters() []*tensor.Tensor {
 	if m.BertModel != nil {
 		params = append(params, m.BertModel.Parameters()...)
 	}
-	params = append(params, m.MoELayer.Parameters()...)
 	params = append(params, m.ParentClassifier.Parameters()...)
 	params = append(params, m.ChildClassifier.Parameters()...)
 	return params
 }
+
 
 // Description prints a summary of the MoEClassificationModel's architecture.
 func (m *MoEClassificationModel) Description() {
@@ -258,26 +232,6 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 	// Assign the newly created and weight-copied BertModel
 	loadedModel.BertModel = newBertModel
 	// --- End of explicit BertModel re-creation and weight copying ---
-
-	// Re-initialize the MoELayer (this part seems necessary due to interface serialization issues)
-	if loadedModel.MoELayer == nil || loadedModel.MoELayer.GatingNetwork == nil || len(loadedModel.MoELayer.Experts) == 0 {
-		// Use default values for numExperts and k if not available in the loaded model
-		// These values should ideally be part of the saved model configuration.
-		// For now, we'll use hardcoded defaults based on NewMoEClassificationModel.
-		numExperts := 8                                   // Default value
-		k := 2                                            // Default value
-		embeddingDim := loadedModel.BertConfig.HiddenSize // Use BertConfig.HiddenSize for embeddingDim
-
-		expertBuilder := func(expertIdx int) (moe.Expert, error) {
-			return moe.NewFeedForwardExpert(embeddingDim, embeddingDim*2, embeddingDim)
-		}
-
-		moeLayer, err := moe.NewMoELayer(embeddingDim, numExperts, k, expertBuilder)
-		if err != nil {
-			return nil, fmt.Errorf("failed to re-initialize MoE layer: %w", err)
-		}
-		loadedModel.MoELayer = moeLayer
-	}
 
 	// Re-initialize the Activation function in the Pooler after loading,
 	// as gob cannot serialize/deserialize functions.

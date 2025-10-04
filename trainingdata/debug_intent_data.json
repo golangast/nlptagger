@@ -1,0 +1,32 @@
+[
+  {
+    "query": "create a thing",
+    "parent_intent": "action",
+    "child_intent": "create"
+  },
+  {
+    "query": "make a thing",
+    "parent_intent": "action",
+    "child_intent": "create"
+  },
+  {
+    "query": "generate a thing",
+    "parent_intent": "action",
+    "child_intent": "create"
+  },
+  {
+    "query": "delete a thing",
+    "parent_intent": "action",
+    "child_intent": "delete"
+  },
+  {
+    "query": "remove a thing",
+    "parent_intent": "action",
+    "child_intent": "delete"
+  },
+  {
+    "query": "get rid of a thing",
+    "parent_intent": "action",
+    "child_intent": "delete"
+  }
+]

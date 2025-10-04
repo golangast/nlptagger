@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	moemodel "nlptagger/neural/moe/model"
+	"nlptagger/neural/nnu/intent"
 	. "nlptagger/neural/nn"
 	. "nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
@@ -53,7 +53,7 @@ func main() {
 	const queryVocabPath = "gob_models/query_vocabulary.gob"
 	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
 	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
-	const modelSavePath = "gob_models/moe_classification_model.gob"
+	const modelSavePath = "gob_models/simple_intent_classifier.gob"
 
 	// Load training data
 	trainingData, err := LoadIntentTrainingData(trainingDataPath)
@@ -80,9 +80,7 @@ func main() {
 		childIntentVocab = mainvocab.NewVocabulary()
 	}
 
-	
-
-	 	for _, example := range *trainingData {
+	for _, example := range *trainingData {
 		words := strings.Fields(strings.ToLower(example.Query))
 		for _, word := range words {
 			queryVocab.AddToken(word)
@@ -101,34 +99,32 @@ func main() {
 	log.Printf("Child intent vocabulary size: %d", childIntentVocab.Size())
 
 	// Create model
-	model, err := moemodel.NewMoEClassificationModel(
+	model, err := intent.NewSimpleIntentClassifier(
 		queryVocab.Size(),
 		64, // embeddingDim
+		128, // hiddenDim
 		parentIntentVocab.Size(),
 		childIntentVocab.Size(),
-		2, // numExperts
-		1, // k
-		32, // maxSeqLength
 	)
 	if err != nil {
-		log.Fatalf("Failed to create new MoE model: %v", err)
+		log.Fatalf("Failed to create simple intent classifier: %v", err)
 	}
 
 	// Train the model
 	TrainIntentModel(model, trainingData, queryVocab, parentIntentVocab, childIntentVocab, 100, 0.001, 32, 32)
 
 	// Save the trained model
-	log.Printf("Saving MoE Classification model to %s", modelSavePath)
-	err = moemodel.SaveMoEClassificationModelToGOB(model, modelSavePath)
+	log.Printf("Saving Simple Intent Classifier model to %s", modelSavePath)
+	err = model.Save(modelSavePath)
 	if err != nil {
-		log.Fatalf("Failed to save MoE model: %v", err)
+		log.Fatalf("Failed to save simple intent classifier model: %v", err)
 	}
 
 	log.Println("Training complete.")
 }
 
-// TrainIntentModel trains the MoEClassificationModel for intent classification.
-func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, epochs int, learningRate float64, batchSize int, maxSeqLength int) {
+// TrainIntentModel trains the SimpleIntentClassifier for intent classification.
+func TrainIntentModel(model *intent.SimpleIntentClassifier, data *IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, epochs int, learningRate float64, batchSize int, maxSeqLength int) {
 	optimizer := NewOptimizer(model.Parameters(), learningRate, 5.0)
 
 	for epoch := 0; epoch < epochs; epoch++ {
@@ -158,7 +154,7 @@ func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTraini
 }
 
 // trainIntentModelBatch performs a single training step on a batch of intent data.
-func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, maxSeqLength int) (float64, error) {
+func trainIntentModelBatch(model *intent.SimpleIntentClassifier, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, maxSeqLength int) (float64, error) {
 	optimizer.ZeroGrad()
 
 	batchSize := len(batch)
@@ -195,7 +191,7 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 
 	inputTensor := NewTensor([]int{batchSize, maxSeqLength}, convertIntsToFloat64s(inputIDsBatch), false)
 
-	parentLogits, childLogits, err := model.Forward(inputTensor, nil, nil, nil)
+	parentLogits, childLogits, err := model.Forward(inputTensor)
 	if err != nil {
 		return 0, fmt.Errorf("model forward pass failed: %w", err)
 	}

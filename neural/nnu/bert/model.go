@@ -959,12 +959,26 @@ func (p *Pooler) Backward(grad *tensor.Tensor) error {
 	for i := range tanhGrad.Data {
 		tanhGrad.Data[i] = 1 - output.Data[i]*output.Data[i]
 	}
-	grad, err := grad.Mul(tanhGrad)
+
+	// The incoming grad might be for the whole sequence.
+	// The pooler only cares about the CLS token.
+	var clsGrad *tensor.Tensor
+	if grad.Shape[1] > 1 {
+		var err error
+		clsGrad, err = grad.Slice(1, 0, 1)
+		if err != nil {
+			return err
+		}
+	} else {
+		clsGrad = grad
+	}
+
+	multipliedGrad, err := clsGrad.Mul(tanhGrad)
 	if err != nil {
 		return err
 	}
 
-	return p.Dense.Backward(grad)
+	return p.Dense.Backward(multipliedGrad)
 }
 
 // NewBertModel creates a new BertModel.

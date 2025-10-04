@@ -109,7 +109,7 @@
         "parent_intent": "version_control",
         "child_intent": "clone"
     },
-    {
+    .{
         "input_text": "merge the feature branch",
         "parent_intent": "version_control",
         "child_intent": "merge"
@@ -148,5 +148,15 @@
         "input_text": "tell me a joke",
         "parent_intent": "UNK",
         "child_intent": "UNK"
+    },
+    {
+        "input_text": "generate a data structure in a webserver handler",
+        "parent_intent": "webserver_creation",
+        "child_intent": "create_data_structure"
+    },
+    {
+        "input_text": "create a server and a handler",
+        "parent_intent": "webserver_creation",
+        "child_intent": "create_server_and_handler"
     }
 ]

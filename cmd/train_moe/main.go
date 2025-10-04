@@ -12,28 +12,29 @@ import (
 	"strings"
 	"syscall"
 
-	"nlptagger/neural/moe" // Import the MoE package for Seq2SeqMoE
+	"nlptagger/neural/moe"
 	. "nlptagger/neural/nn"
 	mainvocab "nlptagger/neural/nnu/vocab"
 	. "nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
 )
 
-// Seq2SeqTrainingExample represents a single input-output pair for Seq2Seq training.
-type Seq2SeqTrainingExample struct {
-	Query       string `json:"Query"`
-	Description string `json:"description"`
+// IntentTrainingExample represents a single training example for intent classification.
+type IntentTrainingExample struct {
+	Query        string `json:"query"`
+	ParentIntent string `json:"parent_intent"`
+	ChildIntent  string `json:"child_intent"`
+	Description  string `json:"description"`
 }
 
-// Seq2SeqTrainingData represents the structure of the Seq2Seq training data JSON.
-type Seq2SeqTrainingData []Seq2SeqTrainingExample
+// IntentTrainingData represents the structure of the intent training data JSON.
+type IntentTrainingData []IntentTrainingExample
 
-// LoadSeq2SeqTrainingData loads the Seq2Seq training data from a JSON file.
-func LoadSeq2SeqTrainingData(filePath string) (*Seq2SeqTrainingData, error) {
+// LoadIntentTrainingData loads the intent training data from a JSON file.
+func LoadIntentTrainingData(filePath string) (*IntentTrainingData, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open training data file %s: %w", filePath, err)
-
 	}
 	defer file.Close()
 
@@ -42,7 +43,7 @@ func LoadSeq2SeqTrainingData(filePath string) (*Seq2SeqTrainingData, error) {
 		return nil, fmt.Errorf("failed to read training data file %s: %w", filePath, err)
 	}
 
-	var data Seq2SeqTrainingData
+	var data IntentTrainingData
 	err = json.Unmarshal(bytes, &data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal training data JSON from %s: %w", filePath, err)
@@ -85,8 +86,8 @@ func TokenizeAndConvertToIDs(text string, tokenizer *tokenizer.Tokenizer, vocabu
 	return tokenIDs, nil
 }
 
-// TrainMoEModel trains the MoEClassificationModel.
-func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, descriptionVocab *mainvocab.Vocabulary, queryTokenizer, descriptionTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
+// TrainIntentMoEModel trains the MoEClassificationModel.
+func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, queryTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
 
 	if model == nil {
 		return errors.New("cannot train a nil model")
@@ -95,7 +96,7 @@ func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epoc
 		return errors.New("no training data provided")
 	}
 
-	optimizer := NewOptimizer(model.Parameters(), learningRate, 5.0) // Using a clip value of 5.0
+	optimizer := NewOptimizer(model.Parameters(), learningRate, 1.0) // Using a clip value of 1.0
 
 	for epoch := 0; epoch < epochs; epoch++ {
 		log.Printf("Epoch %d/%d", epoch+1, epochs)
@@ -108,9 +109,8 @@ func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epoc
 				end = len(*data)
 			}
 			batch := (*data)[i:end]
-			log.Printf("Starting batch %d/%d in Epoch %d", numBatches+1, (len(*data)+batchSize-1)/batchSize, epoch+1) // Added log
 
-			loss, err := trainSeq2SeqMoEBatch(model, optimizer, batch, queryVocab, descriptionVocab, queryTokenizer, descriptionTokenizer, maxSequenceLength)
+			loss, err := trainIntentMoEBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, queryTokenizer, maxSequenceLength)
 			if err != nil {
 				log.Printf("Error training batch: %v", err)
 				continue // Or handle error more strictly
@@ -126,18 +126,16 @@ func TrainSeq2SeqMoEModel(model *moe.Seq2SeqMoE, data *Seq2SeqTrainingData, epoc
 	return nil
 }
 
-// trainSeq2SeqMoEBatch performs a single training step on a batch of data.
-func trainSeq2SeqMoEBatch(seq2seqMoEModel *moe.Seq2SeqMoE, optimizer Optimizer, batch Seq2SeqTrainingData, queryVocab, descriptionVocab *mainvocab.Vocabulary, queryTokenizer, descriptionTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
-	log.Println("Starting trainSeq2SeqMoEBatch")
+// trainIntentMoEBatch performs a single training step on a batch of data.
+func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, queryTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
 	optimizer.ZeroGrad()
-	log.Println("ZeroGrad completed.")
 
 	batchSize := len(batch)
 
 	inputIDsBatch := make([]int, batchSize*maxSequenceLength)
-	targetDescriptionIDsBatch := make([]int, batchSize*maxSequenceLength)
+	parentIntentIDsBatch := make([]int, batchSize)
+	childIntentIDsBatch := make([]int, batchSize)
 
-	log.Println("Starting tokenization and ID conversion.")
 	for i, example := range batch {
 		// Tokenize and pad query
 		queryTokens, err := TokenizeAndConvertToIDs(example.Query, queryTokenizer, queryVocab, maxSequenceLength)
@@ -146,54 +144,34 @@ func trainSeq2SeqMoEBatch(seq2seqMoEModel *moe.Seq2SeqMoE, optimizer Optimizer, 
 		}
 		copy(inputIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], queryTokens)
 
-		// Tokenize and pad description
-		descriptionTokens, err := TokenizeAndConvertToIDs(example.Description, descriptionTokenizer, descriptionVocab, maxSequenceLength)
-		if err != nil {
-			return 0, fmt.Errorf("description tokenization failed for item %d: %w", i, err)
-		}
-		copy(targetDescriptionIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], descriptionTokens)
+		// Get parent and child intent IDs
+		parentIntentIDsBatch[i] = parentIntentVocab.GetTokenID(example.ParentIntent)
+		childIntentIDsBatch[i] = childIntentVocab.GetTokenID(example.ChildIntent)
 	}
-	log.Println("Tokenization and ID conversion completed.")
 
 	// Convert input IDs to a Tensor (embeddings will be handled by the model)
 	inputTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(inputIDsBatch), false)
-	targetTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(targetDescriptionIDsBatch), false)
-	log.Println("Tensors created.")
 
-	// Forward pass through the Seq2SeqMoE model
-	descriptionLogitsSequence, err := seq2seqMoEModel.Forward(inputTensor, targetTensor)
+	// Forward pass through the IntentMoE model
+	parentLogits, childLogits, err := intentMoEModel.Forward(inputTensor)
 	if err != nil {
-		return 0, fmt.Errorf("Seq2SeqMoE model forward pass failed: %w", err)
+		return 0, fmt.Errorf("IntentMoE model forward pass failed: %w", err)
 	}
-	log.Println("Completed forward pass.")
 
-	// Calculate loss for the generated description sequence
-	totalLoss := 0.0
-	var allGrads []*Tensor
+	// Calculate loss for the parent and child intents
+	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDsBatch, parentIntentVocab.PaddingTokenID)
+	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDsBatch, childIntentVocab.PaddingTokenID)
 
-	log.Println("Starting loss calculation.")
-	for t, logitsTensorForTimeStep := range descriptionLogitsSequence {
-		// Extract target IDs for the current time step across the batch
-		targetIDsForTimeStep := make([]int, batchSize)
-		for b := 0; b < batchSize; b++ {
-			targetIDsForTimeStep[b] = targetDescriptionIDsBatch[b*maxSequenceLength+t]
-		}
-
-		loss, grad := CrossEntropyLoss(logitsTensorForTimeStep, targetIDsForTimeStep, descriptionVocab.PaddingTokenID)
-		totalLoss += loss
-		allGrads = append(allGrads, grad)
-	}
-	log.Println("Loss calculation completed.")
+	totalLoss := parentLoss + childLoss
+	allGrads := []*Tensor{parentGrad, childGrad}
 
 	// Backward pass
-	err = seq2seqMoEModel.Backward(allGrads)
+	err = intentMoEModel.Backward(allGrads...)
 	if err != nil {
-		return 0, fmt.Errorf("Seq2SeqMoE model backward pass failed: %w", err)
+		return 0, fmt.Errorf("IntentMoE model backward pass failed: %w", err)
 	}
-	log.Println("Completed backward pass.")
 
 	optimizer.Step()
-	log.Println("Optimizer step completed.")
 
 	return totalLoss, nil
 }
@@ -206,18 +184,39 @@ func convertIntsToFloat64s(input []int) []float64 {
 	return output
 }
 
+func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
+	queryVocabulary := mainvocab.NewVocabulary()
+	parentIntentVocabulary := mainvocab.NewVocabulary()
+	childIntentVocabulary := mainvocab.NewVocabulary()
+
+	intentTrainingData, err := LoadIntentTrainingData(dataPath)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load intent training data from %s: %w", dataPath, err)
+	}
+
+	for _, pair := range *intentTrainingData {
+		// Use the same tokenizer logic as during inference to build the vocabulary
+		tokenizedQuery := tokenizer.Tokenize(strings.ToLower(pair.Query))
+		for _, word := range tokenizedQuery {
+			queryVocabulary.AddToken(word)
+		}
+		parentIntentVocabulary.AddToken(pair.ParentIntent)
+		childIntentVocabulary.AddToken(pair.ChildIntent)
+	}
+
+	return queryVocabulary, parentIntentVocabulary, childIntentVocabulary, nil
+}
+
 func main() {
+	const intentTrainingDataPath = "./trainingdata/intent_data.json"
 	// Start CPU profiling
-	log.Println("Attempting to create cpu.prof file...")
 	f, err := os.Create("cpu.prof")
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
 	}
-	log.Println("Starting CPU profile...")
 	if err := pprof.StartCPUProfile(f); err != nil {
 		log.Fatal("could not start CPU profile: ", err)
 	}
-	log.Println("CPU profiling started.")
 
 	// Set up a channel to listen for interrupt signals
 	sigChan := make(chan os.Signal, 1)
@@ -233,83 +232,72 @@ func main() {
 	}()
 
 	// Define training parameters
-	epochs := 1
+	epochs := 500
 	learningRate := 0.001
-	batchSize := 32
+	batchSize := 64
 	queryVocabularySavePath := "gob_models/query_vocabulary.gob"
-	descriptionVocabularySavePath := "gob_models/description_vocabulary.gob"
-
-	// Define paths for training data
-	const seq2seqTrainingDataPath = "./trainingdata/wikiqa_seq2seq_training.json" // Using transformed WikiQA data
+	parentIntentVocabularySavePath := "gob_models/parent_intent_vocabulary.gob"
+	childIntentVocabularySavePath := "gob_models/child_intent_vocabulary.gob"
 
 	// Try to load vocabularies first
 	queryVocabulary, err := mainvocab.LoadVocabulary(queryVocabularySavePath)
 	if err != nil {
 		log.Println("Failed to load query vocabulary, creating a new one.")
-		queryVocabulary = mainvocab.NewVocabulary()
 	}
-
-	descriptionVocabulary, err := mainvocab.LoadVocabulary(descriptionVocabularySavePath)
+	parentIntentVocabulary, err := mainvocab.LoadVocabulary(parentIntentVocabularySavePath)
 	if err != nil {
-		log.Println("Failed to load description vocabulary, creating a new one.")
-		descriptionVocabulary = mainvocab.NewVocabulary()
+		log.Println("Failed to load parent intent vocabulary, creating a new one.")
 	}
-
-	// Load Seq2Seq training data
-	seq2seqTrainingData, err := LoadSeq2SeqTrainingData(seq2seqTrainingDataPath)
+	childIntentVocabulary, err := mainvocab.LoadVocabulary(childIntentVocabularySavePath)
 	if err != nil {
-		log.Fatalf("Failed to load Seq2Seq training data from %s: %v", seq2seqTrainingDataPath, err)
+		log.Println("Failed to load child intent vocabulary, creating a new one.")
 	}
-	log.Printf("Loaded %d training examples.", len(*seq2seqTrainingData))
 
-	// If vocabularies are empty, populate them from training data
-	if len(queryVocabulary.TokenToWord) <= 2 || len(descriptionVocabulary.TokenToWord) <= 2 { // <= 2 to account for pad and unk
-		log.Println("Populating vocabularies from training data...")
-
-		// Populate vocabularies with tokens from training data
-		for _, pair := range *seq2seqTrainingData {
-			// Add query tokens to query vocabulary
-			queryWords := strings.Fields(strings.ToLower(pair.Query))
-			for _, word := range queryWords {
-				queryVocabulary.AddToken(word)
-			}
-
-			// Add description tokens to description vocabulary
-			descriptionWords := strings.Fields(strings.ToLower(pair.Description))
-			for _, word := range descriptionWords {
-				descriptionVocabulary.AddToken(word)
-			}
+	if queryVocabulary == nil || parentIntentVocabulary == nil || childIntentVocabulary == nil {
+		log.Println("Building vocabularies from scratch...")
+		queryVocabulary, parentIntentVocabulary, childIntentVocabulary, err = BuildVocabularies(intentTrainingDataPath)
+		if err != nil {
+			log.Fatalf("Failed to build vocabularies: %v", err)
 		}
 	}
 
-	log.Printf("Description Vocabulary TokenToWord: %v", descriptionVocabulary.TokenToWord)
+	log.Printf("Query Vocabulary (after load/create): Size=%d", len(queryVocabulary.TokenToWord))
+	log.Printf("Parent Intent Vocabulary (after load/create): Size=%d", len(parentIntentVocabulary.TokenToWord))
+	log.Printf("Child Intent Vocabulary (after load/create): Size=%d", len(childIntentVocabulary.TokenToWord))
+
+	// Load Intent training data
+	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
+	if err != nil {
+		log.Fatalf("Failed to load intent training data from %s: %v", intentTrainingDataPath, err)
+	}
+	log.Printf("Loaded %d training examples.", len(*intentTrainingData))
 
 	// After vocabularies are fully populated, determine vocab sizes and create/load model
 	inputVocabSize := len(queryVocabulary.TokenToWord)
-	outputVocabSize := len(descriptionVocabulary.TokenToWord)
+	parentVocabSize := len(parentIntentVocabulary.TokenToWord)
+	childVocabSize := len(childIntentVocabulary.TokenToWord)
 	embeddingDim := 128
 	numExperts := 2
-	maxAttentionHeads := 4 // Added this line
-	// k := 2 // k is for top-k experts, not directly used in Seq2SeqMoE New function
 	maxSequenceLength := 32 // Max length for input query and output description
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
-	log.Printf("Description Vocabulary Size: %d", outputVocabSize)
+	log.Printf("Parent Intent Vocabulary Size: %d", parentVocabSize)
+	log.Printf("Child Intent Vocabulary Size: %d", childVocabSize)
 
-	var seq2seqMoEModel *moe.Seq2SeqMoE // Declare seq2seqMoEModel here
+	var intentMoEModel *moe.IntentMoE // Declare intentMoEModel here
 
-	modelSavePath := "gob_models/moe_model.gob"
+	modelSavePath := "gob_models/moe_classification_model.gob"
 
-	// Try to load Seq2SeqMoE model
-	seq2seqMoEModel, err = moe.LoadSeq2SeqMoEModelFromGOB(modelSavePath)
+	// Try to load IntentMoE model
+	intentMoEModel, err = moe.LoadIntentMoEModelFromGOB(modelSavePath)
 	if err != nil {
-		log.Printf("Failed to load Seq2SeqMoE model, creating a new one: %v", err)
-		seq2seqMoEModel, err = moe.NewSeq2SeqMoE(inputVocabSize, embeddingDim, numExperts, outputVocabSize, maxAttentionHeads)
+		log.Printf("Failed to load IntentMoE model, creating a new one: %v", err)
+		intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize)
 		if err != nil {
-			log.Fatalf("Failed to create new Seq2SeqMoE model: %v", err)
+			log.Fatalf("Failed to create new IntentMoE model: %v", err)
 		}
 	} else {
-		log.Printf("Loaded Seq2SeqMoE model from %s", modelSavePath)
+		log.Printf("Loaded IntentMoE model from %s", modelSavePath)
 	}
 
 	// Create tokenizers once after vocabularies are loaded/created
@@ -317,22 +305,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create query tokenizer: %v", err)
 	}
-	descriptionTokenizer, err := tokenizer.NewTokenizer(descriptionVocabulary)
-	if err != nil {
-		log.Fatalf("Failed to create description tokenizer: %v", err)
-	}
 
 	// Train the model
-	err = TrainSeq2SeqMoEModel(seq2seqMoEModel, seq2seqTrainingData, epochs, learningRate, batchSize, queryVocabulary, descriptionVocabulary, queryTokenizer, descriptionTokenizer, maxSequenceLength, f)
+	err = TrainIntentMoEModel(intentMoEModel, intentTrainingData, epochs, learningRate, batchSize, queryVocabulary, parentIntentVocabulary, childIntentVocabulary, queryTokenizer, maxSequenceLength, f)
 	if err != nil {
-		log.Fatalf("Failed to train Seq2SeqMoE model: %v", err)
+		log.Fatalf("Failed to train IntentMoE model: %v", err)
 	}
 
 	// Save the trained model
-	fmt.Printf("Saving Seq2SeqMoE model to %s", modelSavePath)
-	err = moe.SaveSeq2SeqMoEModelToGOB(seq2seqMoEModel, modelSavePath)
+	fmt.Printf("Saving IntentMoE model to %s", modelSavePath)
+	err = moe.SaveIntentMoEModelToGOB(intentMoEModel, modelSavePath)
 	if err != nil {
-		log.Fatalf("Failed to save Seq2SeqMoE model: %v", err)
+		log.Fatalf("Failed to save IntentMoE model: %v", err)
 	}
 
 	// Save the vocabularies
@@ -340,8 +324,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to save query vocabulary: %v", err)
 	}
-	err = descriptionVocabulary.Save(descriptionVocabularySavePath)
+	err = parentIntentVocabulary.Save(parentIntentVocabularySavePath)
 	if err != nil {
-		log.Fatalf("Failed to save description vocabulary: %v", err)
+		log.Fatalf("Failed to save parent intent vocabulary: %v", err)
+	}
+	err = childIntentVocabulary.Save(childIntentVocabularySavePath)
+	if err != nil {
+		log.Fatalf("Failed to save child intent vocabulary: %v", err)
 	}
 }

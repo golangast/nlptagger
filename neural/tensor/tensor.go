@@ -1064,13 +1064,41 @@ func (t *Tensor) Slice(axis, start, end int) (*Tensor, error) {
 }
 
 func (t *Tensor) DivScalar(val float64) (*Tensor, error) {
-	// This should be implemented in tensor.go
-	result := make([]float64, len(t.Data))
+	resultData := make([]float64, len(t.Data))
 	for i, v := range t.Data {
-		result[i] = v / val
+		resultData[i] = v / val
 	}
-	return &Tensor{Data: result, Shape: t.Shape}, nil
+
+	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
+	if resultTensor.RequiresGrad {
+		resultTensor.Creator = &divScalarOperation{t, val}
+	}
+	return resultTensor, nil
 }
+
+// divScalarOperation represents the scalar division operation for backward pass.
+type divScalarOperation struct {
+	Input  *Tensor
+	Scalar float64
+}
+
+func (op *divScalarOperation) Inputs() []*Tensor {
+	return []*Tensor{op.Input}
+}
+
+func (op *divScalarOperation) Backward(grad *Tensor) error {
+	if !op.Input.RequiresGrad {
+		return nil
+	}
+	if op.Input.Grad == nil {
+		op.Input.Grad = NewTensor(op.Input.Shape, make([]float64, len(op.Input.Data)), false)
+	}
+	for i := range grad.Data {
+		op.Input.Grad.Data[i] += grad.Data[i] / op.Scalar
+	}
+	return nil
+}
+
 
 // MulScalar performs element-wise multiplication by a scalar.
 func (t *Tensor) MulScalar(val float64) (*Tensor, error) {
@@ -1088,7 +1116,7 @@ func (t *Tensor) MulScalar(val float64) (*Tensor, error) {
 
 // mulScalarOperation represents the scalar multiplication operation for backward pass.
 type mulScalarOperation struct {
-	Input *Tensor
+	Input  *Tensor
 	Scalar float64
 }
 
@@ -1108,6 +1136,7 @@ func (op *mulScalarOperation) Backward(grad *Tensor) error {
 	}
 	return nil
 }
+
 
 // Select returns a new Tensor containing the element at the given index.
 // This operation is differentiable.
@@ -1421,6 +1450,25 @@ func (t *Tensor) Sum(axis int) (*Tensor, error) {
 type sumOperation struct {
 	Input *Tensor
 	Axis  int
+}
+
+// Mean calculates the mean of the tensor along a given axis.
+func (t *Tensor) Mean(axis int) (*Tensor, error) {
+	if axis < 0 || axis >= len(t.Shape) {
+		return nil, fmt.Errorf("axis %d out of bounds for tensor with shape %v", axis, t.Shape)
+	}
+
+	sumTensor, err := t.Sum(axis)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sum tensor for mean calculation: %w", err)
+	}
+
+	meanTensor, err := sumTensor.DivScalar(float64(t.Shape[axis]))
+	if err != nil {
+		return nil, fmt.Errorf("failed to divide tensor by scalar for mean calculation: %w", err)
+	}
+
+	return meanTensor, nil
 }
 
 func (op *sumOperation) Inputs() []*Tensor {

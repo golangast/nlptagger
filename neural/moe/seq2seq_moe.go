@@ -8,6 +8,11 @@ import (
 	"os"
 )
 
+func init() {
+	gob.Register(&Seq2SeqMoE{})
+	gob.Register(&RNNDecoder{})
+}
+
 
 // Seq2SeqMoE represents a Sequence-to-Sequence model with a Mixture of Experts encoder.
 type Seq2SeqMoE struct {
