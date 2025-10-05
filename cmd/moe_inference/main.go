@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math" // Keep math for softmax
 	"math/rand"
+	"os"
 	"sort"
 
 	"nlptagger/neural/moe"
@@ -13,6 +16,40 @@ import (
 	"nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
 )
+
+// IntentTrainingExample represents a single training example for intent classification.
+type IntentTrainingExample struct {
+	Query        string `json:"query"`
+	ParentIntent string `json:"parent_intent"`
+	ChildIntent  string `json:"child_intent"`
+	Description  string `json:"description"`
+	Sentence     string `json:"sentence"`
+}
+
+// IntentTrainingData represents the structure of the intent training data JSON.
+type IntentTrainingData []IntentTrainingExample
+
+// LoadIntentTrainingData loads the intent training data from a JSON file.
+func LoadIntentTrainingData(filePath string) (*IntentTrainingData, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open training data file %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read training data file %s: %w", filePath, err)
+	}
+
+	var data IntentTrainingData
+	err = json.Unmarshal(bytes, &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal training data JSON from %s: %w", filePath, err)
+	}
+
+	return &data, nil
+}
 
 type Prediction struct {
 	TokenID    int
@@ -65,8 +102,9 @@ func main() {
 	const moeModelPath = "gob_models/moe_classification_model.gob"
 	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
 	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
+	const intentTrainingDataPath = "trainingdata/intent_data.json"
 
-	// Setup input vocabulary
+	// Load vocabularies
 	vocabulary, err := mainvocab.LoadVocabulary(vocabPath)
 	if err != nil {
 		log.Fatalf("Failed to set up input vocabulary: %v", err)
@@ -94,6 +132,12 @@ func main() {
 	model, err := moe.LoadIntentMoEModelFromGOB(moeModelPath)
 	if err != nil {
 		log.Fatalf("Failed to load MoE model: %v", err)
+	}
+
+	// Load intent training data
+	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
+	if err != nil {
+		log.Fatalf("Failed to load intent training data: %v", err)
 	}
 
 	log.Printf("---\n--- DEBUG: Parent Intent Vocabulary (TokenToWord): %v ---", parentIntentVocabulary.TokenToWord)
@@ -160,6 +204,21 @@ func main() {
 		predictedParentWord := topParentPredictions[0].Word
 		predictedChildWord := topChildPredictions[0].Word
 		fmt.Printf("\nDescription: The model's top prediction is an action related to %s, specifically to %s.\n", predictedParentWord, predictedChildWord)
+
+		// Find and print the intent sentence
+		foundSentence := ""
+		for _, example := range *intentTrainingData {
+			if example.ParentIntent == predictedParentWord && example.ChildIntent == predictedChildWord {
+				foundSentence = example.Sentence
+				break
+			}
+		}
+
+		if foundSentence != "" {
+			fmt.Printf("Intent Sentence: %s\n", foundSentence)
+		} else {
+			fmt.Println("Intent Sentence: Not found in training data.")
+		}
 	}
 }
 

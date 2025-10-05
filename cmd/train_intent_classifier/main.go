@@ -18,9 +18,11 @@ import (
 
 // TrainingExample represents a single training example with input text and parent/child intents.
 type TrainingExample struct {
-	InputText    string `json:"query"`
+	Query        string `json:"query"`
 	ParentIntent string `json:"parent_intent"`
 	ChildIntent  string `json:"child_intent"`
+	Description  string `json:"description"`
+	Sentence     string `json:"sentence"`
 }
 
 // TrainingData represents the structure of the training data JSON.
@@ -72,7 +74,7 @@ func main() {
 	childIntentVocabulary := mainvocab.NewVocabulary()
 
 	for _, example := range *trainingData {
-		words := strings.Fields(example.InputText)
+		words := strings.Fields(example.Sentence)
 		for _, word := range words {
 			queryVocabulary.AddToken(word)
 		}
@@ -131,7 +133,7 @@ func main() {
 			currentBatchSize := len(batch)
 
 			for _, example := range batch {
-				tokenIDs, _ := tokenizer.Encode(example.InputText)
+				tokenIDs, _ := tokenizer.Encode(example.Sentence)
 				inputData := make([]float64, len(tokenIDs))
 				for i, id := range tokenIDs {
 					inputData[i] = float64(id)

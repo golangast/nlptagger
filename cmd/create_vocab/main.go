@@ -10,8 +10,12 @@ import (
 	"nlptagger/neural/nnu/vocab"
 )
 
-type IntentData struct {
-	Query string `json:"query"`
+type IntentTrainingExample struct {
+	Query        string `json:"query"`
+	ParentIntent string `json:"parent_intent"`
+	ChildIntent  string `json:"child_intent"`
+	Description  string `json:"description"`
+	Sentence     string `json:"sentence"`
 }
 
 func main() {
@@ -25,7 +29,7 @@ func main() {
 		log.Fatalf("Failed to read training data: %v", err)
 	}
 
-	var intents []IntentData
+	var intents []IntentTrainingExample
 	if err := json.Unmarshal(file, &intents); err != nil {
 		log.Fatalf("Failed to unmarshal training data: %v", err)
 	}

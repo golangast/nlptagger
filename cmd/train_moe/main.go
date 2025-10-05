@@ -25,6 +25,7 @@ type IntentTrainingExample struct {
 	ParentIntent string `json:"parent_intent"`
 	ChildIntent  string `json:"child_intent"`
 	Description  string `json:"description"`
+	Sentence     string `json:"sentence"`
 }
 
 // IntentTrainingData represents the structure of the intent training data JSON.
