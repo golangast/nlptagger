@@ -15,17 +15,29 @@ func init() {
 	gob.Register(bert.BertConfig{})
 }
 
-// MoEClassificationModel is a wrapper around the MoELayer to make it a trainable model.
-type MoEClassificationModel struct {
-	Embedding        *nn.Embedding
-	BertModel        *bert.BertModel
-	ParentClassifier *nn.Linear
-	ChildClassifier  *nn.Linear
-	BertConfig       bert.BertConfig
-	pooledOutput     *tensor.Tensor // Add this field
+// DecoderStepState holds the state of a single decoder time step.
+type DecoderStepState struct {
+	LSTMCell      *nn.LSTMCell
+	EmbeddedInput *tensor.Tensor
+	DecoderHidden *tensor.Tensor
+	DecoderCell   *tensor.Tensor
 }
 
-func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChildClasses, numExperts, k, maxSeqLength int) (*MoEClassificationModel, error) {
+// MoEClassificationModel is a wrapper around the MoELayer to make it a trainable model.
+type MoEClassificationModel struct {
+	Embedding             *nn.Embedding
+	BertModel             *bert.BertModel
+	ParentClassifier      *nn.Linear
+	ChildClassifier       *nn.Linear
+	SentenceEmbedding     *nn.Embedding
+	SentenceDecoderTemplate *nn.LSTMCell
+	SentenceClassifier    *nn.Linear
+	BertConfig            bert.BertConfig
+	pooledOutput          *tensor.Tensor // Add this field
+	decoderStates         []*DecoderStepState
+}
+
+func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChildClasses, sentenceVocabSize, numExperts, k, maxSeqLength int) (*MoEClassificationModel, error) {
 	embedding := nn.NewEmbedding(vocabSize, embeddingDim)
 
 	bertConfig := bert.BertConfig{
@@ -49,61 +61,191 @@ func NewMoEClassificationModel(vocabSize, embeddingDim, numParentClasses, numChi
 		return nil, err
 	}
 
+	sentenceEmbedding := nn.NewEmbedding(sentenceVocabSize, embeddingDim)
+	sentenceDecoderTemplate, err := nn.NewLSTMCell(embeddingDim, embeddingDim)
+	if err != nil {
+		return nil, err
+	}
+	sentenceClassifier, err := nn.NewLinear(embeddingDim, sentenceVocabSize)
+	if err != nil {
+		return nil, err
+	}
+
 	return &MoEClassificationModel{
-		Embedding:        embedding,
-		BertModel:        bertModel,
-		ParentClassifier: parentClassifier,
-		ChildClassifier:  childClassifier,
-		BertConfig:       bertConfig,
+		Embedding:             embedding,
+		BertModel:             bertModel,
+		ParentClassifier:      parentClassifier,
+		ChildClassifier:       childClassifier,
+		SentenceEmbedding:     sentenceEmbedding,
+		SentenceDecoderTemplate: sentenceDecoderTemplate,
+		SentenceClassifier:    sentenceClassifier,
+		BertConfig:            bertConfig,
 	}, nil
 }
 
 func (m *MoEClassificationModel) SetMode(training bool) {
 }
 
-func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tensor, *tensor.Tensor, error) {
+func (m *MoEClassificationModel) Forward(inputs ...*tensor.Tensor) (*tensor.Tensor, *tensor.Tensor, *tensor.Tensor, error) {
 	inputIDs := inputs[0]
+	targetSentenceIDs := inputs[1] // New: target sentence for teacher forcing
 
 	batchSize, seqLength := inputIDs.Shape[0], inputIDs.Shape[1]
 
-	// Create dummy tokenTypeIDs, posTagIDs, nerTagIDs for BertModel
+	tokenTypeIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false)
+	posTagIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false)
+	nerTagIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false)
 
-	tokenTypeIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false) // All zeros for now
-	posTagIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false)    // All zeros for now
-	nerTagIDs := tensor.NewTensor([]int{batchSize, seqLength}, make([]float64, batchSize*seqLength), false)    // All zeros for now
-
-	// Pass inputIDs through BertModel to get contextualized embeddings
 	bertOutput, err := m.BertModel.Forward(inputIDs, tokenTypeIDs, posTagIDs, nerTagIDs)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bert model forward failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("bert model forward failed: %w", err)
 	}
 
-	// Extract the output of the first token (CLS token) for classification
-	clsTokenOutput, err := bertOutput.Slice(1, 0, 1) // Slice along the sequence length dimension
+	clsTokenOutput, err := bertOutput.Slice(1, 0, 1)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to slice CLS token output: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to slice CLS token output: %w", err)
 	}
 
 	clsTokenOutputReshaped, err := clsTokenOutput.Reshape([]int{batchSize, m.BertConfig.HiddenSize})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reshape CLS token output: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to reshape CLS token output: %w", err)
 	}
 
 	parentLogits, err := m.ParentClassifier.Forward(clsTokenOutputReshaped)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parent classifier forward failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("parent classifier forward failed: %w", err)
 	}
 
 	childLogits, err := m.ChildClassifier.Forward(clsTokenOutputReshaped)
 	if err != nil {
-		return nil, nil, fmt.Errorf("child classifier forward failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("child classifier forward failed: %w", err)
 	}
 
-	return parentLogits, childLogits, nil
+	// Decoder part
+	targetSeqLen := targetSentenceIDs.Shape[1]
+	sentenceVocabSize := m.SentenceClassifier.Weights.Shape[1]
+	decoderHidden := clsTokenOutputReshaped
+	decoderCell := tensor.NewTensor(decoderHidden.Shape, make([]float64, len(decoderHidden.Data)), true) // Initial cell state
+
+	allLstmOutputs := make([]*tensor.Tensor, targetSeqLen)
+	m.decoderStates = make([]*DecoderStepState, targetSeqLen)
+
+	for t := 0; t < targetSeqLen; t++ {
+		decoderInputData := make([]float64, batchSize)
+		for b := 0; b < batchSize; b++ {
+			decoderInputData[b] = targetSentenceIDs.Data[b*targetSeqLen+t]
+		}
+		decoderInput := tensor.NewTensor([]int{batchSize, 1}, decoderInputData, true)
+
+		embedded, err := m.SentenceEmbedding.Forward(decoderInput)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("decoder embedding failed: %w", err)
+		}
+
+		embeddedReshaped, err := embedded.Reshape([]int{batchSize, m.BertConfig.HiddenSize})
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("decoder embedding reshape failed: %w", err)
+		}
+
+		cell := &nn.LSTMCell{
+			InputSize:  m.SentenceDecoderTemplate.InputSize,
+			HiddenSize: m.SentenceDecoderTemplate.HiddenSize,
+			Wf:         m.SentenceDecoderTemplate.Wf,
+			Wi:         m.SentenceDecoderTemplate.Wi,
+			Wc:         m.SentenceDecoderTemplate.Wc,
+			Wo:         m.SentenceDecoderTemplate.Wo,
+			Bf:         m.SentenceDecoderTemplate.Bf,
+			Bi:         m.SentenceDecoderTemplate.Bi,
+			Bc:         m.SentenceDecoderTemplate.Bc,
+			Bo:         m.SentenceDecoderTemplate.Bo,
+		}
+
+		lstmOutput, c, err := cell.Forward(embeddedReshaped, decoderHidden, decoderCell)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("decoder lstm failed: %+v", err)
+		}
+
+		m.decoderStates[t] = &DecoderStepState{
+			LSTMCell:      cell,
+			EmbeddedInput: embeddedReshaped,
+			DecoderHidden: decoderHidden,
+			DecoderCell:   decoderCell,
+		}
+
+		decoderHidden = lstmOutput
+		decoderCell = c
+		allLstmOutputs[t] = lstmOutput
+	}
+
+	// Concatenate all lstmOutputs
+	concatenatedLstmOutputsData := make([]float64, batchSize*targetSeqLen*m.BertConfig.HiddenSize)
+	for t := 0; t < targetSeqLen; t++ {
+		copy(concatenatedLstmOutputsData[t*batchSize*m.BertConfig.HiddenSize:(t+1)*batchSize*m.BertConfig.HiddenSize], allLstmOutputs[t].Data)
+	}
+	concatenatedLstmOutputs := tensor.NewTensor([]int{batchSize * targetSeqLen, m.BertConfig.HiddenSize}, concatenatedLstmOutputsData, true)
+
+	// Pass concatenated outputs to SentenceClassifier
+	predictions, err := m.SentenceClassifier.Forward(concatenatedLstmOutputs)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder output linear layer failed: %w", err)
+	}
+
+	// Reshape predictions back to [batchSize, targetSeqLen, sentenceVocabSize]
+	decoderOutputs, err := predictions.Reshape([]int{batchSize, targetSeqLen, sentenceVocabSize})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to reshape decoder outputs: %w", err)
+	}
+
+	return parentLogits, childLogits, decoderOutputs, nil
 }
 
-func (m *MoEClassificationModel) Backward(parentGrad, childGrad *tensor.Tensor) error {
-	err := m.ParentClassifier.Backward(parentGrad)
+func (m *MoEClassificationModel) Backward(parentGrad, childGrad, sentenceGrad *tensor.Tensor) error {
+	// Backward for sentence generation
+	reshapedSentenceGrad, err := sentenceGrad.Reshape([]int{sentenceGrad.Shape[0] * sentenceGrad.Shape[1], sentenceGrad.Shape[2]})
+	if err != nil {
+		return fmt.Errorf("failed to reshape sentenceGrad for SentenceClassifier backward: %w", err)
+	}
+	err = m.SentenceClassifier.Backward(reshapedSentenceGrad)
+	if err != nil {
+		return fmt.Errorf("sentence classifier backward failed: %w", err)
+	}
+
+	gradAllLstmOutputs := m.SentenceClassifier.Input().Grad
+	batchSize := sentenceGrad.Shape[0]
+	targetSeqLen := sentenceGrad.Shape[1]
+	hiddenSize := m.BertConfig.HiddenSize
+
+	gradDecoderHidden := tensor.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), true)
+	gradDecoderCell := tensor.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), true)
+
+	for t := targetSeqLen - 1; t >= 0; t-- {
+		stepState := m.decoderStates[t]
+		cell := stepState.LSTMCell
+
+		offset := t * batchSize * hiddenSize
+		gradLstmOutput := tensor.NewTensor(
+			[]int{batchSize, hiddenSize},
+			gradAllLstmOutputs.Data[offset:offset+batchSize*hiddenSize],
+			true,
+		)
+		gradLstmOutput.Add(gradDecoderHidden)
+
+		err := cell.Backward(gradLstmOutput, gradDecoderCell)
+		if err != nil {
+			return fmt.Errorf("sentence decoder backward failed at step %d: %w", t, err)
+		}
+
+		gradDecoderHidden = cell.PrevHidden.Grad
+		gradDecoderCell = cell.PrevCell.Grad
+
+		err = m.SentenceEmbedding.Backward(cell.InputTensor.Grad)
+		if err != nil {
+			return fmt.Errorf("sentence embedding backward failed at step %d: %w", t, err)
+		}
+	}
+
+	// Backward for classifiers
+	err = m.ParentClassifier.Backward(parentGrad)
 	if err != nil {
 		return fmt.Errorf("parent classifier backward failed: %w", err)
 	}
@@ -113,15 +255,13 @@ func (m *MoEClassificationModel) Backward(parentGrad, childGrad *tensor.Tensor) 
 		return fmt.Errorf("child classifier backward failed: %w", err)
 	}
 
-	// Since ParentClassifier and ChildClassifier share the same input tensor,
-	// and Linear.Backward accumulates gradients, the gradient is already summed
-	// in the input tensor's Grad field.
 	clsTokenGrad := m.ParentClassifier.Input().Grad
+	clsTokenGrad.Add(gradDecoderHidden) // Add gradient from decoder's initial hidden state
 
 	bertGrad := tensor.NewTensor([]int{clsTokenGrad.Shape[0], m.BertConfig.MaxPositionEmbeddings, m.BertConfig.HiddenSize}, make([]float64, clsTokenGrad.Shape[0]*m.BertConfig.MaxPositionEmbeddings*m.BertConfig.HiddenSize), false)
 
-	batchSize := clsTokenGrad.Shape[0]
-	hiddenSize := clsTokenGrad.Shape[1]
+	batchSize = clsTokenGrad.Shape[0]
+	hiddenSize = clsTokenGrad.Shape[1]
 
 	for i := 0; i < batchSize; i++ {
 		copy(bertGrad.Data[i*m.BertConfig.MaxPositionEmbeddings*hiddenSize:i*m.BertConfig.MaxPositionEmbeddings*hiddenSize+hiddenSize], clsTokenGrad.Data[i*hiddenSize:(i+1)*hiddenSize])
@@ -137,12 +277,14 @@ func (m *MoEClassificationModel) Backward(parentGrad, childGrad *tensor.Tensor) 
 
 func (m *MoEClassificationModel) Parameters() []*tensor.Tensor {
 	var params []*tensor.Tensor
-	// Only include BertModel parameters if it's not nil
 	if m.BertModel != nil {
 		params = append(params, m.BertModel.Parameters()...)
 	}
 	params = append(params, m.ParentClassifier.Parameters()...)
 	params = append(params, m.ChildClassifier.Parameters()...)
+	params = append(params, m.SentenceEmbedding.Parameters()...)
+	params = append(params, m.SentenceDecoderTemplate.Parameters()...)
+	params = append(params, m.SentenceClassifier.Parameters()...)
 	return params
 }
 
@@ -179,7 +321,13 @@ func LoadMoEClassificationModelFromGOB(filePath string, vocabSize, numParentClas
 	var loadedModel MoEClassificationModel
 	err = decoder.Decode(&loadedModel)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding MoE model from gob: %w", err)
+		return nil, fmt.Errorf("error decoding MoE model from gob: %w. It's possible the model file was created with a different training script (e.g. train_moe instead of train_intent_classifier)", err)
+	}
+
+	// Check if the loaded model is of the correct type.
+	// If BertConfig.HiddenSize is 0, it's likely that the wrong model type was loaded.
+	if loadedModel.BertConfig.HiddenSize == 0 {
+		return nil, fmt.Errorf("loaded model BertConfig has a HiddenSize of 0, which is invalid. It's likely that the model file at %s was created with a different training script (e.g. train_moe) than the one expected by this inference tool (train_intent_classifier)", filePath)
 	}
 
 	// --- Start of explicit BertModel re-creation and weight copying ---

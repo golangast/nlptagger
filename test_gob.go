@@ -25,8 +25,10 @@ func main_test() {
 	numExperts := 2
 	parentVocabSize := 10
 	childVocabSize := 5
+	sentenceVocabSize := 20
+	maxAttentionHeads := 1
 
-	model, err := moe.NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize)
+	model, err := moe.NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads, nil)
 	if err != nil {
 		log.Fatalf("Failed to create new IntentMoE model: %v", err)
 	}
@@ -81,7 +83,8 @@ func main_test() {
 
 	// Test forward pass with dummy input
 	dummyInput := tensor.NewTensor([]int{1, 32}, make([]float64, 1*32), false)
-	_, _, err = loadedModel.Forward(dummyInput)
+	dummyInput2 := tensor.NewTensor([]int{1, 32}, make([]float64, 1*32), false)
+	_, _, _, _, err = loadedModel.Forward(dummyInput, dummyInput2)
 	if err != nil {
 		log.Fatalf("Forward pass on loaded model failed: %v", err)
 	}

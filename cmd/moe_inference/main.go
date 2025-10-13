@@ -128,7 +128,7 @@ func main() {
 		log.Fatalf("Failed to create tokenizer: %w", err)
 	}
 
-	// Load the trained IntentMoE model
+	// Load the trained MoEClassificationModel model
 	model, err := moe.LoadIntentMoEModelFromGOB(moeModelPath)
 	if err != nil {
 		log.Fatalf("Failed to load MoE model: %v", err)
@@ -146,7 +146,6 @@ func main() {
 	log.Printf("Running MoE inference for query: \"%s\"", *query)
 
 	// Encode the query
-
 	tokenIDs, err := tokenizer.Encode(*query)
 	if err != nil {
 		log.Fatalf("Failed to encode query: %v", err)
@@ -166,8 +165,16 @@ func main() {
 	}
 	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
 
+	// Create a dummy target tensor for inference, as the Forward method expects two inputs.
+	// The actual content of this tensor won't be used for parent/child intent classification.
+	dummyTargetTokenIDs := make([]float64, *maxSeqLength)
+	for i := 0; i < *maxSeqLength; i++ {
+		dummyTargetTokenIDs[i] = float64(vocabulary.PaddingTokenID)
+	}
+	dummyTargetTensor := tensor.NewTensor([]int{1, *maxSeqLength}, dummyTargetTokenIDs, false)
+
 	// Forward pass
-	parentLogits, childLogits, err := model.Forward(inputTensor)
+	parentLogits, childLogits, _, _, err := model.Forward(inputTensor, dummyTargetTensor)
 	if err != nil {
 		log.Fatalf("MoE model forward pass failed: %v", err)
 	}

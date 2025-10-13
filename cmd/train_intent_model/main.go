@@ -55,6 +55,7 @@ func main() {
 	const queryVocabPath = "gob_models/query_vocabulary.gob"
 	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
 	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
+	const sentenceVocabPath = "gob_models/sentence_vocabulary.gob"
 	const modelSavePath = "gob_models/moe_classification_model.gob"
 
 	// Load training data
@@ -82,25 +83,35 @@ func main() {
 		childIntentVocab = mainvocab.NewVocabulary()
 	}
 
-	
+	sentenceVocab, err := mainvocab.LoadVocabulary(sentenceVocabPath)
+	if err != nil {
+		log.Println("Failed to load sentence vocabulary, creating a new one.")
+		sentenceVocab = mainvocab.NewVocabulary()
+	}
 
-	 	for _, example := range *trainingData {
+	for _, example := range *trainingData {
 		words := strings.Fields(strings.ToLower(example.Query))
 		for _, word := range words {
 			queryVocab.AddToken(word)
 		}
 		parentIntentVocab.AddToken(example.ParentIntent)
 		childIntentVocab.AddToken(example.ChildIntent)
+		sentenceWords := strings.Fields(strings.ToLower(example.Sentence))
+		for _, word := range sentenceWords {
+			sentenceVocab.AddToken(word)
+		}
 	}
 
 	// Save vocabularies
 	queryVocab.Save(queryVocabPath)
 	parentIntentVocab.Save(parentIntentVocabPath)
 	childIntentVocab.Save(childIntentVocabPath)
+	sentenceVocab.Save(sentenceVocabPath)
 
 	log.Printf("Query vocabulary size: %d", queryVocab.Size())
 	log.Printf("Parent intent vocabulary size: %d", parentIntentVocab.Size())
 	log.Printf("Child intent vocabulary size: %d", childIntentVocab.Size())
+	log.Printf("Sentence vocabulary size: %d", sentenceVocab.Size())
 
 	// Create model
 	model, err := moemodel.NewMoEClassificationModel(
@@ -108,6 +119,7 @@ func main() {
 		64, // embeddingDim
 		parentIntentVocab.Size(),
 		childIntentVocab.Size(),
+		sentenceVocab.Size(),
 		2, // numExperts
 		1, // k
 		32, // maxSeqLength
@@ -117,7 +129,7 @@ func main() {
 	}
 
 	// Train the model
-	TrainIntentModel(model, trainingData, queryVocab, parentIntentVocab, childIntentVocab, 100, 0.001, 32, 32)
+	TrainIntentModel(model, trainingData, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab, 100, 0.001, 32, 32)
 
 	// Save the trained model
 	log.Printf("Saving MoE Classification model to %s", modelSavePath)
@@ -130,7 +142,7 @@ func main() {
 }
 
 // TrainIntentModel trains the MoEClassificationModel for intent classification.
-func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, epochs int, learningRate float64, batchSize int, maxSeqLength int) {
+func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, epochs int, learningRate float64, batchSize int, maxSeqLength int) {
 	optimizer := NewOptimizer(model.Parameters(), learningRate, 5.0)
 
 	for epoch := 0; epoch < epochs; epoch++ {
@@ -145,7 +157,7 @@ func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTraini
 			}
 			batch := (*data)[i:end]
 
-			loss, err := trainIntentModelBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, maxSeqLength)
+			loss, err := trainIntentModelBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab, maxSeqLength)
 			if err != nil {
 				log.Printf("Error training batch: %v", err)
 				continue
@@ -160,7 +172,7 @@ func TrainIntentModel(model *moemodel.MoEClassificationModel, data *IntentTraini
 }
 
 // trainIntentModelBatch performs a single training step on a batch of intent data.
-func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, maxSeqLength int) (float64, error) {
+func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, maxSeqLength int) (float64, error) {
 	optimizer.ZeroGrad()
 
 	batchSize := len(batch)
@@ -168,10 +180,16 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 	inputIDsBatch := make([]int, batchSize*maxSeqLength)
 	parentIntentIDs := make([]int, batchSize)
 	childIntentIDs := make([]int, batchSize)
+	targetSentenceIDsBatch := make([]int, batchSize*maxSeqLength)
 
 	tokenizer, err := tokenizer.NewTokenizer(queryVocab)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create tokenizer: %w", err)
+	}
+
+	sentenceTokenizer, err := tokenizer.NewTokenizer(sentenceVocab)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create sentence tokenizer: %w", err)
 	}
 
 	for i, example := range batch {
@@ -191,28 +209,46 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 		}
 		copy(inputIDsBatch[i*maxSeqLength:(i+1)*maxSeqLength], tokenIDs)
 
+		sentenceTokenIDs, err := sentenceTokenizer.Encode(example.Sentence)
+		if err != nil {
+			return 0, fmt.Errorf("sentence tokenization failed for item %d: %w", i, err)
+		}
+
+		if len(sentenceTokenIDs) > maxSeqLength {
+			sentenceTokenIDs = sentenceTokenIDs[:maxSeqLength]
+		} else {
+			padding := make([]int, maxSeqLength-len(sentenceTokenIDs))
+			for j := range padding {
+				padding[j] = sentenceVocab.PaddingTokenID
+			}
+			sentenceTokenIDs = append(sentenceTokenIDs, padding...)
+		}
+		copy(targetSentenceIDsBatch[i*maxSeqLength:(i+1)*maxSeqLength], sentenceTokenIDs)
+
 		parentIntentIDs[i] = parentIntentVocab.GetTokenID(example.ParentIntent)
 		childIntentIDs[i] = childIntentVocab.GetTokenID(example.ChildIntent)
 	}
 
 	inputTensor := NewTensor([]int{batchSize, maxSeqLength}, convertIntsToFloat64s(inputIDsBatch), false)
+	targetSentenceTensor := NewTensor([]int{batchSize, maxSeqLength}, convertIntsToFloat64s(targetSentenceIDsBatch), false)
 
-	parentLogits, childLogits, err := model.Forward(inputTensor, nil, nil, nil)
+	parentLogits, childLogits, sentenceLogits, err := model.Forward(inputTensor, targetSentenceTensor)
 	if err != nil {
 		return 0, fmt.Errorf("model forward pass failed: %w", err)
 	}
 
 	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDs, -1)
 	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDs, -1)
+	sentenceLoss, sentenceGrad := SequenceCrossEntropyLoss(sentenceLogits, targetSentenceIDsBatch, sentenceVocab.PaddingTokenID)
 
-	totalLoss := parentLoss + childLoss
+	totalLoss := parentLoss + childLoss + sentenceLoss
 
 	// Backward pass
-	if parentGrad == nil || childGrad == nil {
+	if parentGrad == nil || childGrad == nil || sentenceGrad == nil {
 		log.Printf("Skipping backward pass due to nil gradient")
 		return totalLoss, nil
 	}
-	err = model.Backward(parentGrad, childGrad)
+	err = model.Backward(parentGrad, childGrad, sentenceGrad)
 	if err != nil {
 		return 0, fmt.Errorf("model backward pass failed: %w", err)
 	}
@@ -228,4 +264,50 @@ func convertIntsToFloat64s(input []int) []float64 {
 		output[i] = float64(v)
 	}
 	return output
+}
+
+func SequenceCrossEntropyLoss(predictions *Tensor, targets []int, paddingID int) (float64, *Tensor) {
+	batchSize := predictions.Shape[0]
+	seqLen := predictions.Shape[1]
+	vocabSize := predictions.Shape[2]
+
+	predictionsFlat, _ := predictions.Reshape([]int{batchSize * seqLen, vocabSize})
+	logSoftmax, _ := predictionsFlat.LogSoftmax(1)
+
+	targetsFlat := targets
+
+	totalLoss := 0.0
+	numTokens := 0
+
+	grad := make([]float64, len(logSoftmax.Data))
+
+	for i := 0; i < batchSize*seqLen; i++ {
+		targetID := targetsFlat[i]
+
+		if targetID == paddingID {
+			continue
+		}
+
+		numTokens++
+		predictedLogProb := logSoftmax.Data[i*vocabSize+targetID]
+		totalLoss -= predictedLogProb
+
+		for j := 0; j < vocabSize; j++ {
+			prob := logSoftmax.Data[i*vocabSize+j]
+			if j == targetID {
+				grad[i*vocabSize+j] = prob - 1
+			} else {
+				grad[i*vocabSize+j] = prob
+			}
+		}
+	}
+
+	if numTokens == 0 {
+		return 0.0, nil
+	}
+
+	avgLoss := totalLoss / float64(numTokens)
+	gradTensor := NewTensor(logSoftmax.Shape, grad, true)
+
+	return avgLoss, gradTensor
 }

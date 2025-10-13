@@ -1,15 +1,13 @@
 package moe
 
 import (
-	"encoding/gob"
+	
 	"fmt"
 	"nlptagger/neural/nn"
 	"nlptagger/neural/tensor"
 )
 
-func init() {
-	gob.Register((*FeedForwardExpert)(nil))
-}
+
 
 // FeedForwardExpert is a simple feed-forward neural network that implements the Expert interface.
 type FeedForwardExpert struct {

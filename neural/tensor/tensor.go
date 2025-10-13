@@ -253,23 +253,23 @@ func (t *Tensor) Add(other *Tensor) (*Tensor, error) {
 
 	// If either input requires gradient, set up the backward pass
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &addOperation{t, other}
+		resultTensor.Creator = &AddOperation{t, other}
 	}
 
 	return resultTensor, nil
 }
 
 // addOperation represents the addition operation for backward pass.
-type addOperation struct {
+type AddOperation struct {
 	A *Tensor
 	B *Tensor
 }
 
-func (op *addOperation) Inputs() []*Tensor {
+func (op *AddOperation) Inputs() []*Tensor {
 	return []*Tensor{op.A, op.B}
 }
 
-func (op *addOperation) Backward(grad *Tensor) error {
+func (op *AddOperation) Backward(grad *Tensor) error {
 	// Gradient of addition is simply passing the gradient through to both inputs.
 	// Assuming grad has the same shape as the output of the Add operation.
 
@@ -358,7 +358,7 @@ rowsA := t.Shape[0]
 
 		resultTensor := NewTensor([]int{resultRows, resultCols}, resultData, t.RequiresGrad || other.RequiresGrad)
 		if resultTensor.RequiresGrad {
-			resultTensor.Creator = &matmulOperation{t, other}
+			resultTensor.Creator = &MatmulOperation{t, other}
 		}
 		return resultTensor, nil
 	}
@@ -377,7 +377,8 @@ batchSize := t.Shape[0]
 	
 rowsA := t.Shape[2]
 		colsA := t.Shape[3]
-			rowsB := other.Shape[2]
+	
+		rowsB := other.Shape[2]
 		colsB := other.Shape[3]
 
 		resultRows := rowsA
@@ -407,7 +408,7 @@ rowsA := t.Shape[2]
 
 		resultTensor := NewTensor(resultShape, resultData, t.RequiresGrad || other.RequiresGrad)
 		if resultTensor.RequiresGrad {
-			resultTensor.Creator = &matmulOperation{t, other}
+			resultTensor.Creator = &MatmulOperation{t, other}
 		}
 		return resultTensor, nil
 	}
@@ -415,17 +416,17 @@ rowsA := t.Shape[2]
 	return nil, fmt.Errorf("MatMul operation currently only supports 2D or 4D tensors. Got %v and %v", t.Shape, other.Shape)
 }
 
-// matmulOperation represents the matrix multiplication operation for backward pass.
-type matmulOperation struct {
+// MatmulOperation represents the matrix multiplication operation for backward pass.
+type MatmulOperation struct {
 	A *Tensor
 	B *Tensor
 }
 
-func (op *matmulOperation) Inputs() []*Tensor {
+func (op *MatmulOperation) Inputs() []*Tensor {
 	return []*Tensor{op.A, op.B}
 }
 
-func (op *matmulOperation) Backward(grad *Tensor) error {
+func (op *MatmulOperation) Backward(grad *Tensor) error {
 	// Handle 2D case
 	if len(op.A.Shape) == 2 {
 		// dL/dA = grad * B^T
@@ -634,22 +635,22 @@ func (t *Tensor) AddWithBroadcast(other *Tensor) (*Tensor, error) {
 	resultTensor := NewTensor(resultShape, resultData, t.RequiresGrad || other.RequiresGrad)
 
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &addWithBroadcastOperation{t, other}
+		resultTensor.Creator = &AddWithBroadcastOperation{t, other}
 	}
 
 	return resultTensor, nil
 }
 
-type addWithBroadcastOperation struct {
+type AddWithBroadcastOperation struct {
 	A *Tensor
 	B *Tensor
 }
 
-func (op *addWithBroadcastOperation) Inputs() []*Tensor {
+func (op *AddWithBroadcastOperation) Inputs() []*Tensor {
 	return []*Tensor{op.A, op.B}
 }
 
-func (op *addWithBroadcastOperation) Backward(grad *Tensor) error {
+func (op *AddWithBroadcastOperation) Backward(grad *Tensor) error {
 	if op.A.RequiresGrad {
 		if op.A.Grad == nil {
 			op.A.Grad = NewTensor(op.A.Shape, make([]float64, len(op.A.Data)), false)
@@ -815,7 +816,7 @@ func (t *Tensor) Softmax(axis int) (*Tensor, error) {
 	outputTensor := NewTensor(t.Shape, outputData, t.RequiresGrad)
 
 	if outputTensor.RequiresGrad {
-		outputTensor.Creator = &softmaxOperation{t, outputTensor, axis}
+		outputTensor.Creator = &SoftmaxOperation{t, outputTensor, axis}
 	}
 
 	// Calculate the size of the dimension along which softmax is applied
@@ -862,18 +863,18 @@ func (t *Tensor) Softmax(axis int) (*Tensor, error) {
 	return outputTensor, nil
 }
 
-// softmaxOperation represents the softmax operation for backward pass.
-type softmaxOperation struct {
+// SoftmaxOperation represents the softmax operation for backward pass.
+type SoftmaxOperation struct {
 	Input  *Tensor
 	Output *Tensor
 	Axis   int
 }
 
-func (op *softmaxOperation) Inputs() []*Tensor {
+func (op *SoftmaxOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *softmaxOperation) Backward(grad *Tensor) error {
+func (op *SoftmaxOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -894,6 +895,47 @@ func (op *softmaxOperation) Backward(grad *Tensor) error {
 		outerSize *= op.Input.Shape[i]
 	}
 	innerSize := 1
+	for i := resolvedAxis + 1; i < len(op.Input.Shape); i++ {
+		innerSize *= op.Input.Shape[i]
+	}
+
+	for i := 0; i < outerSize; i++ {
+		for j := 0; j < innerSize; j++ {
+			// Calculate sum_k(dL/dy_k * y_k) for the current slice
+			sum_dL_dy_y := 0.0
+			for k := 0; k < axisDimSize; k++ {
+				idx := i*axisDimSize*innerSize + k*innerSize + j
+				sum_dL_dy_y += grad.Data[idx] * op.Output.Data[idx]
+			}
+
+			// Calculate dL/dx_i for the current slice
+			for k := 0; k < axisDimSize; k++ {
+				idx := i*axisDimSize*innerSize + k*innerSize + j
+				op.Input.Grad.Data[idx] += op.Output.Data[idx] * (grad.Data[idx] - sum_dL_dy_y)
+			}
+		}
+	}
+
+	if !op.Input.RequiresGrad {
+		return nil
+	}
+	if op.Input.Grad == nil {
+		op.Input.Grad = NewTensor(op.Input.Shape, make([]float64, len(op.Input.Data)), false)
+	}
+
+	// This backward pass is simplified and assumes softmax is applied along the last dimension
+	// of a 2D or 4D tensor, which is common in transformers.
+	resolvedAxis = op.Axis
+	if resolvedAxis < 0 {
+		resolvedAxis = len(op.Input.Shape) + resolvedAxis
+	}
+
+	axisDimSize = op.Input.Shape[resolvedAxis]
+	outerSize = 1
+	for i := 0; i < resolvedAxis; i++ {
+		outerSize *= op.Input.Shape[i]
+	}
+	innerSize = 1
 	for i := resolvedAxis + 1; i < len(op.Input.Shape); i++ {
 		innerSize *= op.Input.Shape[i]
 	}
@@ -1071,22 +1113,22 @@ func (t *Tensor) DivScalar(val float64) (*Tensor, error) {
 
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &divScalarOperation{t, val}
+		resultTensor.Creator = &DivScalarOperation{t, val}
 	}
 	return resultTensor, nil
 }
 
 // divScalarOperation represents the scalar division operation for backward pass.
-type divScalarOperation struct {
+type DivScalarOperation struct {
 	Input  *Tensor
 	Scalar float64
 }
 
-func (op *divScalarOperation) Inputs() []*Tensor {
+func (op *DivScalarOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *divScalarOperation) Backward(grad *Tensor) error {
+func (op *DivScalarOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1109,22 +1151,22 @@ func (t *Tensor) MulScalar(val float64) (*Tensor, error) {
 
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &mulScalarOperation{t, val}
+		resultTensor.Creator = &MulScalarOperation{t, val}
 	}
 	return resultTensor, nil
 }
 
-// mulScalarOperation represents the scalar multiplication operation for backward pass.
-type mulScalarOperation struct {
+// MulScalarOperation represents the scalar multiplication operation for backward pass.
+type MulScalarOperation struct {
 	Input  *Tensor
 	Scalar float64
 }
 
-func (op *mulScalarOperation) Inputs() []*Tensor {
+func (op *MulScalarOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *mulScalarOperation) Backward(grad *Tensor) error {
+func (op *MulScalarOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1147,22 +1189,22 @@ func (t *Tensor) Select(index int) (*Tensor, error) {
 
 	resultTensor := NewTensor([]int{1}, []float64{t.Data[index]}, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &selectOperation{t, index}
+		resultTensor.Creator = &SelectOperation{t, index}
 	}
 	return resultTensor, nil
 }
 
 // selectOperation represents the selection of a single element for backward pass.
-type selectOperation struct {
+type SelectOperation struct {
 	Input *Tensor
 	Index int
 }
 
-func (op *selectOperation) Inputs() []*Tensor {
+func (op *SelectOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *selectOperation) Backward(grad *Tensor) error {
+func (op *SelectOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1184,21 +1226,21 @@ func (t *Tensor) Tanh() (*Tensor, error) {
 
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &tanhOperation{t}
+		resultTensor.Creator = &TanhOperation{t}
 	}
 	return resultTensor, nil
 }
 
 // tanhOperation represents the tanh operation for backward pass.
-type tanhOperation struct {
+type TanhOperation struct {
 	Input *Tensor
 }
 
-func (op *tanhOperation) Inputs() []*Tensor {
+func (op *TanhOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *tanhOperation) Backward(grad *Tensor) error {
+func (op *TanhOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1223,21 +1265,21 @@ func (t *Tensor) Sigmoid() (*Tensor, error) {
 
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &sigmoidOperation{t}
+		resultTensor.Creator = &SigmoidOperation{t}
 	}
 	return resultTensor, nil
 }
 
-// sigmoidOperation represents the sigmoid operation for backward pass.
-type sigmoidOperation struct {
+// SigmoidOperation represents the sigmoid operation for backward pass.
+type SigmoidOperation struct {
 	Input *Tensor
 }
 
-func (op *sigmoidOperation) Inputs() []*Tensor {
+func (op *SigmoidOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *sigmoidOperation) Backward(grad *Tensor) error {
+func (op *SigmoidOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1266,21 +1308,21 @@ func (t *Tensor) Log() (*Tensor, error) {
 
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &logOperation{t}
+		resultTensor.Creator = &LogOperation{t}
 	}
 	return resultTensor, nil
 }
 
 // logOperation represents the natural logarithm operation for backward pass.
-type logOperation struct {
+type LogOperation struct {
 	Input *Tensor
 }
 
-func (op *logOperation) Inputs() []*Tensor {
+func (op *LogOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *logOperation) Backward(grad *Tensor) error {
+func (op *LogOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1298,14 +1340,13 @@ func (t *Tensor) Get(indices []int) float64 {
 	if len(indices) != len(t.Shape) {
 		panic(fmt.Sprintf("Get: number of indices %d does not match tensor dimensions %d", len(indices), len(t.Shape)))
 	}
+	strides := calculateStrides(t.Shape)
 	flatIndex := 0
-	multiplier := 1
-	for i := len(t.Shape) - 1; i >= 0; i-- {
-		if indices[i] < 0 || indices[i] >= t.Shape[i] {
-			panic(fmt.Sprintf("Get: index %d out of bounds for dimension %d (size %d)", indices[i], i, t.Shape[i]))
+	for i, index := range indices {
+		if index < 0 || index >= t.Shape[i] {
+			panic(fmt.Sprintf("Get: index %d out of bounds for dimension %d (size %d)", index, i, t.Shape[i]))
 		}
-		flatIndex += indices[i] * multiplier
-		multiplier *= t.Shape[i]
+		flatIndex += index * strides[i]
 	}
 	return t.Data[flatIndex]
 }
@@ -1314,14 +1355,13 @@ func (t *Tensor) Set(indices []int, value float64) {
 	if len(indices) != len(t.Shape) {
 		panic(fmt.Sprintf("Set: number of indices %d does not match tensor dimensions %d", len(indices), len(t.Shape)))
 	}
+	strides := calculateStrides(t.Shape)
 	flatIndex := 0
-	multiplier := 1
-	for i := len(t.Shape) - 1; i >= 0; i-- {
-		if indices[i] < 0 || indices[i] >= t.Shape[i] {
-			panic(fmt.Sprintf("Set: index %d out of bounds for dimension %d (size %d)", indices[i], i, t.Shape[i]))
+	for i, index := range indices {
+		if index < 0 || index >= t.Shape[i] {
+			panic(fmt.Sprintf("Set: index %d out of bounds for dimension %d (size %d)", index, i, t.Shape[i]))
 		}
-		flatIndex += indices[i] * multiplier
-		multiplier *= t.Shape[i]
+		flatIndex += index * strides[i]
 	}
 	t.Data[flatIndex] = value
 }
@@ -1356,23 +1396,23 @@ func (t *Tensor) Mul(other *Tensor) (*Tensor, error) {
 	resultTensor := NewTensor(t.Shape, resultData, t.RequiresGrad || other.RequiresGrad)
 
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &mulOperation{t, other}
+		resultTensor.Creator = &MulOperation{t, other}
 	}
 
 	return resultTensor, nil
 }
 
 // mulOperation represents the element-wise multiplication operation for backward pass.
-type mulOperation struct {
+type MulOperation struct {
 	A *Tensor
 	B *Tensor
 }
 
-func (op *mulOperation) Inputs() []*Tensor {
+func (op *MulOperation) Inputs() []*Tensor {
 	return []*Tensor{op.A, op.B}
 }
 
-func (op *mulOperation) Backward(grad *Tensor) error {
+func (op *MulOperation) Backward(grad *Tensor) error {
 	// dL/dA = grad * B
 	if op.A.RequiresGrad {
 		if op.A.Grad == nil {
@@ -1441,13 +1481,13 @@ func (t *Tensor) Sum(axis int) (*Tensor, error) {
 
 	resultTensor := NewTensor(newShape, newData, t.RequiresGrad)
 	if resultTensor.RequiresGrad {
-		resultTensor.Creator = &sumOperation{t, axis}
+		resultTensor.Creator = &SumOperation{t, axis}
 	}
 	return resultTensor, nil
 }
 
-// sumOperation represents the sum operation for backward pass.
-type sumOperation struct {
+// SumOperation represents the sum operation for backward pass.
+type SumOperation struct {
 	Input *Tensor
 	Axis  int
 }
@@ -1471,11 +1511,11 @@ func (t *Tensor) Mean(axis int) (*Tensor, error) {
 	return meanTensor, nil
 }
 
-func (op *sumOperation) Inputs() []*Tensor {
+func (op *SumOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
 
-func (op *sumOperation) Backward(grad *Tensor) error {
+func (op *SumOperation) Backward(grad *Tensor) error {
 	if !op.Input.RequiresGrad {
 		return nil
 	}
@@ -1673,7 +1713,7 @@ func Concat(tensors []*Tensor, axis int) (*Tensor, error) {
 	for _, t := range tensors {
 		if t.RequiresGrad {
 			resultTensor.RequiresGrad = true
-			resultTensor.Creator = &concatOperation{InputTensors: tensors, Axis: axis}
+			resultTensor.Creator = &ConcatOperation{InputTensors: tensors, Axis: axis}
 			break
 		}
 	}
@@ -1681,17 +1721,17 @@ func Concat(tensors []*Tensor, axis int) (*Tensor, error) {
 	return resultTensor, nil
 }
 
-// concatOperation represents the concatenation operation for backward pass.
-type concatOperation struct {
+// ConcatOperation represents the concatenation operation for backward pass.
+type ConcatOperation struct {
 	InputTensors []*Tensor
-	Axis   int
+	Axis         int
 }
 
-func (op *concatOperation) Inputs() []*Tensor {
+func (op *ConcatOperation) Inputs() []*Tensor {
 	return op.InputTensors
 }
 
-func (op *concatOperation) Backward(grad *Tensor) error {
+func (op *ConcatOperation) Backward(grad *Tensor) error {
 	currentOffset := 0
 	for _, inputTensor := range op.InputTensors {
 		if inputTensor.RequiresGrad {
@@ -1771,17 +1811,17 @@ func Split(t *Tensor, axis int, splitSizes []int) ([]*Tensor, error) {
 }
 
 // splitOperation represents the split operation for backward pass.
-type splitOperation struct {
+type SplitOperation struct {
 	InputTensor      *Tensor
 	Axis       int
 	SplitSizes []int
 }
 
-func (op *splitOperation) Inputs() []*Tensor {
+func (op *SplitOperation) Inputs() []*Tensor {
 	return []*Tensor{op.InputTensor}
 }
 
-func (op *splitOperation) Backward(grad *Tensor) error {
+func (op *SplitOperation) Backward(grad *Tensor) error {
 	if !op.InputTensor.RequiresGrad {
 		return nil
 	}
@@ -1845,4 +1885,85 @@ func (op *splitOperation) Backward(grad *Tensor) error {
 	}
 
 	return nil
+}
+
+
+// Next moves the iterator to the next row.
+func (it *RowIterator) Next() bool {
+	it.currentRow++
+	return it.currentRow < it.rows
+}
+
+// Current returns the current row index.
+func (it *RowIterator) Current() int {
+	return it.currentRow
+}
+
+// GetRow returns a slice representing the data of the current row.
+func (it *RowIterator) GetRow(data []float64) []float64 {
+	start := it.currentRow * it.cols
+	end := start + it.cols
+	return data[start:end]
+}
+
+// SetRow sets the data of the current row from a slice.
+func (it *RowIterator) SetRow(data []float64, rowData []float64) {
+	start := it.currentRow * it.cols
+	end := start + it.cols
+	copy(data[start:end], rowData)
+}
+
+// Argmax returns the indices of the maximum values along an axis.
+func (t *Tensor) Argmax(axis int) (*Tensor, error) {
+	if axis < 0 {
+		axis = len(t.Shape) + axis
+	}
+	if axis < 0 || axis >= len(t.Shape) {
+		return nil, fmt.Errorf("axis %d out of bounds for tensor with shape %v", axis, t.Shape)
+	}
+
+	// Calculate the new shape for the output tensor
+	newShape := make([]int, 0, len(t.Shape)-1)
+	for i, dim := range t.Shape {
+		if i != axis {
+			newShape = append(newShape, dim)
+		}
+	}
+	if len(newShape) == 0 { // This happens if the input is a 1D tensor
+		newShape = []int{1}
+	}
+
+	newSize := 1
+	for _, dim := range newShape {
+		newSize *= dim
+	}
+	newData := make([]float64, newSize)
+
+	axisDimSize := t.Shape[axis]
+	outerSize := 1
+	for i := 0; i < axis; i++ {
+		outerSize *= t.Shape[i]
+	}
+	innerSize := 1
+	for i := axis + 1; i < len(t.Shape); i++ {
+		innerSize *= t.Shape[i]
+	}
+
+	for i := 0; i < outerSize; i++ {
+		for j := 0; j < innerSize; j++ {
+			maxVal := -math.MaxFloat64
+			maxIndex := 0
+			for k := 0; k < axisDimSize; k++ {
+				idx := i*axisDimSize*innerSize + k*innerSize + j
+				if t.Data[idx] > maxVal {
+					maxVal = t.Data[idx]
+					maxIndex = k
+				}
+			}
+			newIndex := i*innerSize + j
+			newData[newIndex] = float64(maxIndex)
+		}
+	}
+
+	return NewTensor(newShape, newData, false), nil
 }

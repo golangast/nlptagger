@@ -3,9 +3,16 @@ package nn
 import (
 	"fmt"
 	"math"
+	"log"
+	"os"
 
 	. "nlptagger/neural/tensor"
 )
+
+func init() {
+	log.SetOutput(os.Stderr)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 // LSTMCell represents a single LSTM cell.
 type LSTMCell struct {
@@ -18,9 +25,9 @@ type LSTMCell struct {
 	Bf, Bi, Bc, Bo *Tensor
 
 	// Stored for backward pass
-	inputTensor *Tensor
-	prevHidden  *Tensor
-	prevCell    *Tensor
+	InputTensor *Tensor
+	PrevHidden  *Tensor
+	PrevCell    *Tensor
 	ft, it, ct, ot *Tensor
 	cct         *Tensor
 }
@@ -72,9 +79,9 @@ func (c *LSTMCell) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 	input, prevHidden, prevCell := inputs[0], inputs[1], inputs[2]
 
 	// Store inputs for backward pass
-	c.inputTensor = input
-	c.prevHidden = prevHidden
-	c.prevCell = prevCell
+	c.InputTensor = input
+	c.PrevHidden = prevHidden
+	c.PrevCell = prevCell
 
 	// Concatenate input and previous hidden state
 	combined, err := Concat([]*Tensor{input, prevHidden}, 1)
@@ -160,11 +167,11 @@ func (c *LSTMCell) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 	// New hidden state
 	ct_tanh, err := ct.Tanh()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("LSTMCell.Forward: Tanh operation failed: %w", err)
 	}
 	ht, err := ot.Mul(ct_tanh)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("LSTMCell.Forward: Mul operation failed for hidden state: %w", err)
 	}
 
 	return ht, ct, nil
@@ -194,7 +201,7 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	gradIt := NewTensor(c.it.Shape, make([]float64, len(c.it.Data)), false)
 	gradCct := NewTensor(c.cct.Shape, make([]float64, len(c.cct.Data)), false)
 	for i := range gradCt.Data {
-		gradFt.Data[i] = gradCt.Data[i] * c.prevCell.Data[i]
+		gradFt.Data[i] = gradCt.Data[i] * c.PrevCell.Data[i]
 		gradIt.Data[i] = gradCt.Data[i] * c.cct.Data[i]
 		gradCct.Data[i] = gradCt.Data[i] * c.it.Data[i]
 	}
@@ -218,7 +225,7 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	}
 
 	// Gradients for weights and biases
-	combined, _ := Concat([]*Tensor{c.inputTensor, c.prevHidden}, 1)
+	combined, _ := Concat([]*Tensor{c.InputTensor, c.PrevHidden}, 1)
 	combinedT, _ := combined.Transpose(0, 1)
 
 	gradWf, _ := combinedT.MatMul(gradFt_linear)
@@ -302,9 +309,30 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	gradPrevCell, _ := gradCt.Mul(c.ft)
 
 	// Accumulate gradients for inputs
-	c.inputTensor.Grad.Add(gradInput)
-	c.prevHidden.Grad.Add(gradPrevHidden)
-	c.prevCell.Grad.Add(gradPrevCell)
+	if c.InputTensor.RequiresGrad {
+		if c.InputTensor.Grad == nil {
+			c.InputTensor.Grad = NewTensor(c.InputTensor.Shape, make([]float64, len(c.InputTensor.Data)), false)
+		}
+		for i := range c.InputTensor.Grad.Data {
+			c.InputTensor.Grad.Data[i] += gradInput.Data[i]
+		}
+	}
+	if c.PrevHidden.RequiresGrad {
+		if c.PrevHidden.Grad == nil {
+			c.PrevHidden.Grad = NewTensor(c.PrevHidden.Shape, make([]float64, len(c.PrevHidden.Data)), false)
+		}
+		for i := range c.PrevHidden.Grad.Data {
+			c.PrevHidden.Grad.Data[i] += gradPrevHidden.Data[i]
+		}
+	}
+	if c.PrevCell.RequiresGrad {
+		if c.PrevCell.Grad == nil {
+			c.PrevCell.Grad = NewTensor(c.PrevCell.Shape, make([]float64, len(c.PrevCell.Data)), false)
+		}
+		for i := range c.PrevCell.Grad.Data {
+			c.PrevCell.Grad.Data[i] += gradPrevCell.Data[i]
+		}
+	}
 
 	return nil
 }
@@ -356,22 +384,27 @@ func (l *LSTM) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 	if len(inputs) != 3 {
 		return nil, nil, fmt.Errorf("LSTM.Forward expects 3 inputs (input, prevHidden, prevCell), got %d", len(inputs))
 	}
-	input, prevHidden, prevCell := inputs[0], inputs[1], inputs[2]
+	input, initialHidden, initialCell := inputs[0], inputs[1], inputs[2] // Renamed for clarity
 
-	var ht, ct *Tensor
+	var currentHidden, currentCell *Tensor = initialHidden, initialCell // Initialize with initial states
+	var layerOutput *Tensor = input                                    // Input to the first layer
+
 	for i := 0; i < l.NumLayers; i++ {
-		layerInput := input
+		// For the first layer, layerInput is the original input.
+		// For subsequent layers, layerInput is the output (ht) of the previous layer.
 		if i > 0 {
-			layerInput = ht
+			layerOutput = currentHidden
 		}
-		ht, ct, err := l.Cells[i][0].Forward(layerInput, prevHidden, prevCell)
+
+		ht, ct, err := l.Cells[i][0].Forward(layerOutput, currentHidden, currentCell)
 		if err != nil {
+			log.Printf("LSTMCell.Forward in LSTM.Forward failed: %+v", err)
 			return nil, nil, err
 		}
-		prevHidden = ht
-		prevCell = ct
+		currentHidden = ht
+		currentCell = ct
 	}
-	return ht, ct, nil
+	return currentHidden, currentCell, nil // Return the final hidden and cell states
 }
 
 // Backward performs the backward pass for the LSTM.
@@ -383,8 +416,8 @@ func (l *LSTM) Backward(gradHt, gradCt *Tensor) error {
 		}
 		// Gradients for the previous layer's hidden and cell states
 		// are now in the Grad fields of the input tensors of the current layer's cell.
-		gradHt = l.Cells[i][0].prevHidden.Grad
-		gradCt = l.Cells[i][0].prevCell.Grad
+		gradHt = l.Cells[i][0].PrevHidden.Grad
+		gradCt = l.Cells[i][0].PrevCell.Grad
 	}
 	return nil
 }

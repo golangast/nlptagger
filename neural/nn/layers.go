@@ -62,6 +62,9 @@ func (l *Linear) Forward(inputs ...*Tensor) (*Tensor, error) {
 		return nil, fmt.Errorf("Linear.Forward expects 1 input, got %d", len(inputs))
 	}
 	input := inputs[0]
+	if input == nil { // Add this check
+		return nil, fmt.Errorf("Linear.Forward received a nil input tensor")
+	}
 	// Store input tensor for backward pass
 	l.input = input
 

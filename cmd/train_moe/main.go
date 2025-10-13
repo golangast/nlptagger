@@ -15,6 +15,7 @@ import (
 	"nlptagger/neural/moe"
 	. "nlptagger/neural/nn"
 	mainvocab "nlptagger/neural/nnu/vocab"
+	"nlptagger/neural/nnu/word2vec"
 	. "nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
 )
@@ -88,7 +89,7 @@ func TokenizeAndConvertToIDs(text string, tokenizer *tokenizer.Tokenizer, vocabu
 }
 
 // TrainIntentMoEModel trains the MoEClassificationModel.
-func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, queryTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
+func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, queryTokenizer, sentenceTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
 
 	if model == nil {
 		return errors.New("cannot train a nil model")
@@ -111,7 +112,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 			}
 			batch := (*data)[i:end]
 
-			loss, err := trainIntentMoEBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, queryTokenizer, maxSequenceLength)
+			loss, err := trainIntentMoEBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab, queryTokenizer, sentenceTokenizer, maxSequenceLength)
 			if err != nil {
 				log.Printf("Error training batch: %v", err)
 				continue // Or handle error more strictly
@@ -128,7 +129,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 }
 
 // trainIntentMoEBatch performs a single training step on a batch of data.
-func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab *mainvocab.Vocabulary, queryTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
+func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, queryTokenizer, sentenceTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
 	optimizer.ZeroGrad()
 
 	batchSize := len(batch)
@@ -136,6 +137,7 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	inputIDsBatch := make([]int, batchSize*maxSequenceLength)
 	parentIntentIDsBatch := make([]int, batchSize)
 	childIntentIDsBatch := make([]int, batchSize)
+	sentenceIDsBatch := make([]int, batchSize*maxSequenceLength)
 
 	for i, example := range batch {
 		// Tokenize and pad query
@@ -148,13 +150,21 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 		// Get parent and child intent IDs
 		parentIntentIDsBatch[i] = parentIntentVocab.GetTokenID(example.ParentIntent)
 		childIntentIDsBatch[i] = childIntentVocab.GetTokenID(example.ChildIntent)
+
+		// Tokenize and pad sentence
+		sentenceTokens, err := TokenizeAndConvertToIDs(example.Sentence, sentenceTokenizer, sentenceVocab, maxSequenceLength)
+		if err != nil {
+			return 0, fmt.Errorf("sentence tokenization failed for item %d: %w", i, err)
+		}
+		copy(sentenceIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], sentenceTokens)
 	}
 
 	// Convert input IDs to a Tensor (embeddings will be handled by the model)
 	inputTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(inputIDsBatch), false)
+	sentenceTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(sentenceIDsBatch), false)
 
 	// Forward pass through the IntentMoE model
-	parentLogits, childLogits, err := intentMoEModel.Forward(inputTensor)
+	parentLogits, childLogits, sentenceLogits, contextVector, err := intentMoEModel.Forward(inputTensor, sentenceTensor)
 	if err != nil {
 		return 0, fmt.Errorf("IntentMoE model forward pass failed: %w", err)
 	}
@@ -163,8 +173,26 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDsBatch, parentIntentVocab.PaddingTokenID)
 	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDsBatch, childIntentVocab.PaddingTokenID)
 
-	totalLoss := parentLoss + childLoss
+	// Calculate loss for the sentence
+	sentenceLoss := 0.0
+	var sentenceGrads []*Tensor
+	for t := 0; t < maxSequenceLength; t++ {
+		targets := make([]int, batchSize)
+		for i := 0; i < batchSize; i++ {
+			targets[i] = sentenceIDsBatch[i*maxSequenceLength+t]
+		}
+		loss, grad := CrossEntropyLoss(sentenceLogits[t], targets, sentenceVocab.PaddingTokenID)
+		sentenceLoss += loss
+		sentenceGrads = append(sentenceGrads, grad)
+	}
+
+	sentenceLossWeight := 0.1
+	totalLoss := parentLoss + childLoss + sentenceLoss*sentenceLossWeight
+	for _, grad := range sentenceGrads {
+		grad.MulScalar(sentenceLossWeight)
+	}
 	allGrads := []*Tensor{parentGrad, childGrad}
+	allGrads = append(allGrads, sentenceGrads...)
 
 	// Backward pass
 	err = intentMoEModel.Backward(allGrads...)
@@ -173,6 +201,20 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	}
 
 	optimizer.Step()
+
+	// Log guessed sentence
+	guessedIDs, err := intentMoEModel.GreedySearchDecode(contextVector, maxSequenceLength, sentenceVocab.GetTokenID("<s>"), sentenceVocab.GetTokenID("</s>"))
+	if err != nil {
+		log.Printf("Error decoding guessed sentence: %v", err)
+	} else {
+		guessedSentence, err := sentenceTokenizer.Decode(guessedIDs)
+		if err != nil {
+		    log.Printf("Error decoding guessed sentence: %v", err)
+		} else {
+		    log.Printf("Guessed sentence: %s", guessedSentence)
+		}
+		log.Printf("Target sentence: %s", batch[0].Sentence)
+	}
 
 	return totalLoss, nil
 }
@@ -185,14 +227,31 @@ func convertIntsToFloat64s(input []int) []float64 {
 	return output
 }
 
-func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
+func convertW2VVocab(w2vVocab map[string]int) *mainvocab.Vocabulary {
+	vocab := mainvocab.NewVocabulary()
+	vocab.WordToToken = w2vVocab
+	maxID := 0
+	for _, id := range w2vVocab {
+		if id > maxID {
+			maxID = id
+		}
+	}
+	vocab.TokenToWord = make([]string, maxID+1)
+	for token, id := range w2vVocab {
+		vocab.TokenToWord[id] = token
+	}
+	return vocab
+}
+
+func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
 	queryVocabulary := mainvocab.NewVocabulary()
 	parentIntentVocabulary := mainvocab.NewVocabulary()
 	childIntentVocabulary := mainvocab.NewVocabulary()
+	sentenceVocabulary := mainvocab.NewVocabulary()
 
 	intentTrainingData, err := LoadIntentTrainingData(dataPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load intent training data from %s: %w", dataPath, err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to load intent training data from %s: %w", dataPath, err)
 	}
 
 	for _, pair := range *intentTrainingData {
@@ -203,13 +262,20 @@ func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocab
 		}
 		parentIntentVocabulary.AddToken(pair.ParentIntent)
 		childIntentVocabulary.AddToken(pair.ChildIntent)
+
+		tokenizedSentence := tokenizer.Tokenize(strings.ToLower(pair.Sentence))
+		for _, word := range tokenizedSentence {
+			sentenceVocabulary.AddToken(word)
+		}
 	}
 
-	return queryVocabulary, parentIntentVocabulary, childIntentVocabulary, nil
+	return queryVocabulary, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, nil
 }
 
 func main() {
 	const intentTrainingDataPath = "./trainingdata/intent_data.json"
+	const word2vecModelPath = "gob_models/word2vec_model.gob"
+
 	// Start CPU profiling
 	f, err := os.Create("cpu.prof")
 	if err != nil {
@@ -233,18 +299,23 @@ func main() {
 	}()
 
 	// Define training parameters
-	epochs := 500
+	epochs := 20
 	learningRate := 0.001
-	batchSize := 64
-	queryVocabularySavePath := "gob_models/query_vocabulary.gob"
+	batchSize := 32
 	parentIntentVocabularySavePath := "gob_models/parent_intent_vocabulary.gob"
 	childIntentVocabularySavePath := "gob_models/child_intent_vocabulary.gob"
+	sentenceVocabularySavePath := "gob_models/sentence_vocabulary.gob"
 
-	// Try to load vocabularies first
-	queryVocabulary, err := mainvocab.LoadVocabulary(queryVocabularySavePath)
+	// Load Word2Vec model
+	word2vecModel, err := word2vec.LoadModel(word2vecModelPath)
 	if err != nil {
-		log.Println("Failed to load query vocabulary, creating a new one.")
+		log.Fatalf("Failed to load Word2Vec model: %v", err)
 	}
+
+	// Create query vocabulary from word2vec model
+	queryVocabulary := convertW2VVocab(word2vecModel.Vocabulary)
+
+	// Try to load other vocabularies first
 	parentIntentVocabulary, err := mainvocab.LoadVocabulary(parentIntentVocabularySavePath)
 	if err != nil {
 		log.Println("Failed to load parent intent vocabulary, creating a new one.")
@@ -253,18 +324,23 @@ func main() {
 	if err != nil {
 		log.Println("Failed to load child intent vocabulary, creating a new one.")
 	}
+	sentenceVocabulary, err := mainvocab.LoadVocabulary(sentenceVocabularySavePath)
+	if err != nil {
+		log.Println("Failed to load sentence vocabulary, creating a new one.")
+	}
 
-	if queryVocabulary == nil || parentIntentVocabulary == nil || childIntentVocabulary == nil {
+	if parentIntentVocabulary == nil || childIntentVocabulary == nil || sentenceVocabulary == nil {
 		log.Println("Building vocabularies from scratch...")
-		queryVocabulary, parentIntentVocabulary, childIntentVocabulary, err = BuildVocabularies(intentTrainingDataPath)
+		_, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, err = BuildVocabularies(intentTrainingDataPath)
 		if err != nil {
 			log.Fatalf("Failed to build vocabularies: %v", err)
 		}
 	}
 
-	log.Printf("Query Vocabulary (after load/create): Size=%d", len(queryVocabulary.TokenToWord))
-	log.Printf("Parent Intent Vocabulary (after load/create): Size=%d", len(parentIntentVocabulary.TokenToWord))
-	log.Printf("Child Intent Vocabulary (after load/create): Size=%d", len(childIntentVocabulary.TokenToWord))
+	log.Printf("Query Vocabulary (after load/create): Size=%d", len(queryVocabulary.WordToToken))
+	log.Printf("Parent Intent Vocabulary (after load/create): Size=%d", len(parentIntentVocabulary.WordToToken))
+	log.Printf("Child Intent Vocabulary (after load/create): Size=%d", len(childIntentVocabulary.WordToToken))
+	log.Printf("Sentence Vocabulary (after load/create): Size=%d", len(sentenceVocabulary.WordToToken))
 
 	// Load Intent training data
 	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
@@ -274,31 +350,29 @@ func main() {
 	log.Printf("Loaded %d training examples.", len(*intentTrainingData))
 
 	// After vocabularies are fully populated, determine vocab sizes and create/load model
-	inputVocabSize := len(queryVocabulary.TokenToWord)
-	parentVocabSize := len(parentIntentVocabulary.TokenToWord)
-	childVocabSize := len(childIntentVocabulary.TokenToWord)
-	embeddingDim := 128
+	inputVocabSize := len(queryVocabulary.WordToToken)
+	parentVocabSize := len(parentIntentVocabulary.WordToToken)
+	childVocabSize := len(childIntentVocabulary.WordToToken)
+	sentenceVocabSize := len(sentenceVocabulary.WordToToken)
+	embeddingDim := word2vecModel.VectorSize // Use vector size from word2vec
 	numExperts := 2
 	maxSequenceLength := 32 // Max length for input query and output description
+	maxAttentionHeads := 4
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
 	log.Printf("Parent Intent Vocabulary Size: %d", parentVocabSize)
 	log.Printf("Child Intent Vocabulary Size: %d", childVocabSize)
+	log.Printf("Sentence Vocabulary Size: %d", sentenceVocabSize)
 
 	var intentMoEModel *moe.IntentMoE // Declare intentMoEModel here
 
 	modelSavePath := "gob_models/moe_classification_model.gob"
 
-	// Try to load IntentMoE model
-	intentMoEModel, err = moe.LoadIntentMoEModelFromGOB(modelSavePath)
+	// Always create a new IntentMoE model for now to debug gob loading
+	log.Printf("Creating a new IntentMoE model.")
+	intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads, word2vecModel)
 	if err != nil {
-		log.Printf("Failed to load IntentMoE model, creating a new one: %v", err)
-		intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize)
-		if err != nil {
-			log.Fatalf("Failed to create new IntentMoE model: %v", err)
-		}
-	} else {
-		log.Printf("Loaded IntentMoE model from %s", modelSavePath)
+		log.Fatalf("Failed to create new IntentMoE model: %v", err)
 	}
 
 	// Create tokenizers once after vocabularies are loaded/created
@@ -306,9 +380,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create query tokenizer: %v", err)
 	}
+	sentenceTokenizer, err := tokenizer.NewTokenizer(sentenceVocabulary)
+	if err != nil {
+		log.Fatalf("Failed to create sentence tokenizer: %v", err)
+	}
 
 	// Train the model
-	err = TrainIntentMoEModel(intentMoEModel, intentTrainingData, epochs, learningRate, batchSize, queryVocabulary, parentIntentVocabulary, childIntentVocabulary, queryTokenizer, maxSequenceLength, f)
+	err = TrainIntentMoEModel(intentMoEModel, intentTrainingData, epochs, learningRate, batchSize, queryVocabulary, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, queryTokenizer, sentenceTokenizer, maxSequenceLength, f)
 	if err != nil {
 		log.Fatalf("Failed to train IntentMoE model: %v", err)
 	}
@@ -321,6 +399,7 @@ func main() {
 	}
 
 	// Save the vocabularies
+	queryVocabularySavePath := "gob_models/query_vocabulary.gob"
 	err = queryVocabulary.Save(queryVocabularySavePath)
 	if err != nil {
 		log.Fatalf("Failed to save query vocabulary: %v", err)
@@ -332,5 +411,9 @@ func main() {
 	err = childIntentVocabulary.Save(childIntentVocabularySavePath)
 	if err != nil {
 		log.Fatalf("Failed to save child intent vocabulary: %v", err)
+	}
+	err = sentenceVocabulary.Save(sentenceVocabularySavePath)
+	if err != nil {
+		log.Fatalf("Failed to save sentence vocabulary: %v", err)
 	}
 }

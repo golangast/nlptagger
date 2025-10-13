@@ -181,7 +181,7 @@ func TokenizeAndConvertToIDs(text string, vocab *vocab.Vocabulary, maxLen int) (
 				paddingSize := maxLen - len(tokenIDs)
 				padding := make([]int, paddingSize)
 				for i := range padding {
-					padding[i] = vocab.GetTokenID("[PAD]") // Use GetTokenID for PAD
+					padding[i] = vocab.GetTokenID("<pad>") // Use GetTokenID for <pad>
 				}
 				tokenIDs = append(tokenIDs, padding...)
 			// } else {

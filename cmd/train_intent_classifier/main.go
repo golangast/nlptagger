@@ -58,6 +58,7 @@ func main() {
 	const queryVocabPath = "gob_models/query_vocabulary.gob"
 	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
 	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
+	const sentenceVocabPath = "gob_models/sentence_vocabulary.gob"
 	const modelSavePath = "gob_models/moe_classification_model.gob"
 
 	// Load training data
@@ -72,11 +73,13 @@ func main() {
 	queryVocabulary.AddToken("</s>")
 	parentIntentVocabulary := mainvocab.NewVocabulary()
 	childIntentVocabulary := mainvocab.NewVocabulary()
+	sentenceVocabulary := mainvocab.NewVocabulary()
 
 	for _, example := range *trainingData {
 		words := strings.Fields(example.Sentence)
 		for _, word := range words {
 			queryVocabulary.AddToken(word)
+			sentenceVocabulary.AddToken(word) // Also add to sentence vocab
 		}
 		parentIntentVocabulary.AddToken(example.ParentIntent)
 		childIntentVocabulary.AddToken(example.ChildIntent)
@@ -92,6 +95,9 @@ func main() {
 	if err := childIntentVocabulary.Save(childIntentVocabPath); err != nil {
 		log.Fatalf("Failed to save child intent vocabulary: %v", err)
 	}
+	if err := sentenceVocabulary.Save(sentenceVocabPath); err != nil {
+		log.Fatalf("Failed to save sentence vocabulary: %v", err)
+	}
 
 	// Create the model
 	model, err := moemodel.NewMoEClassificationModel(
@@ -99,8 +105,9 @@ func main() {
 		256, // embeddingDim (increased from 128)
 		parentIntentVocabulary.Size(),
 		childIntentVocabulary.Size(),
-		4,  // numExperts (increased from 2)
-		2,  // k (increased from 1)
+		sentenceVocabulary.Size(),
+		4, // numExperts (increased from 2)
+		2, // k (increased from 1)
 		32, // maxSeqLength (increased to match inference)
 	)
 	if err != nil {
@@ -109,7 +116,11 @@ func main() {
 
 	// Train the model
 	optimizer := nn.NewOptimizer(model.Parameters(), 0.001, 5.0)
-	tokenizer, _ := tokenizer.NewTokenizer(queryVocabulary) // Initialize tokenizer once
+	queryTokenizer, _ := tokenizer.NewTokenizer(queryVocabulary) // Initialize tokenizer once
+	sentenceTokenizer, _ := tokenizer.NewTokenizer(sentenceVocabulary)
+
+	log.Printf("Sentence Vocabulary PaddingTokenID: %d", sentenceVocabulary.PaddingTokenID)
+	log.Printf("Sentence Vocabulary Size: %d", sentenceVocabulary.Size())
 
 	const batchSize = 32 // Define batch size
 
@@ -130,10 +141,11 @@ func main() {
 			var batchInputIDs [][]float64
 			var batchParentTargetIDs []int
 			var batchChildTargetIDs []int
+			var batchSentenceTargetIDs [][]int
 			currentBatchSize := len(batch)
 
 			for _, example := range batch {
-				tokenIDs, _ := tokenizer.Encode(example.Sentence)
+				tokenIDs, _ := queryTokenizer.Encode(example.Sentence)
 				inputData := make([]float64, len(tokenIDs))
 				for i, id := range tokenIDs {
 					inputData[i] = float64(id)
@@ -141,6 +153,9 @@ func main() {
 				batchInputIDs = append(batchInputIDs, inputData)
 				batchParentTargetIDs = append(batchParentTargetIDs, parentIntentVocabulary.WordToToken[example.ParentIntent])
 				batchChildTargetIDs = append(batchChildTargetIDs, childIntentVocabulary.WordToToken[example.ChildIntent])
+
+				sentenceTokenIDs, _ := sentenceTokenizer.Encode(example.Sentence)
+				batchSentenceTargetIDs = append(batchSentenceTargetIDs, sentenceTokenIDs)
 			}
 
 			// Pad sequences to maxSeqLength (64)
@@ -153,14 +168,27 @@ func main() {
 				}
 			}
 
+			paddedSentenceData := make([]float64, currentBatchSize*model.BertConfig.MaxPositionEmbeddings)
+			for rowIdx, seq := range batchSentenceTargetIDs {
+				floatSeq := make([]float64, len(seq))
+				for i, v := range seq {
+					floatSeq[i] = float64(v)
+				}
+				copy(paddedSentenceData[rowIdx*model.BertConfig.MaxPositionEmbeddings:], floatSeq)
+				for k := len(seq); k < model.BertConfig.MaxPositionEmbeddings; k++ {
+					paddedSentenceData[rowIdx*model.BertConfig.MaxPositionEmbeddings+k] = float64(sentenceVocabulary.PaddingTokenID)
+				}
+			}
+
 			inputTensor := tensor.NewTensor([]int{currentBatchSize, model.BertConfig.MaxPositionEmbeddings}, paddedInputData, false)
+			targetSentenceTensor := tensor.NewTensor([]int{currentBatchSize, model.BertConfig.MaxPositionEmbeddings}, paddedSentenceData, false)
 
 			optimizer.ZeroGrad()
 
 			// Forward pass
-			parentLogits, childLogits, err := model.Forward(inputTensor)
+			parentLogits, childLogits, sentenceOutputs, err := model.Forward(inputTensor, targetSentenceTensor)
 			if err != nil {
-				log.Printf("Forward pass failed: %v", err)
+				log.Printf("Forward pass failed: %+v", err)
 				continue
 			}
 
@@ -168,10 +196,20 @@ func main() {
 			parentLoss, parentGrad := tensor.CrossEntropyLoss(parentLogits, batchParentTargetIDs, parentIntentVocabulary.PaddingTokenID)
 			childLoss, childGrad := tensor.CrossEntropyLoss(childLogits, batchChildTargetIDs, childIntentVocabulary.PaddingTokenID)
 
-			totalLoss := parentLoss + childLoss
+			flatTargets := make([]int, 0, currentBatchSize*model.BertConfig.MaxPositionEmbeddings)
+			for _, t := range batchSentenceTargetIDs {
+				flatTargets = append(flatTargets, t...)
+				// Pad the individual sentence targets to maxSeqLength
+				for k := len(t); k < model.BertConfig.MaxPositionEmbeddings; k++ {
+					flatTargets = append(flatTargets, sentenceVocabulary.PaddingTokenID)
+				}
+			}
+			sentenceLoss, sentenceGrad := tensor.CrossEntropyLoss(sentenceOutputs, flatTargets, sentenceVocabulary.PaddingTokenID)
+
+			totalLoss := parentLoss + childLoss + sentenceLoss
 
 			// Backward pass
-			if err := model.Backward(parentGrad, childGrad); err != nil {
+			if err := model.Backward(parentGrad, childGrad, sentenceGrad); err != nil {
 				log.Printf("Backward pass failed: %v", err)
 				continue
 			}

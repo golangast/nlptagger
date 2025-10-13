@@ -1,6 +1,7 @@
 package moe
 
 import (
+	"bytes"
 	"encoding/gob"
 	"fmt"
 	"math/rand"
@@ -9,9 +10,91 @@ import (
 	. "nlptagger/neural/tensor"
 )
 
-func init() {
-	gob.Register(&MoELayer{})
+// GobEncode implements the gob.GobEncoder interface for MoELayer.
+func (moe *MoELayer) GobEncode() ([]byte, error) {
+	// Use a buffer to encode the struct
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+
+	// Encode the non-interface fields
+	if err := enc.Encode(moe.GatingNetwork); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(moe.K); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(moe.InputDim); err != nil {
+		return nil, err
+	}
+
+	// Encode the number of experts
+	if err := enc.Encode(len(moe.Experts)); err != nil {
+		return nil, err
+	}
+
+	// Encode each expert with its type information
+	for _, expert := range moe.Experts {
+		// Encode the type name of the expert
+		if err := enc.Encode(expert.Description()); err != nil {
+			return nil, err
+		}
+		// Encode the expert itself
+		if err := enc.Encode(expert); err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
 }
+
+// GobDecode implements the gob.GobDecoder interface for MoELayer.
+func (moe *MoELayer) GobDecode(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+
+	// Decode the non-interface fields
+	if err := dec.Decode(&moe.GatingNetwork); err != nil {
+		return err
+	}
+	if err := dec.Decode(&moe.K); err != nil {
+		return err
+	}
+	if err := dec.Decode(&moe.InputDim); err != nil {
+		return err
+	}
+
+	// Decode the number of experts
+	var numExperts int
+	if err := dec.Decode(&numExperts); err != nil {
+		return err
+	}
+
+	// Decode each expert
+	moe.Experts = make([]Expert, numExperts)
+	for i := 0; i < numExperts; i++ {
+		var expertType string
+		if err := dec.Decode(&expertType); err != nil {
+			return err
+		}
+
+		var expert Expert
+		switch expertType {
+		case "FeedForwardExpert":
+			expert = &FeedForwardExpert{}
+		default:
+			return fmt.Errorf("unknown expert type: %s", expertType)
+		}
+
+		if err := dec.Decode(expert); err != nil {
+			return err
+		}
+		moe.Experts[i] = expert
+	}
+
+	return nil
+}
+
+
 
 // MoELayer implements a Mixture of Experts layer.
 type MoELayer struct {
@@ -27,7 +110,7 @@ type MoELayer struct {
 	selectedExperts   [][]int   // Indices of selected experts for each input in the batch
 	gateOutputs       *Tensor   // Output of the gating network (probabilities)
 	LoadBalancingLoss float64   // Load balancing loss
-	training          bool      // training mode
+	Training          bool      // training mode
 }
 
 // NewMoELayer creates a new MoELayer.
@@ -106,7 +189,7 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 	}
 
 	// Add noise for soft selection during training
-	if moe.training {
+	if moe.Training {
 		noise := make([]float64, len(gateLogitsReshaped.Data))
 		for i := range noise {
 			noise[i] = rand.NormFloat64()
@@ -205,7 +288,7 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 	}
 
 	// Finalize load balancing loss
-	if moe.training {
+	if moe.Training {
 		totalTokens := float64(batchSize * seqLength)
 		for e := 0; e < numExperts; e++ {
 			fractionTokens := tokensPerExpert[e] / totalTokens
@@ -336,7 +419,7 @@ func (moe *MoELayer) Inputs() []*Tensor {
 
 // SetMode sets the mode for the MoELayer and all its experts.
 func (moe *MoELayer) SetMode(training bool) {
-	moe.training = training
+	moe.Training = training
 	for _, expert := range moe.Experts {
 		expert.SetMode(training)
 	}

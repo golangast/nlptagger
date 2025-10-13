@@ -15,10 +15,10 @@ func main() {
 	flag.Parse()
 
 	// Train Word2Vec model first
-	word2vecTrainingDataPath := "trainingdata/bartdata/explanation_data.json"
+	word2vecTrainingDataPath := "trainingdata/WikiQA-train.txt"
 	word2vecModelSavePath := "gob_models/word2vec_model.gob"
 	word2vecVectorSize := *dimModel
-	word2vecEpochs := 50
+	word2vecEpochs := 1
 	word2vecWindow := 5
 	word2vecNegativeSamples := 5
 	word2vecMinWordFrequency := 1

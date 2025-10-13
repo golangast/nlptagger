@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
 
 	"nlptagger/neural/nnu/vocab"
+	"nlptagger/neural/tokenizer"
 )
 
 type IntentTrainingExample struct {
@@ -37,7 +37,7 @@ func main() {
 	// Create and save vocabulary
 	tokenVocab := vocab.NewVocabulary()
 	for _, intent := range intents {
-		tokens := strings.Fields(strings.ToLower(intent.Query))
+		tokens := tokenizer.Tokenize(intent.Query)
 		for _, token := range tokens {
 			tokenVocab.AddToken(token)
 		}

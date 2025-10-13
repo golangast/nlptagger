@@ -54,6 +54,20 @@ func NewEmbedding(vocabSize, dimModel int) *Embedding {
 	}
 }
 
+// LoadPretrainedWeights loads pretrained embedding weights.
+func (e *Embedding) LoadPretrainedWeights(weights map[int][]float64) {
+	for tokenID, vector := range weights {
+		if tokenID >= e.VocabSize {
+			continue // Or handle error
+		}
+		offset := tokenID * e.DimModel
+		if len(vector) != e.DimModel {
+			continue // Or handle error
+		}
+		copy(e.Weight.Data[offset:offset+e.DimModel], vector)
+	}
+}
+
 // Parameters returns all learnable parameters of the layer.
 func (e *Embedding) Parameters() []*Tensor {
 	return []*Tensor{e.Weight}
@@ -200,6 +214,7 @@ func (e *Embedding) Forward(inputIDs *Tensor) (*Tensor, error) {
 
 		// Validate the token ID is within the vocabulary range.
 		if tokenID < 0 || tokenID >= e.VocabSize {
+			log.Printf("Error: token ID %d is out of vocabulary range [0, %d)", tokenID, e.VocabSize)
 			return nil, fmt.Errorf("token ID %d is out of vocabulary range [0, %d)", tokenID, e.VocabSize)
 		}
 

@@ -1,6 +1,7 @@
 package tensor
 
 import (
+	"fmt"
 	"math"
 )
 
@@ -40,14 +41,36 @@ func Softmax(tensor *Tensor) *Tensor {
 
 // CrossEntropyLoss calculates the cross-entropy loss.
 func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Tensor) {
-	probs := Softmax(logits)
+	// Reshape logits to 2D if it's 3D (batch_size * seq_len, vocab_size)
+	originalShape := logits.Shape
+	var reshapedLogits *Tensor
+	var numClasses int
+
+	if len(originalShape) == 3 {
+		batchSize := originalShape[0]
+		seqLen := originalShape[1]
+		numClasses = originalShape[2]
+		var err error
+		reshapedLogits, err = logits.Reshape([]int{batchSize * seqLen, numClasses})
+		if err != nil {
+			panic(fmt.Sprintf("Failed to reshape logits: %v", err))
+		}
+	} else if len(originalShape) == 2 {
+		reshapedLogits = logits
+		numClasses = originalShape[1]
+	} else {
+		// Handle other dimensions or return an error
+		panic("Unsupported logits dimension for CrossEntropyLoss")
+	}
+
+	probs := Softmax(reshapedLogits)
 	loss := 0.0
 	activeTokens := 0
 	epsilon := 1e-9 // Small value to avoid log(0)
 
-	grad := NewTensor(logits.Shape, make([]float64, len(logits.Data)), false)
+	grad := NewTensor(reshapedLogits.Shape, make([]float64, len(reshapedLogits.Data)), false)
 
-	for i := 0; i < logits.Shape[0]; i++ {
+	for i := 0; i < reshapedLogits.Shape[0]; i++ {
 		targetID := targetIDs[i]
 		if targetID == padID {
 			continue
@@ -55,13 +78,13 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 		activeTokens++
 
 		// Add epsilon to the probability to avoid log(0)
-		loss -= math.Log(probs.Data[i*logits.Shape[1]+targetID] + epsilon)
+		loss -= math.Log(probs.Data[i*numClasses+targetID] + epsilon)
 
-		for j := 0; j < logits.Shape[1]; j++ {
+		for j := 0; j < numClasses; j++ {
 			if j == targetID {
-				grad.Data[i*logits.Shape[1]+j] = probs.Data[i*logits.Shape[1]+j] - 1
+				grad.Data[i*numClasses+j] = probs.Data[i*numClasses+j] - 1
 			} else {
-				grad.Data[i*logits.Shape[1]+j] = probs.Data[i*logits.Shape[1]+j]
+				grad.Data[i*numClasses+j] = probs.Data[i*numClasses+j]
 			}
 		}
 	}
@@ -70,6 +93,15 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 		loss /= float64(activeTokens)
 		for i := range grad.Data {
 			grad.Data[i] /= float64(activeTokens)
+		}
+	}
+
+	// Reshape grad back to original shape if it was reshaped
+	if len(originalShape) == 3 {
+		var err error
+		grad, err = grad.Reshape(originalShape)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to reshape gradient: %v", err))
 		}
 	}
 

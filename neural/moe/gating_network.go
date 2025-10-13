@@ -1,15 +1,13 @@
 package moe
 
 import (
-	"encoding/gob"
+	
 	"fmt"
 	"nlptagger/neural/nn"
 	"nlptagger/neural/tensor"
 )
 
-func init() {
-	gob.Register(&GatingNetwork{})
-}
+
 
 // GatingNetwork (Router) determines which experts to activate for a given input.
 type GatingNetwork struct {
