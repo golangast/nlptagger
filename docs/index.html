@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nlptagger: M3 Dark Theme with All M2 Components</title>
+    <title>nlptagger: Go NLP Toolkit - Custom Dashboard GUI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -11,167 +11,166 @@
 </head>
 <body class="dark-theme">
     
-    <div id="status-dialog" class="m3-dialog">
-        <div class="m3-dialog-surface">
-            <h3 class="m3-dialog-title">⚠️ Status Update: Beta</h3>
-            <div class="m3-dialog-content">
+    <div id="status-dialog" class="custom-dialog">
+        <div class="dialog-surface">
+            <h3 class="title-large">⚠️ Project Status: Beta</h3>
+            <div class="dialog-content body-medium">
                 <p>This project is currently in a **beta stage** and is under active development. The API and functionality are subject to change.</p>
-                <p class="mt-10">The primary goal is to explore and implement these complex NLP models in the Go language.</p>
+                <p class="mt-10">We encourage contributions and feedback from the community.</p>
             </div>
-            <div class="m3-dialog-actions">
-                <button class="m3-button outlined" id="dialog-cancel">Dismiss</button>
-                <button class="m3-button filled">Review Roadmap</button>
+            <div class="dialog-actions">
+                <button class="custom-button outlined" id="dialog-cancel">Close</button>
+                <button class="custom-button filled">View GitHub</button>
             </div>
         </div>
     </div>
     
-    <div id="m3-snackbar" class="m3-snackbar" aria-live="polite">
-        <span class="snackbar-message">Code Copied!</span>
+    <div id="custom-snackbar" class="custom-snackbar" aria-live="polite">
+        <span class="snackbar-message body-small">Code Copied to Clipboard!</span>
     </div>
 
-    <div class="m3-main-container">
+    <div class="app-container">
         
-        <header class="m3-app-bar">
-            <div class="content-wrapper">
-                <div class="header-content">
-                    <button class="m3-icon-button" aria-label="Menu">☰</button>
-                    <div class="header-branding">
-                        <span class="logo-icon">🔗</span>
-                        <h1>nlptagger</h1>
-                    </div>
-                    <button class="m3-button text" id="show-dialog-btn">Project Status</button>
-                </div>
+        <aside class="app-sidebar">
+            <div class="sidebar-header">
+                <span class="logo-icon">🔗</span>
+                <h1 class="title-large">nlp<span class="tagger-title-part">tagger</span></h1>
             </div>
-        </header>
 
-        <main>
-            <div class="content-wrapper">
+            <nav class="sidebar-nav">
+                <a href="#features" class="nav-item active">
+                    <span class="icon">✨</span>
+                    <span class="label label-medium">Key Features</span>
+                    <span class="badge small"></span> 
+                </a>
+                <a href="#models" class="nav-item">
+                    <span class="icon">🧠</span>
+                    <span class="label label-medium">Model Catalog</span>
+                    <span class="badge">3</span> 
+                </a>
+                <a href="#usage" class="nav-item">
+                    <span class="icon">🛠️</span>
+                    <span class="label label-medium">Usage & CLI</span>
+                </a>
+                <a href="#go-reason" class="nav-item">
+                    <span class="icon">💡</span>
+                    <span class="label label-medium">Go Utility</span>
+                </a>
+                <div class="sidebar-divider"></div>
+                <a href="#" class="nav-item settings-item">
+                    <span class="icon">⚙️</span>
+                    <span class="label label-medium">Settings</span>
+                </a>
+            </nav>
+        </aside>
+
+        <div class="app-content-wrapper">
+
+            <header class="app-top-bar">
+                <div class="search-box">
+                    <input type="text" placeholder="Search Documentation (Ctrl+K)" class="body-medium">
+                    <button class="custom-icon-button" aria-label="Search">🔍</button>
+                </div>
+                <div class="header-actions">
+                    <button class="custom-button text tooltip-target" id="show-dialog-btn">Project Status</button>
+                    <div class="user-status title-small">Developer </div>
+                </div>
+            </header>
+
+            <main class="content-area">
                 
                 <section id="features" data-animation-target>
-                    <h2>✨ Key Features</h2>
-                    <p class="section-intro">The application is structured as a dispatcher that runs specialized modules for various NLP tasks:</p>
+                    <h2 class="display-small">✨ Key Features</h2>
+                    <p class="section-intro body-large">**nlptagger** is structured as a versatile toolkit, enabling high-performance processing across core NLP domains.</p>
                     <div class="feature-grid">
-                        <div class="m3-card elevated">
-                            <h3>Word2Vec Training</h3>
-                            <p>Generate high-quality distributed word representations (embeddings) from a text corpus.</p>
-                            <button class="m3-fab small" aria-label="Details">i</button>
+                        <div class="custom-card elevated">
+                            <h3 class="headline-small">Word Embeddings</h3>
+                            <p class="body-medium">Train **Word2Vec** models from raw text corpora to generate powerful, distributed word representations for vector space modeling.</p>
                         </div>
-                        <div class="m3-card elevated">
-                            <h3>Mixture of Experts (MoE) Architecture</h3>
-                            <p>Train a powerful MoE model, designed for improved performance, scalability, and handling of complex sequential or structural data.</p>
+                        <div class="custom-card elevated">
+                            <h3 class="headline-small">Scalable MoE Architecture</h3>
+                            <p class="body-medium">Utilize the **Mixture of Experts (MoE)** model, designed to efficiently handle large datasets and complex sequential tasks in Go.</p>
                         </div>
+                        <div class="custom-card elevated">
+                            <h3 class="headline-small">Intent & Classification</h3>
+                            <p class="body-medium">Develop machine learning models for high-accuracy **intent classification** and semantic categorization of user queries.</p>
                         </div>
+                        <div class="custom-card elevated">
+                            <h3 class="headline-small">High-Performance Core</h3>
+                            <p class="body-medium">Leveraging Go's concurrency for fast training and low-latency inference, crucial for real-time NLP applications.</p>
+                        </div>
+                    </div>
                 </section>
 
-                <div class="m3-divider"></div>
-
-                <section id="usage" data-animation-target>
-                    <h2>🛠️ Usage</h2>
-                    <p class="section-intro">The main executable controls all operations using specific command-line flags.</p>
-                    <div class="tabs m3-segmented-button">
-                        <button class="tab-button active" data-tab="train">1. Training Models</button>
-                        <button class="tab-button" data-tab="inference">2. MoE Inference</button>
+                <div class="custom-divider"></div>
+                
+                <section id="models" data-animation-target>
+                    <h2 class="display-small">🧠 Model Catalog</h2>
+                    <p class="section-intro body-large mt-20">Explore the different model types available for training and inference.</p>
+                    
+                    <div class="progress-container">
+                        <span class="label-medium">Model Deployment Status: 85% Complete</span>
+                        <div class="custom-linear-progress" role="progressbar" aria-valuenow="85" aria-valuemin="0" aria-valuemax="100">
+                            <div class="fill"></div>
+                        </div>
                     </div>
 
-                    <div id="tab-train" class="tab-content active">
-                        <h3>Training Commands</h3>
-                        <table class="cmd-table">
-                            <thead><tr><th>Model</th><th>Flag</th><th>Command</th></tr></thead>
-                            <tbody>
-                                <tr><td>**Word2Vec**</td><td><code>--train-word2vec</code></td><td><code>go run main.go --train-word2vec</code></td></tr>
-                                </tbody>
-                        </table>
+                    <div class="chip-container">
+                        <span class="body-medium">Filter by:</span>
+                        <button class="custom-chip input">
+                            <span class="label-large">Go Language</span>
+                            <span class="close-icon" aria-label="Remove filter">×</span>
+                        </button>
+                        <button class="custom-chip assist">
+                            <span class="label-large">Export All Models</span>
+                        </button>
+                    </div>
+
+                    <div class="tabs custom-segmented-button">
+                        <button class="tab-button active label-large" data-tab="sequential">Sequential Models</button>
+                        <button class="tab-button label-large" data-tab="vector">Vector Embeddings</button>
+                        <button class="tab-button label-large" data-tab="classification">Classification</button>
+                    </div>
+
+                    <div id="tab-sequential" class="tab-content active model-cards">
+                        <div class="custom-card filled">
+                            <h3 class="title-large">Mixture of Experts (MoE)</h3>
+                            <p class="body-medium text-secondary">A novel approach for handling sequential data with high sparsity and concurrency.</p>
+                            <span class="card-status status-beta label-small">BETA</span>
+                        </div>
+                        <div class="custom-card outlined">
+                            <h3 class="title-large">Transformer Encoder</h3>
+                            <p class="body-medium text-secondary">Classic self-attention mechanism implementation for baseline tasks.</p>
+                            <span class="card-status status-stable label-small">STABLE</span>
+                        </div>
                     </div>
                     </section>
 
-                <div class="m3-divider"></div>
+                <div class="custom-divider"></div>
 
-                <section id="integration" data-animation-target>
-                    <h2>⚛️ Integrating `nlptagger` into Your Go Projects</h2>
-                    <p class="section-intro">The project is a collection of reusable Go packages. Use the core components found in the <code>neural/</code> and <code>tagger/</code> directories.</p>
-                    <div class="code-block m3-surface dark-theme-code">
-                        <button class="copy-btn m3-fab-style" aria-label="Copy code snippet">
-                            <span class="material-icon">📋</span> Copy
-                        </button>
-                        <pre id="go-code-example"><code>package main
+                <section id="usage" data-animation-target>
+                    <h2 class="display-small">🛠️ Usage & CLI</h2>
+                    <p class="section-intro body-large">Control all operations using the command-line executable.</p>
+                    </section>
 
-import (
-  "fmt"
-  "github.com/golangast/nlptagger/neural/nn"
-)
-
-func main() {
-  // Example: Create a simple feed-forward layer
-  layer := nn.NewFeedForward(10, 5)
-  fmt.Printf("Created a feed-forward layer with input size %d and output size %d\n", layer.InputSize(), layer.OutputSize())
-}</code></pre>
-                    </div>
-                    
-                    <div class="m3-text-field-container">
-                        <label for="search-input" class="m3-text-field-label">Search Docs</label>
-                        <input type="text" id="search-input" class="m3-text-field outlined" placeholder="e.g. 'MoE parameters'" />
-                    </div>
-                </section>
-                
-                <div class="m3-divider"></div>
-                
-                <section id="settings" data-animation-target>
-                    <h2>⚙️ Configuration & Controls</h2>
-                    <p class="section-intro">Demonstrating interactive input components.</p>
-                    
-                    <div class="m3-card elevated p-24">
-                        <h3 class="mb-20">Logging and Performance</h3>
-
-                        <div class="m3-form-control">
-                            <input type="checkbox" id="verbose-log" checked>
-                            <label for="verbose-log">Enable verbose logging</label>
-                        </div>
-                        
-                        <div class="m3-form-control">
-                            <input type="checkbox" id="tensor-debug">
-                            <label for="tensor-debug">Enable Tensor Debugging</label>
-                        </div>
-
-                        <h3 class="mt-30 mb-10">Data Sharding Strategy</h3>
-                        
-                        <div class="m3-form-control radio">
-                            <input type="radio" id="strategy-local" name="sharding" checked>
-                            <label for="strategy-local">Local Node Only</label>
-                        </div>
-                        <div class="m3-form-control radio">
-                            <input type="radio" id="strategy-distributed" name="sharding">
-                            <label for="strategy-distributed">Distributed Cluster (gRPC)</label>
-                        </div>
-
-                        <h3 class="mt-30 mb-10">Training Batch Size (1-1024)</h3>
-                        <div class="m3-slider-container">
-                            <input type="range" min="1" max="1024" value="64" id="batch-slider" class="m3-slider">
-                            <div class="slider-value">64</div>
-                        </div>
-                    </div>
-                </section>
-                
-                <div class="m3-divider"></div>
+                <div class="custom-divider"></div>
 
                 <section id="go-reason" data-animation-target>
-                    <h2>Why Go?</h2>
-                    <ul class="m3-list">
-                        <li>**Stability:** Go's strong compatibility promise ensures longevity.</li>
-                        <li>**Simplicity:** Clean syntax makes code easy to read and maintain.</li>
-                        <li>**Performance:** A compiled language with performance crucial for NLP tasks.</li>
-                        <li>**Concurrency:** Built-in concurrency for efficient data processing and training.</li>
+                    <h2 class="display-small">💡 Why Go? The Utility of Golang in NLP</h2>
+                    <p class="section-intro body-large">The choice of Go provides significant advantages for complex machine learning infrastructure.</p>
+                    
+                   
+                    
+                    <ul class="custom-list">
+                        <li class="list-item-animated body-large">**Deployment Simplicity:** Compiled single binaries make deployment trivial across cloud platforms.</li>
+                        <li class="list-item-animated body-large">**Concurrency & Speed:** Native goroutines enable highly parallel data processing and efficient model training loops.</li>
                     </ul>
                 </section>
-            </div>
-        </main>
-
-        <footer>
-            <div class="content-wrapper">
-                <p>&copy; nlptagger Project | <a href="https://github.com/golangast/nlptagger/blob/main/LICENSE" target="_blank">GNU GPL v3.0</a></p>
-                <p>Built with Go. Designed to be Expressive.</p>
-            </div>
-        </footer>
+                
+            </main>
+        </div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>

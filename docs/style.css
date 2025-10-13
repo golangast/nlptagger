@@ -1,356 +1,241 @@
 :root {
-    /* M3 Dark Color Role Mapping */
-    --color-primary: #86D0FF;           
-    --color-on-primary: #003350;
-    --color-primary-container: #004A71;
-    --color-on-primary-container: #C3E8FF;
-
-    --color-secondary: #B1C9DA;         
-    --color-on-secondary: #243140;
-    --color-secondary-container: #3B4858;
-
-    --color-surface: #1A1C20;           
-    --color-on-surface: #E3E2E6;        
-    --color-surface-container: #212429; 
-    --color-surface-container-high: #2A2D33; 
-    --color-surface-container-low: #1E2125;  
-    --color-surface-bright: #36393E;
-
-    --color-outline: #8D929A;           
-    --color-outline-variant: #42474E; 
+    /* Custom High-Contrast Dark Palette */
+    --color-bg-primary: #111215;           /* Deep background */
+    --color-bg-secondary: #1A1C20;         /* Sidebar / Elevated Surface */
+    --color-bg-tertiary: #24272B;          /* Card / High Elevation */
+    --color-text-primary: #E3E2E6;         /* Main text */
+    --color-text-secondary: #8D929A;       /* Secondary text / Outline */
+    --color-accent: #00A7D9;               /* Electric Blue Accent */
+    --color-accent-dark: #003350;          /* Accent Container */
+    --color-error: #FF5A5A;                /* Red for badges/errors */
     
-    --color-error: #FFB4AB;
-    --color-warning: #FFB74D;           
-    --color-warning-container: #663900;
-    --color-on-warning: #492500;
-    
-    /* Code Block Colors */
-    --color-code-bg: #0D1117;           
-    --color-code-text: #E6EDF3;         
+    /* Shapes (Geometric/Sharp) */
+    --shape-radius-small: 4px;
+    --shape-radius-medium: 6px;
+    --shape-radius-large: 8px;
+    --shape-radius-full: 9999px;
 
-    --font-heading: 'Inter', sans-serif;
-    --font-body: 'Inter', sans-serif;
-    
-    /* Animation Variables */
-    --m3-transition-duration: 0.3s;
-    --m3-transition-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+    --transition-duration: 0.2s;
+    --sidebar-width: 260px;
 }
 
-/* Keyframe Animations */
-@keyframes fadeInUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
-@keyframes gradientAnimation { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }
-@keyframes snackbar-slide { 0% { transform: translateY(100%); opacity: 0; } 10% { transform: translateY(-20px); opacity: 1; } 90% { transform: translateY(-20px); opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
-
-/* Base Styling and Scroll Animation */
+/* --- GLOBAL STYLES & TYPOGRAPHY --- */
+* { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; } /* Ensure fixed layout works */
 body.dark-theme {
-    font-family: var(--font-body);
-    color: var(--color-on-surface);
-    background: linear-gradient(135deg, var(--color-surface), var(--color-surface-container));
-    background-size: 400% 400%;
-    animation: gradientAnimation 20s ease infinite alternate;
-    min-height: 100vh;
+    background: var(--color-bg-primary); 
+    color: var(--color-text-primary);
 }
 
-.m3-main-container {
-    background-color: var(--color-surface);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-    animation: fadeInUp 0.8s var(--m3-transition-easing) forwards;
-    opacity: 0;
-    /* ... other container styles ... */
-}
+/* Custom Typography Scale (Based on M3 names, custom sizes) */
+.display-small { font-size: 38px; font-weight: 800; }
+.headline-small { font-size: 24px; font-weight: 600; }
+.title-large { font-size: 20px; font-weight: 600; }
+.title-small { font-size: 16px; font-weight: 600; }
+.body-large { font-size: 16px; font-weight: 400; }
+.body-medium { font-size: 14px; font-weight: 400; }
+.body-small { font-size: 12px; font-weight: 400; }
+.label-medium { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; }
 
-/* Section Entrance Animation */
-section {
-    opacity: 0;
-    transform: translateY(30px);
-    transition: opacity var(--m3-transition-duration) var(--m3-transition-easing), 
-                transform var(--m3-transition-duration) var(--m3-transition-easing);
-}
-
-section.animate-in { opacity: 1; transform: translateY(0); }
-
-
-/* 1. DIALOG (Modal) */
-.m3-dialog {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.7); /* Modal scrim */
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-.m3-dialog.open { display: flex; }
-
-.m3-dialog-surface {
-    background: var(--color-surface-container);
-    border-radius: 28px; /* Large dialog radius */
-    padding: 24px;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    transform: scale(0.9);
-    opacity: 0;
-    transition: transform 0.4s var(--m3-transition-easing), opacity 0.4s var(--m3-transition-easing);
-}
-
-.m3-dialog.open .m3-dialog-surface {
-    transform: scale(1);
-    opacity: 1;
-}
-.m3-dialog-title { color: var(--color-primary); margin-bottom: 16px; font-size: 1.5em; }
-.m3-dialog-content { color: var(--color-on-surface); line-height: 1.5; }
-.m3-dialog-actions { 
-    display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; 
-}
-
-
-/* 2. SNACKBAR (Snackbar component) */
-.m3-snackbar {
-    position: fixed;
-    bottom: 0;
-    left: 50%;
-    transform: translate(-50%, 100%); /* Start off-screen */
-    background-color: var(--color-surface-bright);
-    color: var(--color-on-surface);
-    padding: 14px 24px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    z-index: 900;
-    min-width: 300px;
-    text-align: center;
-}
-
-.m3-snackbar.show {
-    animation: snackbar-slide 3s var(--m3-transition-easing) forwards;
-}
-
-
-/* 3. TOP APP BAR (Header) */
-.m3-app-bar {
-    background-color: var(--color-surface-container);
-    /* ... (rest of the header styles) ... */
-}
-.header-content {
+/* --- MAIN LAYOUT (Side Panel + Content) --- */
+.app-container {
     display: flex;
-    justify-content: space-between;
+    height: 100vh;
+}
+.app-content-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* Scrollable main content */
+    margin-left: var(--sidebar-width);
+}
+.content-area {
+    padding: 40px 60px;
+}
+
+/* --- SIDE PANEL --- */
+.app-sidebar {
+    width: var(--sidebar-width);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    background-color: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-bg-tertiary);
+    padding: 24px 0;
+}
+.sidebar-header {
+    display: flex;
     align-items: center;
+    padding: 0 20px 20px;
+}
+.sidebar-header .logo-icon { font-size: 1.5em; margin-right: 10px; color: var(--color-accent); }
+.tagger-title-part { color: var(--color-accent); }
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+}
+.sidebar-divider { height: 1px; background-color: var(--color-bg-tertiary); margin: 20px 0; }
+
+/* Sidebar Nav Item */
+.app-sidebar .nav-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    margin: 2px 10px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border-radius: var(--shape-radius-medium);
+    transition: background-color var(--transition-duration), color var(--transition-duration);
+    position: relative;
+}
+.app-sidebar .nav-item .icon { margin-right: 10px; font-size: 1.1em; }
+
+.app-sidebar .nav-item:hover {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+}
+.app-sidebar .nav-item.active {
+    background-color: var(--color-accent-dark);
+    color: var(--color-text-primary);
+    box-shadow: 0 0 0 1px var(--color-accent); /* Accent border */
+}
+.app-sidebar .nav-item.active .label {
+    font-weight: 700;
+}
+.settings-item {
+    margin-top: 20px;
+}
+
+
+/* --- TOP APP BAR --- */
+.app-top-bar {
+    position: sticky;
+    top: 0;
+    height: 64px;
+    background-color: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 0 40px;
-    height: 64px; /* Standard M3 App Bar height */
+    z-index: 100;
 }
-
-
-/* 4. BUTTON (Filled, Outlined, Text - Component) */
-.m3-button {
-    padding: 10px 24px;
-    border-radius: 20px; /* Pill shape */
-    font-weight: 500;
-    font-size: 0.9em;
-    cursor: pointer;
-    transition: all 0.2s var(--m3-transition-easing);
+.search-box {
+    display: flex;
+    align-items: center;
+    width: 400px;
+    background-color: var(--color-bg-primary);
+    border-radius: var(--shape-radius-medium);
+    border: 1px solid var(--color-bg-tertiary);
 }
-
-/* Filled Button */
-.m3-button.filled {
-    background-color: var(--color-primary);
-    color: var(--color-on-primary);
-    border: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-.m3-button.filled:hover {
-    background-color: var(--color-primary-container);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-/* Outlined Button */
-.m3-button.outlined {
-    background-color: transparent;
-    color: var(--color-primary);
-    border: 1px solid var(--color-outline);
-}
-.m3-button.outlined:hover {
-    background-color: rgba(var(--color-primary), 0.08); /* Subtle hover fill */
-    border-color: var(--color-primary);
-}
-
-/* Text Button */
-.m3-button.text {
-    background-color: transparent;
-    color: var(--color-primary);
-    border: none;
-    padding: 10px 12px;
-}
-.m3-button.text:hover {
-    background-color: rgba(var(--color-primary), 0.08);
-}
-
-/* Icon Button (used for menu) */
-.m3-icon-button {
+.search-box input {
+    flex-grow: 1;
+    height: 40px;
     background: transparent;
     border: none;
-    color: var(--color-on-surface);
-    font-size: 1.5em;
-    padding: 8px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background-color 0.2s;
+    color: var(--color-text-primary);
+    padding: 0 15px;
 }
-.m3-icon-button:hover {
-    background-color: var(--color-surface-bright);
+.search-box input::placeholder { color: var(--color-text-secondary); }
+.search-box button { background: none; border: none; padding: 0 10px; cursor: pointer; color: var(--color-text-secondary); }
+.user-status {
+    color: var(--color-accent);
 }
 
-/* 5. FAB (Small) */
-.m3-fab.small {
-    position: absolute;
-    bottom: 12px;
-    right: 12px;
-    width: 40px;
+/* --- BUTTONS (Custom Style - Sharp Corners) --- */
+.custom-button {
     height: 40px;
-    border-radius: 50%;
-    background-color: var(--color-secondary-container);
-    color: var(--color-on-secondary);
-    border: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    font-size: 1.2em;
-    transition: all 0.2s;
-}
-.m3-fab.small:hover {
-    background-color: var(--color-secondary);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* 8. EXTENDED FAB (Copy Button) */
-.copy-btn {
-    background-color: var(--color-primary);
-    color: var(--color-on-primary);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
-    /* ... (rest of the FAB styles) ... */
-}
-
-
-/* 9. TEXT FIELD (Outlined) */
-.m3-text-field-container {
-    position: relative;
-    margin-top: 30px;
-}
-.m3-text-field {
-    width: 100%;
-    padding: 16px;
-    border-radius: 12px;
-    font-size: 1em;
-    background-color: var(--color-surface-container);
-    color: var(--color-on-surface);
-    border: 1px solid var(--color-outline);
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-.m3-text-field:focus {
-    outline: none;
-    border: 2px solid var(--color-primary);
-    padding: 15px; /* Adjust for thicker border */
-    box-shadow: 0 0 0 1px var(--color-primary);
-}
-.m3-text-field-label {
-    position: absolute;
-    top: -10px;
-    left: 12px;
-    padding: 0 4px;
-    background: var(--color-surface); /* Hide the line underneath the label */
-    color: var(--color-outline);
-    font-size: 0.85em;
-    transition: color 0.2s;
-}
-.m3-text-field:focus + .m3-text-field-label {
-    color: var(--color-primary);
-}
-
-
-/* 11 & 12. CHECKBOX and RADIO BUTTONS (Form Components) */
-.m3-form-control {
-    display: flex;
-    align-items: center;
-    margin-bottom: 12px;
-    cursor: pointer;
-    color: var(--color-on-surface);
-}
-.m3-form-control label {
-    margin-left: 12px;
-    cursor: pointer;
-}
-
-input[type="checkbox"], input[type="radio"] {
-    /* Hide native control */
-    opacity: 0;
-    position: absolute;
-}
-.m3-form-control::before {
-    content: '';
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--color-outline);
-    border-radius: 4px; /* Checkbox */
-    display: inline-block;
-    background-color: transparent;
-    transition: all 0.2s;
-    margin-right: -20px; /* Keep label close */
-}
-
-/* Checked State */
-input[type="checkbox"]:checked + label::before {
-    content: '✔';
-    line-height: 18px;
-    text-align: center;
-    font-size: 14px;
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-on-primary);
-}
-
-/* Radio Button Styling */
-.m3-form-control.radio::before {
-    border-radius: 50%; /* Radio button shape */
-}
-
-input[type="radio"]:checked + label::before {
-    content: '';
-    width: 10px;
-    height: 10px;
-    border-width: 5px; /* Thicker border */
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    margin: 5px;
-    transform: scale(1);
-}
-
-
-/* 13. SLIDER */
-.m3-slider-container {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 10px 0;
-}
-.m3-slider {
-    -webkit-appearance: none;
-    width: 100%;
-    height: 4px;
-    background: var(--color-secondary-container); /* Inactive track */
-    border-radius: 2px;
-}
-.m3-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--color-primary); /* Thumb color */
-    cursor: grab;
-    transition: box-shadow 0.2s;
-}
-.m3-slider::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 0 8px rgba(var(--color-primary), 0.2); /* Focus ring simulation */
-}
-.slider-value {
-    color: var(--color-primary);
+    padding: 0 20px;
+    border-radius: var(--shape-radius-small);
+    text-transform: none;
     font-weight: 600;
+    transition: background-color var(--transition-duration), box-shadow var(--transition-duration);
 }
+.custom-button.filled {
+    background-color: var(--color-accent);
+    color: var(--color-bg-primary);
+    border: 1px solid var(--color-accent);
+}
+.custom-button.outlined {
+    background-color: transparent;
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+}
+.custom-button.text {
+    background-color: transparent;
+    color: var(--color-text-primary);
+    border: none;
+}
+.custom-button:hover:not(.text) {
+    opacity: 0.9;
+    box-shadow: 0 0 8px rgba(0, 167, 217, 0.3);
+}
+
+/* --- CARDS (Custom Style - High Contrast/Solid Backgrounds) --- */
+.custom-card {
+    padding: 24px;
+    border-radius: var(--shape-radius-medium);
+    transition: box-shadow var(--transition-duration);
+}
+
+.custom-card.elevated {
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-bg-tertiary);
+}
+.custom-card.filled {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-bg-tertiary);
+}
+.custom-card.outlined {
+    background: transparent;
+    border: 1px solid var(--color-text-secondary);
+}
+
+/* --- SEGMENTED BUTTONS/TABS (Custom Style - Underlined look) --- */
+.custom-segmented-button {
+    display: flex;
+    border-bottom: 2px solid var(--color-bg-tertiary);
+    margin-bottom: 20px;
+}
+.custom-segmented-button .tab-button {
+    height: 40px;
+    padding: 0 15px;
+    background-color: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    transition: color var(--transition-duration);
+}
+.custom-segmented-button .tab-button.active {
+    color: var(--color-accent);
+    border-bottom: 2px solid var(--color-accent);
+    margin-bottom: -2px; /* Pull active line down */
+    font-weight: 700;
+}
+
+/* --- CHECKBOX & RADIO (Custom Geometric Style) --- */
+.custom-checkbox-container input:checked ~ .checkmark,
+.custom-radio-container input:checked ~ .radio-dot {
+    border-color: var(--color-accent);
+}
+.custom-radio-container input:checked ~ .radio-dot::after {
+    background: var(--color-accent);
+}
+
+/* --- DIVIDER --- */
+.custom-divider {
+    height: 1px;
+    background-color: var(--color-bg-tertiary);
+    margin: 40px 0;
+}
+
+/* Code Block */
+.code-block {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-bg-tertiary);
+    border-radius: var(--shape-radius-medium);
+    position: relative;
+    padding: 15px;
+    overflow-x: auto;
+}
+.code-block code { font-family: 'Roboto Mono', monospace; color: #79CCFF; }

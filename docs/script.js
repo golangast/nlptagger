@@ -13,85 +13,106 @@ document.addEventListener('DOMContentLoaded', () => {
     targets.forEach(target => { observer.observe(target); });
 
 
-    // --- Dialog Logic (M2 Dialog/Modal) ---
+    // --- Dialog, Snackbar, and Copy Logic (UPDATED IDs) ---
     const dialog = document.getElementById('status-dialog');
     const showDialogBtn = document.getElementById('show-dialog-btn');
     const dialogCancelBtn = document.getElementById('dialog-cancel');
-
-    if (showDialogBtn && dialog && dialogCancelBtn) {
-        showDialogBtn.addEventListener('click', () => {
-            dialog.classList.add('open');
-        });
-        dialogCancelBtn.addEventListener('click', () => {
-            dialog.classList.remove('open');
-        });
-        dialog.addEventListener('click', (e) => {
-            if (e.target === dialog) { // Close when clicking the scrim (background)
-                dialog.classList.remove('open');
-            }
-        });
-    }
-
-    // --- Tab Switching Logic (Segmented Button) ---
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabId = button.getAttribute('data-tab');
-            const targetContent = document.getElementById(`tab-${tabId}`);
-
-            if (button.classList.contains('active')) return;
-
-            // Deactivate old content and tab
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => {
-                if (content.classList.contains('active')) {
-                    content.style.opacity = '0';
-                    content.style.transform = 'translateY(10px)';
-                    setTimeout(() => { content.classList.remove('active'); }, 300);
-                }
-            });
-
-            // Activate new tab button
-            button.classList.add('active');
-
-            // Activate new content with a delay
-            setTimeout(() => { targetContent.classList.add('active'); }, 150);
-        });
-    });
-
-    // --- Code Copying & Snackbar Logic ---
+    const viewGithubBtn = dialog ? dialog.querySelector('.custom-button.filled') : null; // Custom button class
     const copyButton = document.querySelector('.copy-btn');
     const codeElement = document.getElementById('go-code-example');
-    const snackbar = document.getElementById('m3-snackbar');
+    const snackbar = document.getElementById('custom-snackbar'); // Custom snackbar ID
 
+    if (showDialogBtn && dialog && dialogCancelBtn) {
+        showDialogBtn.addEventListener('click', () => { dialog.classList.add('open'); });
+        dialogCancelBtn.addEventListener('click', () => { dialog.classList.remove('open'); });
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) { dialog.classList.remove('open'); }
+        });
+        if (viewGithubBtn) {
+             viewGithubBtn.addEventListener('click', () => {
+                window.open('https://github.com/golangast/nlptagger', '_blank');
+                dialog.classList.remove('open');
+             });
+        }
+    }
     if (copyButton && codeElement && snackbar) {
         copyButton.addEventListener('click', async () => {
             const codeText = codeElement.textContent;
-            
             try {
                 await navigator.clipboard.writeText(codeText);
-                
-                // Show Snackbar
-                snackbar.classList.remove('show'); // Reset animation
-                void snackbar.offsetWidth; // Trigger reflow
+                snackbar.classList.remove('show');
+                void snackbar.offsetWidth;
                 snackbar.classList.add('show');
-
             } catch (err) {
                 console.error('Failed to copy text: ', err);
-                alert('Failed to copy code. Please copy manually.');
             }
         });
     }
 
-    // --- Slider Logic ---
-    const slider = document.getElementById('batch-slider');
-    const sliderValueDisplay = document.querySelector('.slider-value');
+    // --- Tab Switching Logic (UPDATED class selector) ---
+    const allTabButtons = document.querySelectorAll('.tab-button');
+    
+    allTabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.getAttribute('data-tab');
+            const targetContent = document.getElementById(`tab-${tabId}`);
+            const parentContainer = button.closest('.custom-segmented-button'); // Custom class
 
-    if (slider && sliderValueDisplay) {
-        slider.addEventListener('input', () => {
-            sliderValueDisplay.textContent = slider.value;
+            if (button.classList.contains('active') || !parentContainer) return;
+
+            parentContainer.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            
+            const tabSection = parentContainer.closest('section');
+            if (tabSection) {
+                tabSection.querySelectorAll('.tab-content').forEach(content => {
+                    if (content.classList.contains('active')) {
+                        content.style.opacity = '0';
+                        content.style.transform = 'translateY(10px)';
+                        setTimeout(() => { content.classList.remove('active'); }, 200);
+                    }
+                });
+            }
+
+            button.classList.add('active');
+            setTimeout(() => { if (targetContent) { targetContent.classList.add('active'); } }, 100);
         });
-    }
+    });
+
+
+    // --- Navigation Synchronization (Sidebar Link Sync) ---
+    const navItems = document.querySelectorAll('.app-sidebar .nav-item');
+    const mainSections = document.querySelectorAll('.content-area section');
+    const contentWrapper = document.querySelector('.app-content-wrapper');
+
+
+    // Smooth scroll handler
+    const scrollToSection = (e, item) => {
+        e.preventDefault();
+        const targetId = item.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+        if (targetElement) {
+            // Scroll the app-content-wrapper element
+            const offset = targetElement.offsetTop - 80; // Offset by header height
+            contentWrapper.scrollTo({ top: offset, behavior: 'smooth' });
+        }
+    };
+    navItems.forEach(item => item.addEventListener('click', (e) => scrollToSection(e, item)));
+
+
+    // IntersectionObserver for Nav Active State update
+    const sectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                navItems.forEach(item => item.classList.remove('active'));
+                const activeId = entry.target.id;
+                document.querySelector(`.app-sidebar a[href="#${activeId}"]`)?.classList.add('active');
+            }
+        });
+    }, {
+        threshold: 0.5,
+        root: contentWrapper, // Observe relative to the scrolling element
+        rootMargin: '-20% 0px -50% 0px'
+    });
+
+    mainSections.forEach(section => sectionObserver.observe(section));
 });
