@@ -88,7 +88,7 @@ Use the respective flags to initiate the training process. Each flag executes a 
 To run predictions using a previously trained MoE model, use the `--moe_inference` flag and pass the input query string.
 
 | Action          | Flag              | Command Example                                                              |
-| :-------------- | :---------------- | :--------------------------------------------------------------------------- |
+| :---------------- | :---------------- | :--------------------------------------------------------------------------- |
 | **MoE Inference** | `--moe_inference` | `go run main.go --moe_inference "schedule a meeting with John for tomorrow at 2pm"` |
 
 If no flags are provided, the application will prompt the user to specify an action:
@@ -98,26 +98,45 @@ $ go run main.go
 No action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, or -moe_inference <query>.
 ```
 
+## 🧩 Integrating `nlptagger` into Your Projects
+
+This project is more than just command-line tools. It's a collection of Go packages. You can use these packages in your own Go projects.
+
+For example, to use the core neural network components:
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/golangast/nlptagger/neural/nn"
+)
+
+func main() {
+	// Example: Create a simple feed-forward layer
+	layer := nn.NewFeedForward(10, 5)
+	fmt.Printf("Created a feed-forward layer with input size %d and output size %d\n", layer.InputSize(), layer.OutputSize())
+}
+```
+
+The `neural/` and `tagger/` directories contain the reusable components. Import them as needed.
+
 ## ⚙️ Project Structure
 
-The architecture is modular, with the main file dispatching tasks to specialized packages in the `cmd/` directory. This separation ensures clean code and independent development of model components.
+
+The project is a collection of tools. Its structure reflects this.
 
 ```
 nlptagger/
-├── main.go                       # Main entry point and command dispatcher.
-├── go.mod                        # Go module file.
-├── cmd/                          # Directory for all specialized command-line modules
-│   ├── train_word2vec/           # Handles all Word2Vec training logic.
-│   ├── train_moe/                # Handles all MoE training and model saving logic.
-│   ├── train_intent_classifier/  # Handles all Intent Classifier training logic.
-│   └── moe_inference/            # Handles MoE model loading and prediction logic.
-├── neural/                       # Core neural network components (layers, models, etc.)
-│   ├── moe/                      # Mixture of Experts model implementation.
-│   ├── nn/                       # Neural network primitives.
-│   └── nnu/                      # Neural network utilities and models.
-├── tagger/                       # NLP tagging components (POS, NER, etc.).
-├── trainingdata/                 # Example training data.
-└── gob_models/                   # Default location for saved models.
+├── main.go         # Dispatches to common tools.
+├── go.mod          # Go module definition.
+├── cmd/            # Each subdirectory is a command-line tool.
+│   ├── train_word2vec/ # Example: Word2Vec training.
+│   └── moe_inference/  # Example: MoE inference.
+├── neural/         # Core neural network code.
+├── tagger/         # NLP tagging components.
+├── trainingdata/   # Sample data for training.
+└── gob_models/     # Saved models.
 ```
 
 ## 📊 Data & Configuration
