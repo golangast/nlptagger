@@ -1,273 +1,289 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NLPTagger - GitHub Readme Styled</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+    <title>NLPTagger - NLP Toolkit in Go</title>
+    <!-- Material Design 3 CSS from CDN -->
+    <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Custom CSS for layout and responsiveness -->
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--mdc-theme-background, #f5f5f5);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 960px;
+            width: 100%;
+            display: grid;
+            gap: 20px;
+            grid-template-columns: 1fr;
+        }
+        @media (min-width: 768px) {
+            .container {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+        }
+        .mdc-card {
+            padding: 20px;
+            box-shadow: var(--mdc-elevation-box-shadow, 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12));
+        }
+        h1, h2, h3 {
+            color: var(--mdc-theme-on-surface, #212121);
+        }
+        pre {
+            background-color: var(--mdc-theme-surface, #e0e0e0);
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'Roboto Mono', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid var(--mdc-theme-on-surface, #e0e0e0);
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: var(--mdc-theme-surface, #e0e0e0);
+        }
+        .note {
+            background-color: var(--mdc-theme-secondary-container, #e8eaf6);
+            color: var(--mdc-theme-on-secondary-container, #1a237e);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .badge-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        .badge-container img {
+            height: 20px; /* Standard badge height */
+        }
+    </style>
+    <!-- Material Web Components JS from CDN -->
+    <script type="module" src="https://unpkg.com/@material/web@latest/all.js"></script>
 </head>
 <body>
     <div class="container">
-        <div class="card main-section">
+        <!-- Main Title and Description -->
+        <md-card class="mdc-card" style="grid-column: 1 / -1;">
             <h1>NLPTagger</h1>
-            <p>A tagger for pos, ner, and phrases in Go.</p>
-            <p class="note">
-                This project is heavily under construction and will change a lot because I am learning as I am making and accuracy isn't #1 right now. When you need a program to understand context of commands.
-            </p>
-        </div>
+            <div class="badge-container">
+                <!-- Badges will be inserted here -->
+            </div>
+            <p>A versatile, high-performance Natural Language Processing (NLP) toolkit written entirely in <strong>Go</strong> (Golang). The project provides a command-line utility for training and utilizing foundational NLP models, including <strong>Word2Vec</strong> embeddings, a sophisticated <strong>Mixture of Experts (MoE)</strong> model, and a practical <strong>Intent Classifier</strong>.</p>
+            <div class="note">
+                <p><strong>Note:</strong> This project is currently in a beta stage and is under active development. The API and functionality are subject to change. Accuracy is not the primary focus at this stage, as the main goal is to explore and implement these NLP models in Go.</p>
+            </div>
+        </md-card>
 
-        <div class="card features-section">
-            <h2>General Info</h2>
+        <!-- Table of Contents -->
+        <md-card class="mdc-card" style="grid-column: 1 / -1;">
+            <h2>Table of Contents</h2>
             <ul>
-                <li><strong>Tokenization:</strong> This is the very first step in most NLP pipelines. It involves breaking down text into individual units called tokens (words, punctuation marks, etc.). Tokenization is fundamental because it creates the building blocks for further analysis.</li>
-                <li><strong>Part-of-Speech (POS) Tagging:</strong> POS tagging assigns grammatical categories (noun, verb, adjective, etc.) to each token. It's a crucial step for understanding sentence structure and is often used as input for more complex tasks like phrase tagging.</li>
-                <li><strong>Named Entity Recognition (NER):</strong> NER identifies and classifies named entities (people, organizations, locations, dates, etc.) in text. This is more specific than POS tagging but still more generic than phrase tagging, as it focuses on individual entities rather than complete phrases.</li>
-                <li><strong>Dependency Parsing:</strong> Dependency parsing analyzes the grammatical relationships between words in a sentence, creating a tree-like structure that shows how words depend on each other. It provides a deeper understanding of sentence structure than phrase tagging, which focuses on contiguous chunks.</li>
-                <li><strong>Lemmatization and Stemming:</strong> These techniques reduce words to their base or root forms (e.g., "running" to "run"). They help to normalize text and improve the accuracy of other NLP tasks.</li>
-                <li><strong>Word2Vec:</strong> is a technique that represents words as numerical vectors capturing semantic relationships: words with similar meanings have closer vectors. This allows algorithms to understand and process text more effectively by leveraging word similarities.</li>
-                <li><strong>Semantic roles:</strong> describe the roles of words or phrases within a sentence, such as agent, action, or object. Identifying these roles helps to understand the meaning and relationships between different parts of a sentence.</li>
+                <li><a href="#key-features">✨ Key Features</a></li>
+                <li><a href="#getting-started">🚀 Getting Started</a>
+                    <ul>
+                        <li><a href="#prerequisites">Prerequisites</a></li>
+                        <li><a href="#installation">Installation</a></li>
+                        <li><a href="#building-from-source">Building from Source</a></li>
+                    </ul>
+                </li>
+                <li><a href="#usage">🛠️ Usage</a>
+                    <ul>
+                        <li><a href="#training-models">Training Models</a></li>
+                        <li><a href="#running-moe-inference">Running MoE Inference</a></li>
+                    </ul>
+                </li>
+                <li><a href="#integrating-nlptagger">🧩 Integrating `nlptagger` into Your Projects</a></li>
+                <li><a href="#project-structure">⚙️ Project Structure</a></li>
+                <li><a href="#data-configuration">📊 Data & Configuration</a></li>
+                <li><a href="#roadmap">🗺️ Roadmap</a></li>
+                <li><a href="#contributing">🤝 Contributing</a></li>
+                <li><a href="#license">📜 License</a></li>
+                <li><a href="#special-thanks">🙏 Special Thanks</a></li>
+                <li><a href="#why-go">Why Go?</a></li>
             </ul>
-            <p class="note">
-                This project is used for tagging cli commands. It is not a LLM or trying to be. I am using it to generate go code but I made this completely separate so others can enjoy it.
-                I will keep working on it and hopefully improving the guessing of intent.
-            </p>
-        </div>
+        </md-card>
 
-        <div class="card basic-info-section">
-            <h2>Why build this?</h2>
+        <!-- Key Features -->
+        <md-card class="mdc-card" id="key-features" style="grid-column: 1 / -1;">
+            <h2>✨ Key Features</h2>
+            <p>The application is structured as a dispatcher that runs specialized modules for various NLP tasks:</p>
             <ul>
-                <li>Go never changes.</li>
-                <li>It is nice to not have terminal drop downs.</li>
+                <li><strong>Word2Vec Training</strong>: Generate high-quality distributed word representations (embeddings) from a text corpus.</li>
+                <li><strong>Mixture of Experts (MoE) Architecture</strong>: Train a powerful MoE model, designed for improved performance, scalability, and handling of complex sequential or structural data.</li>
+                <li><strong>Intent Classification</strong>: Develop a model for accurately categorizing user queries into predefined semantic intents.</li>
+                <li><strong>Efficient Execution</strong>: Built in Go, leveraging its performance and concurrency features for fast training and inference.</li>
             </ul>
+        </md-card>
 
-            <h2>What does it do?</h2>
-            <p>It tags words for commands. I made an overview video on this project but there have been a lot of changes. <a href="YOUR_VIDEO_LINK_HERE">video</a>.</p>
+        <!-- Getting Started -->
+        <md-card class="mdc-card" id="getting-started" style="grid-column: 1 / -1;">
+            <h2>🚀 Getting Started</h2>
+            <h3 id="prerequisites">Prerequisites</h3>
+            <p>You need a working <strong>Go environment</strong> (version 1.25 or higher is recommended) installed on your system.</p>
+            <h3 id="installation">Installation</h3>
+            <p>1.  <strong>Clone the repository:</strong></p>
+            <pre><code>git clone https://github.com/golangast/nlptagger.git\ncd nlptagger</code></pre>
+            <h3 id="building-from-source">Building from Source</h3>
+            <p>You can build the executable from the root of the project directory:</p>
+            <pre><code>go build .</code></pre>
+            <p>This will create an `nlptagger` executable in the current directory.</p>
+        </md-card>
 
-            <h2>Technologies</h2>
-            <p>Go</p>
-        </div>
+        <!-- Usage -->
+        <md-card class="mdc-card" id="usage" style="grid-column: 1 / -1;">
+            <h2>🛠️ Usage</h2>
+            <p>The main executable (`nlptagger` or `main.go`) controls all operations using specific command-line flags. All commands should be run from the root directory of the project.</p>
+            <h3 id="training-models">1. Training Models</h3>
+            <p>Use the respective flags to initiate the training process. Each flag executes a separate module located in the `cmd/` directory.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>Flag</th>
+                        <th>Command</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Word2Vec</strong></td>
+                        <td><code>--train-word2vec</code></td>
+                        <td><code>go run main.go --train-word2vec</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mixture of Experts (MoE)</strong></td>
+                        <td><code>--train-moe</code></td>
+                        <td><code>go run main.go --train-moe</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Intent Classifier</strong></td>
+                        <td><code>--train-intent-classifier</code></td>
+                        <td><code>go run main.go --train-intent-classifier</code></td>
+                    </tr>
+                </tbody>
+            </table>
+            <h3 id="running-moe-inference">2. Running MoE Inference</h3>
+            <p>To run predictions using a previously trained MoE model, use the `--moe_inference` flag and pass the input query string.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Flag</th>
+                        <th>Command Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>MoE Inference</strong></td>
+                        <td><code>--moe_inference</code></td>
+                        <td><code>go run main.go --moe_inference "schedule a meeting with John for tomorrow at 2pm"</code></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>If no flags are provided, the application will prompt the user to specify an action:</p>
+            <pre><code>$ go run main.go\nNo action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, or -moe_inference &lt;query&gt;.</code></pre>
+        </md-card>
 
-        <div class="card installation-section">
-            <h2>Requirements</h2>
+        <!-- Integrating nlptagger -->
+        <md-card class="mdc-card" id="integrating-nlptagger" style="grid-column: 1 / -1;">
+            <h2>🧩 Integrating `nlptagger` into Your Projects</h2>
+            <p>This project is more than just command-line tools. It's a collection of Go packages. You can use these packages in your own Go projects.</p>
+            <p>For example, to use the core neural network components:</p>
+            <pre><code>package main\n\nimport (\n\t\"fmt\"\n\t\"github.com/golangast/nlptagger/neural/nn\"\n)\n\nfunc main() {\n\t// Example: Create a simple feed-forward layer\n\tlayer := nn.NewFeedForward(10, 5)\n\tfmt.Printf(\"Created a feed-forward layer with input size %d and output size %d\\n\", layer.InputSize(), layer.OutputSize())\n}\n</code></pre>
+            <p>The `neural/` and `tagger/` directories contain the reusable components. Import them as needed.</p>
+        </md-card>
+
+        <!-- Project Structure -->
+        <md-card class="mdc-card" id="project-structure" style="grid-column: 1 / -1;">
+            <h2>⚙️ Project Structure</h2>
+            <p>The project is a collection of tools. Its structure reflects this.</p>
+            <pre><code>nlptagger/\n├── main.go         # Dispatches to common tools.\n├── go.mod          # Go module definition.\n├── cmd/            # Each subdirectory is a command-line tool.\n│   ├── train_word2vec/ # Example: Word2Vec training.\n│   └── moe_inference/  # Example: MoE inference.\n├── neural/         # Core neural network code.\n├── tagger/         # NLP tagging components.\n├── trainingdata/   # Sample data for training.\n└── gob_models/     # Saved models.\n</code></pre>
+        </md-card>
+
+        <!-- Data & Configuration -->
+        <md-card class="mdc-card" id="data-configuration" style="grid-column: 1 / -1;">
+            <h2>📊 Data & Configuration</h2>
             <ul>
-                <li>Go 1.20+</li>
+                <li><strong>Data Structure</strong>: Training modules look for data files in the `trainingdata/` directory. For example, `intent_data.json` is used for intent classification training.</li>
+                <li><strong>Configuration</strong>: Model hyperparameters (learning rate, epochs, vector size, etc.) are currently hardcoded within their respective training modules in the `cmd/` directory. This is an area for future improvement.</li>
+                <li><strong>Model Output</strong>: Trained models are saved as `.gob` files to the `gob_models/` directory by default.</li>
             </ul>
+        </md-card>
 
-            <h2>Installation</h2>
-            <p>To install NLPTagger, use 'go get':</p>
-            <pre><code>go get github.com/golangast/nlptagger</code></pre>
-            <p>Or, to initialize a new project with NLPTagger using <code>gonew</code>:</p>
-            <pre><code>go install golang.org/x/tools/cmd/gonew@latest
-gonew github.com/golangast/nlptagger example.com/nlptagger</code></pre>
-        </div>
-
-        <div class="card repository-overview-section">
-            <h2>Repository overview</h2>
-            <p>Overview of the code:</p>
+        <!-- Roadmap -->
+        <md-card class="mdc-card" id="roadmap" style="grid-column: 1 / -1;">
+            <h2>🗺️ Roadmap</h2>
+            <p>This project is under active development. Here are some of the planned features and improvements:</p>
             <ul>
-                <li><code>tagger/</code>: Core logic for tagging.</li>
-                <li><code>models/</code>: Contains pre-trained models.</li>
-                <li><code>cmd/</code>: Example usage and CLI tools.</li>
-                <li><code>test/</code>: Tests for the library.</li>
+                <li>Implement comprehensive unit and integration tests.</li>
+                <li>Add more NLP tasks (e.g., Named Entity Recognition, Part-of-Speech tagging).</li>
+                <li>Externalize model configurations from code into files (e.g., YAML, JSON).</li>
+                <li>Improve model accuracy and performance.</li>
+                <li>Enhance documentation with more examples and API references.</li>
+                <li>Create a more user-friendly command-line interface.</li>
             </ul>
-        </div>
+        </md-card>
 
-        <div class="card details-section">
-            <h2>Things to remember</h2>
-            <p>A larger <code>VectorSize</code> can allow for a more nuanced representation of words, but it also increases the computational cost of training and storage.</p>
-            <p>A larger hidden size usually allows the network to learn more complex patterns, but also increases the computational resources required.</p>
-            <p>By limiting the norm of the gradients to <code>maxGrad</code>, the updates to the model's weights are kept within a reasonable range, promoting more stable and effective training.</p>
+        <!-- Contributing -->
+        <md-card class="mdc-card" id="contributing" style="grid-column: 1 / -1;">
+            <h2>🤝 Contributing</h2>
+            <p>We welcome contributions! Please feel free to open issues for bug reports or feature requests, or submit pull requests for any enhancements.</p>
+            <ol>
+                <li>Fork the repository.</li>
+                <li>Create a new branch (<code>git checkout -b feature/AmazingFeature</code>).</li>
+                <li>Commit your changes (<code>git commit -m 'Add AmazingFeature'</code>).</li>
+                <li>Push to the branch (<code>git push origin feature/AmazingFeature</code>).</li>
+                <li>Open a Pull Request.</li>
+            </ol>
+            <div class="note">
+                <p><strong>Note on Tests:</strong> There is currently a lack of automated tests. Contributions in this area are highly encouraged and appreciated!</p>
+            </div>
+        </md-card>
 
-            <h2>Reference Commands</h2>
-            <pre><code>// Example command usage (replace with actual commands from the repo if available)
-nlptagger process "your text here"
-nlptagger train --model mymodel.json --data mydata.txt</code></pre>
-        </div>
+        <!-- License -->
+        <md-card class="mdc-card" id="license" style="grid-column: 1 / -1;">
+            <h2>📜 License</h2>
+            <p>This project is licensed under the <strong>GNU General Public License v3.0</strong>. See the <a href="LICENSE">LICENSE</a> file for details.</p>
+        </md-card>
 
-        <div class="card acknowledgements-section">
-            <h2>Special thanks</h2>
+        <!-- Special Thanks -->
+        <md-card class="mdc-card" id="special-thanks" style="grid-column: 1 / -1;">
+            <h2>🙏 Special Thanks</h2>
             <ul>
-                <li>Go Team because they are gods.</li>
-                <li>Creators of <a href="https://github.com/golang/go">Go</a></li>
+                <li><a href="https://github.com/golang/go/graphs/contributors">The Go Team and contributors</a> for creating and maintaining Go.</li>
             </ul>
+        </md-card>
 
+        <!-- Why Go? -->
+        <md-card class="mdc-card" id="why-go" style="grid-column: 1 / -1;">
             <h2>Why Go?</h2>
+            <p>Go is a great choice for this project for several reasons:</p>
             <ul>
-                <li>Concurrency model with goroutines and channels.</li>
-                <li>Fast compilation times.</li>
-                <li>Strong standard library.</li>
-                <li>Static typing and strong tooling.</li>
+                <li><strong>Stability:</strong> The language has a strong compatibility promise. What you learn now will be useful for a long time. (<a href="https://go.dev/doc/go1compat">Go 1 Compatibility Promise</a>)</li>
+                <li><strong>Simplicity and Readability:</strong> Go's simple syntax makes it easy to read and maintain code.</li>
+                <li><strong>Performance:</strong> Go is a compiled language with excellent performance, which is crucial for NLP tasks.</li>
+                <li><strong>Concurrency:</strong> Go's built-in concurrency features make it easy to write concurrent code for data processing and model training.</li>
+                <li><strong>Strong Community and Ecosystem:</strong> Go has a growing community and a rich ecosystem of libraries and tools. (<a href="https://go.dev/wiki/GoUsers">Go User Community</a>)</li>
             </ul>
-
-            <h2>Just added</h2>
-            <p>Word2Vec integration and neural network for intent guessing.</p>
-        </div>
+        </md-card>
     </div>
 </body>
 </html>
-
-
-<style>
-  body {
-    font-family: 'Roboto', sans-serif;
-    background-color: #f0f2f5; /* Light gray background */
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 40px 20px;
-    margin: 0;
-    min-height: 100vh;
-}
-
-.container {
-    width: 100%;
-    max-width: 900px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px; /* Space between cards */
-}
-
-.card {
-    background-color: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 30px;
-    transition: all 0.3s cubic-bezier(.25,.8,.25,1);
-}
-
-.card:hover {
-    box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
-}
-
-h1 {
-    font-size: 28px;
-    color: #333;
-    margin-top: 0;
-    margin-bottom: 10px;
-    font-weight: 700;
-}
-
-h2 {
-    font-size: 22px;
-    color: #333;
-    margin-top: 0;
-    margin-bottom: 15px;
-    font-weight: 700;
-}
-
-p {
-    font-size: 16px;
-    line-height: 1.6;
-    color: #555;
-    margin-bottom: 16px; /* Default margin for paragraphs */
-}
-
-ul {
-    list-style: none; /* Remove default bullet points */
-    padding: 0;
-    margin: 0;
-    margin-bottom: 16px; /* Default margin for lists */
-}
-
-li {
-    font-size: 16px;
-    line-height: 1.8;
-    color: #555;
-    margin-bottom: 8px;
-    position: relative;
-    padding-left: 20px; /* Space for custom bullet */
-}
-
-li:last-child {
-    margin-bottom: 0;
-}
-
-li::before {
-    content: '•'; /* Custom bullet point */
-    color: #4CAF50; /* Green color for bullet */
-    font-size: 1.2em;
-    position: absolute;
-    left: 0;
-    top: 0;
-}
-
-li strong {
-    color: #333;
-    font-weight: 600;
-}
-
-pre {
-    background-color: #e8e8e8; /* Lighter gray for code block */
-    border-radius: 6px;
-    padding: 15px;
-    overflow-x: auto;
-    font-family: 'Roboto Mono', monospace; /* Monospaced font for code */
-    font-size: 14px;
-    color: #333;
-    white-space: pre-wrap; /* Ensures code wraps */
-    word-break: break-all; /* Breaks long words */
-    margin-bottom: 16px; /* Default margin for pre blocks */
-}
-
-code {
-    font-family: 'Roboto Mono', monospace; /* Monospaced font for code */
-    font-size: 85%;
-    background-color: rgba(27,31,35,.05); /* Light background for inline code */
-    border-radius: 3px;
-    padding: .2em .4em;
-    color: #007bff; /* Blue color for code inside pre */
-}
-
-a {
-    color: #007bff; /* Blue link color */
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-.note {
-    background-color: #fff8e1; /* Light yellow background */
-    border-left: 4px solid #ffeb3b; /* Yellow left border */
-    padding: 15px;
-    margin-top: 15px; /* Space above note */
-    margin-bottom: 15px; /* Space below note */
-    border-radius: 4px;
-    font-size: 15px;
-    color: #856404; /* Darker yellow text */
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .card {
-        padding: 20px;
-    }
-
-    h1 {
-        font-size: 24px;
-    }
-
-    h2 {
-        font-size: 20px;
-    }
-
-    p, ul li {
-        font-size: 15px;
-    }
-
-    pre {
-        font-size: 13px;
-    }
-}
-
-@media (max-width: 480px) {
-    .container {
-        padding: 20px 10px;
-    }
-    .card {
-        padding: 15px;
-    }
-}
-</style>
