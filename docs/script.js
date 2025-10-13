@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     
-    // --- Scroll Animation Logic (IntersectionObserver) ---
+    // --- Scroll Animation Logic (UNCHANGED) ---
     const targets = document.querySelectorAll('[data-animation-target]');
     const observer = new IntersectionObserver((entries, observer) => {
         entries.forEach(entry => {
@@ -13,14 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
     targets.forEach(target => { observer.observe(target); });
 
 
-    // --- Dialog, Snackbar, and Copy Logic (UPDATED IDs) ---
+    // --- Dialog, Snackbar, and Copy Logic (UNCHANGED) ---
     const dialog = document.getElementById('status-dialog');
     const showDialogBtn = document.getElementById('show-dialog-btn');
     const dialogCancelBtn = document.getElementById('dialog-cancel');
-    const viewGithubBtn = dialog ? dialog.querySelector('.custom-button.filled') : null; // Custom button class
+    const viewGithubBtn = dialog ? dialog.querySelector('.custom-button.filled') : null;
     const copyButton = document.querySelector('.copy-btn');
     const codeElement = document.getElementById('go-code-example');
-    const snackbar = document.getElementById('custom-snackbar'); // Custom snackbar ID
+    const snackbar = document.getElementById('custom-snackbar');
 
     if (showDialogBtn && dialog && dialogCancelBtn) {
         showDialogBtn.addEventListener('click', () => { dialog.classList.add('open'); });
@@ -49,14 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Tab Switching Logic (UPDATED class selector) ---
+    // --- Tab Switching Logic (UNCHANGED) ---
     const allTabButtons = document.querySelectorAll('.tab-button');
     
     allTabButtons.forEach(button => {
         button.addEventListener('click', () => {
             const tabId = button.getAttribute('data-tab');
             const targetContent = document.getElementById(`tab-${tabId}`);
-            const parentContainer = button.closest('.custom-segmented-button'); // Custom class
+            const parentContainer = button.closest('.custom-segmented-button');
 
             if (button.classList.contains('active') || !parentContainer) return;
 
@@ -79,9 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // --- Navigation Synchronization (Sidebar Link Sync) ---
+    // --- Navigation Synchronization (Sidebar Link Fix) ---
     const navItems = document.querySelectorAll('.app-sidebar .nav-item');
-    const mainSections = document.querySelectorAll('.content-area section');
+    const mainSections = document.querySelectorAll('.content-area section'); 
     const contentWrapper = document.querySelector('.app-content-wrapper');
 
 
@@ -92,7 +92,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetElement = document.getElementById(targetId);
         if (targetElement) {
             // Scroll the app-content-wrapper element
-            const offset = targetElement.offsetTop - 80; // Offset by header height
+            // Offset by header height (64px) + some margin = ~80px
+            const offset = targetElement.offsetTop - 80; 
             contentWrapper.scrollTo({ top: offset, behavior: 'smooth' });
         }
     };
@@ -102,16 +103,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // IntersectionObserver for Nav Active State update
     const sectionObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
-            if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-                navItems.forEach(item => item.classList.remove('active'));
-                const activeId = entry.target.id;
-                document.querySelector(`.app-sidebar a[href="#${activeId}"]`)?.classList.add('active');
+            if (entry.isIntersecting) {
+                // Ensure the active item is near the top of the viewport to count as 'active'
+                if (entry.boundingClientRect.top < contentWrapper.clientHeight / 2) {
+                    navItems.forEach(item => item.classList.remove('active'));
+                    const activeId = entry.target.id;
+                    document.querySelector(`.app-sidebar a[href="#${activeId}"]`)?.classList.add('active');
+                }
             }
         });
     }, {
-        threshold: 0.5,
-        root: contentWrapper, // Observe relative to the scrolling element
-        rootMargin: '-20% 0px -50% 0px'
+        root: contentWrapper, 
+        // Use a small rootMargin to trigger the link when the section enters the top of the viewport
+        rootMargin: '-50% 0px 0px 0px', // Adjusted to better handle the top-heavy fixed layout
+        threshold: 0.01 // Trigger immediately when even a small part enters
     });
 
     mainSections.forEach(section => sectionObserver.observe(section));

@@ -52,15 +52,6 @@
                     <span class="icon">🛠️</span>
                     <span class="label label-medium">Usage & CLI</span>
                 </a>
-                <a href="#go-reason" class="nav-item">
-                    <span class="icon">💡</span>
-                    <span class="label label-medium">Go Utility</span>
-                </a>
-                <div class="sidebar-divider"></div>
-                <a href="#" class="nav-item settings-item">
-                    <span class="icon">⚙️</span>
-                    <span class="label label-medium">Settings</span>
-                </a>
             </nav>
         </aside>
 
@@ -108,21 +99,12 @@
                     <h2 class="display-small">🧠 Model Catalog</h2>
                     <p class="section-intro body-large mt-20">Explore the different model types available for training and inference.</p>
                     
-                    <div class="progress-container">
-                        <span class="label-medium">Model Deployment Status: 85% Complete</span>
-                        <div class="custom-linear-progress" role="progressbar" aria-valuenow="85" aria-valuemin="0" aria-valuemax="100">
-                            <div class="fill"></div>
-                        </div>
-                    </div>
 
                     <div class="chip-container">
                         <span class="body-medium">Filter by:</span>
                         <button class="custom-chip input">
                             <span class="label-large">Go Language</span>
                             <span class="close-icon" aria-label="Remove filter">×</span>
-                        </button>
-                        <button class="custom-chip assist">
-                            <span class="label-large">Export All Models</span>
                         </button>
                     </div>
 
@@ -148,24 +130,41 @@
 
                 <div class="custom-divider"></div>
 
+               <div class="custom-divider"></div>
+
                 <section id="usage" data-animation-target>
                     <h2 class="display-small">🛠️ Usage & CLI</h2>
-                    <p class="section-intro body-large">Control all operations using the command-line executable.</p>
-                    </section>
+                    <p class="section-intro body-large">Control all operations using the command-line executable. Use the tabs below to view main modes.</p>
+
+                    <div class="tabs custom-segmented-button">
+                        <button class="tab-button active label-large" data-tab="train-usage">1. Training Models</button>
+                        <button class="tab-button label-large" data-tab="inference-usage">2. Inference/Prediction</button>
+                    </div>
+
+                    <div id="tab-train-usage" class="tab-content active">
+                        <h3 class="headline-small">Training Commands</h3>
+                        <table class="cmd-table">
+                            <thead><tr><th class="label-medium">Model</th><th class="label-medium">Flag</th><th class="label-medium">Description</th></tr></thead>
+                            <tbody>
+                                <tr class="body-medium"><td>**Word2Vec**</td><td><code class="body-small">--train-word2vec</code></td><td>Initiates embedding training with default parameters.</td></tr>
+                                <tr class="body-medium"><td>**MoE**</td><td><code class="body-small">--train-moe</code></td><td>Starts training the Mixture of Experts model on sequence data.</td></tr>
+                                <tr class="body-medium"><td>**Intent Classifier**</td><td><code class="body-small">--train-intent-classifier</code></td><td>Trains the model using labeled intent datasets.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div id="tab-inference-usage" class="tab-content">
+                        <h3 class="headline-small">MoE Inference Example</h3>
+                        <div class="code-block dark-theme-code">
+                            <button class="copy-btn custom-button filled" aria-label="Copy code snippet">📋 Copy</button>
+                            <pre id="go-code-example" class="body-small"><code>go run main.go --moe_inference "I need to reschedule my doctor's appointment."</code></pre>
+                        </div>
+                        <p class="mt-20 body-medium text-secondary">The result will be the predicted sequence and confidence scores from the model.</p>
+                    </div>
+
+                </section>
 
                 <div class="custom-divider"></div>
-
-                <section id="go-reason" data-animation-target>
-                    <h2 class="display-small">💡 Why Go? The Utility of Golang in NLP</h2>
-                    <p class="section-intro body-large">The choice of Go provides significant advantages for complex machine learning infrastructure.</p>
-                    
-                   
-                    
-                    <ul class="custom-list">
-                        <li class="list-item-animated body-large">**Deployment Simplicity:** Compiled single binaries make deployment trivial across cloud platforms.</li>
-                        <li class="list-item-animated body-large">**Concurrency & Speed:** Native goroutines enable highly parallel data processing and efficient model training loops.</li>
-                    </ul>
-                </section>
                 
             </main>
         </div>
