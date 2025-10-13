@@ -19,6 +19,7 @@ A versatile, high-performance Natural Language Processing (NLP) toolkit written 
 
 ## Table of Contents
 
+- [🌐 Project Website](https://golangast.github.io/nlptagger/)
 - [✨ Key Features](#-key-features)
 - [🚀 Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
