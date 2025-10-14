@@ -21,7 +21,7 @@
 
 /* --- GLOBAL STYLES & TYPOGRAPHY --- */
 * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
-html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; } /* Ensure fixed layout works */
+html, body { margin: 0; padding: 0; height: 100%; } /* Ensure fixed layout works */
 body.dark-theme {
     background: var(--color-bg-primary); 
     color: var(--color-text-primary);
@@ -239,3 +239,137 @@ body.dark-theme {
     overflow-x: auto;
 }
 .code-block code { font-family: 'Roboto Mono', monospace; color: #79CCFF; }
+
+/* Container for the example section */
+.nlptagger-example-section {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #f9f9f9; /* Light background for the section */
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nlptagger-example-section h2 {
+    color: #333;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.example-description {
+    color: #555;
+    margin-bottom: 30px;
+    font-style: italic;
+}
+
+/* Table styling */
+.nlptagger-table-container {
+    overflow-x: auto; /* Ensures table is scrollable on small screens */
+}
+
+.nlptagger-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    font-size: 14px;
+    background-color: #fff; /* White background for the table */
+}
+
+.nlptagger-table-container th, 
+.nlptagger-table-container td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.nlptagger-table-container th {
+    background-color: #007bff; /* Primary blue color for header */
+    color: white;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Style for field labels (the first column) */
+.field-label {
+    width: 30%; /* Allocates a reasonable width for the label */
+    font-weight: 600;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+/* Style for the confidence text */
+.confidence {
+    color: #6c757d; /* Muted gray for less important details */
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+/* Style for the generated command row to make it stand out */
+.generated-command-row {
+    background-color: #e6f0ff; /* Light blue background */
+    border-top: 2px solid #0056b3;
+    font-weight: bold;
+}
+
+/* Code block styling (e.g., for tags and the generated command) */
+.code-block, 
+.generated-command pre {
+    font-family: 'Consolas', 'Monaco', monospace;
+    background-color: #282c34; /* Dark background for code/terminal look */
+    color: #61afef; /* Light blue/cyan for code text */
+    padding: 5px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    white-space: pre-wrap; /* Allows long strings to wrap */
+}
+
+.generated-command pre {
+    margin: 0;
+    padding: 10px;
+    font-size: 1.1em;
+    width: 100%; /* Full width within the cell */
+}
+
+/* Highlighting the command line text in the table for a subtle terminal feel */
+.command-line {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #008000; /* Green color for user input */
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 600px) {
+    .nlptagger-table-container table {
+        display: block;
+        width: 100%;
+    }
+
+    /* Stack rows on small screens */
+    .nlptagger-table-container thead {
+        display: none;
+    }
+
+    .nlptagger-table-container tr {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+
+    .nlptagger-table-container td {
+        border-bottom: none;
+    }
+
+    .field-label {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 15px;
+        border-radius: 5px 5px 0 0;
+    }
+
+    .field-value {
+        border-top: 1px solid #ddd;
+    }
+}

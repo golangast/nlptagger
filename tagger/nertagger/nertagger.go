@@ -10,7 +10,7 @@ import (
 
 var nerTags = map[string]string{
 	`\bcreate\b`: "COMMAND",
-	`\b(webserver|database|handler|structure|field|data)\b`: "OBJECT_TYPE",
+	`\b(webserver|database|handler|structure|field|data|file|folder)\b`: "OBJECT_TYPE",
 	`\bnamed\s+([a-zA-Z]+)\b`:                               "NAME",
 	`\bthe\b`:                                               "DETERMINER", // Add this
 	`\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|string|byte|rune|integer|boolean|float|double|char|bool|int)\b`: "DATA_TYPE",

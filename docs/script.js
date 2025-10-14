@@ -121,3 +121,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     mainSections.forEach(section => sectionObserver.observe(section));
 });
+
+// --- JAVASCRIPT: Copy to Clipboard Feature (Optional) ---
+document.addEventListener('DOMContentLoaded', () => {
+    const generatedCommandCell = document.querySelector('.generated-command');
+    if (generatedCommandCell) {
+        // 1. Extract the command text
+        const commandText = generatedCommandCell.querySelector('code').innerText.trim();
+        
+        // 2. Create the Copy Button element
+        const copyButton = document.createElement('button');
+        copyButton.innerText = '📋 Copy';
+        copyButton.className = 'copy-command-btn';
+        
+        // 3. Add styles to the button
+        copyButton.style.cssText = `
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        `;
+
+        // 4. Implement the copy functionality
+        copyButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(commandText).then(() => {
+                copyButton.innerText = '✅ Copied!';
+                setTimeout(() => {
+                    copyButton.innerText = '📋 Copy';
+                }, 2000);
+            }).catch(err => {
+                console.error('Could not copy text: ', err);
+            });
+        });
+
+        // 5. Append the button below the command
+        generatedCommandCell.appendChild(copyButton);
+    }
+});

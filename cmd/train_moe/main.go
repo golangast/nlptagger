@@ -151,8 +151,10 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 		parentIntentIDsBatch[i] = parentIntentVocab.GetTokenID(example.ParentIntent)
 		childIntentIDsBatch[i] = childIntentVocab.GetTokenID(example.ChildIntent)
 
+		// Prepend BOS and append EOS to the sentence for training
+		trainingSentence := "<s> " + example.Sentence + " </s>"
 		// Tokenize and pad sentence
-		sentenceTokens, err := TokenizeAndConvertToIDs(example.Sentence, sentenceTokenizer, sentenceVocab, maxSequenceLength)
+		sentenceTokens, err := TokenizeAndConvertToIDs(trainingSentence, sentenceTokenizer, sentenceVocab, maxSequenceLength)
 		if err != nil {
 			return 0, fmt.Errorf("sentence tokenization failed for item %d: %w", i, err)
 		}
@@ -209,9 +211,9 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	} else {
 		guessedSentence, err := sentenceTokenizer.Decode(guessedIDs)
 		if err != nil {
-		    log.Printf("Error decoding guessed sentence: %v", err)
+			log.Printf("Error decoding guessed sentence: %v", err)
 		} else {
-		    log.Printf("Guessed sentence: %s", guessedSentence)
+			log.Printf("Guessed sentence: %s", guessedSentence)
 		}
 		log.Printf("Target sentence: %s", batch[0].Sentence)
 	}
@@ -263,11 +265,17 @@ func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocab
 		parentIntentVocabulary.AddToken(pair.ParentIntent)
 		childIntentVocabulary.AddToken(pair.ChildIntent)
 
-		tokenizedSentence := tokenizer.Tokenize(strings.ToLower(pair.Sentence))
+		// Add BOS and EOS tokens to the sentence when building the vocabulary
+		trainingSentence := "<s> " + pair.Sentence + " </s>"
+		tokenizedSentence := tokenizer.Tokenize(strings.ToLower(trainingSentence))
 		for _, word := range tokenizedSentence {
 			sentenceVocabulary.AddToken(word)
 		}
 	}
+
+	// Explicitly add BOS and EOS tokens to the sentence vocabulary
+	sentenceVocabulary.BosID = sentenceVocabulary.GetTokenID("<s>")
+	sentenceVocabulary.EosID = sentenceVocabulary.GetTokenID("</s>")
 
 	return queryVocabulary, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, nil
 }
@@ -299,9 +307,9 @@ func main() {
 	}()
 
 	// Define training parameters
-	epochs := 20
+	epochs := 10
 	learningRate := 0.001
-	batchSize := 32
+	batchSize := 16
 	parentIntentVocabularySavePath := "gob_models/parent_intent_vocabulary.gob"
 	childIntentVocabularySavePath := "gob_models/child_intent_vocabulary.gob"
 	sentenceVocabularySavePath := "gob_models/sentence_vocabulary.gob"
@@ -357,7 +365,7 @@ func main() {
 	embeddingDim := word2vecModel.VectorSize // Use vector size from word2vec
 	numExperts := 2
 	maxSequenceLength := 32 // Max length for input query and output description
-	maxAttentionHeads := 4
+	maxAttentionHeads := 5
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
 	log.Printf("Parent Intent Vocabulary Size: %d", parentVocabSize)

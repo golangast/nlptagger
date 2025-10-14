@@ -355,5 +355,12 @@
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
     "sentence": "In the webserver API and handler v1, this will create a data structure named User."
+  },
+  {
+    "query": "generate a webserver named jim",
+    "parent_intent": "webserver_creation",
+    "child_intent": "create_server_and_handler",
+    "description": "Generates a new webserver with a specified name.",
+    "sentence": "This will generate a new webserver named jim."
   }
 ]

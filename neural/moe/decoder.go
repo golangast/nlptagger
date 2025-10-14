@@ -242,6 +242,50 @@ func (d *RNNDecoder) Backward(grads []*Tensor) error {
 	return nil
 }
 
+// DecodeStep performs a single decoding step.
+// It takes the current input token, the previous hidden and cell states, and the encoder's context vector.
+// It returns the output logits for the current step, and the new hidden and cell states.
+func (d *RNNDecoder) DecodeStep(inputToken *Tensor, prevHiddenState, prevCellState, contextVector *Tensor) (*Tensor, *Tensor, *Tensor, error) {
+	// Embed the decoder input
+	embeddedInput, err := d.Embedding.Forward(inputToken)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder embedding failed: %w", err)
+	}
+
+	// Apply attention
+	attentionOutput, err := d.Attention.Forward(embeddedInput, contextVector, contextVector)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder attention failed: %w", err)
+	}
+
+	// Concatenate embedded input and attention output
+	combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 1)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder concat failed: %w", err)
+	}
+
+	// Reshape combinedInput from [batchSize, 2, embeddingDim] to [batchSize, 2 * embeddingDim]
+	batchSize := combinedInput.Shape[0]
+	reshapedCombinedInput, err := combinedInput.Reshape([]int{batchSize, combinedInput.Shape[1] * combinedInput.Shape[2]})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to reshape combined input for LSTM: %w", err)
+	}
+
+	// Pass through LSTM
+	hiddenState, cellState, err := d.LSTM.Forward(reshapedCombinedInput, prevHiddenState, prevCellState)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder LSTM forward failed: %w", err)
+	}
+
+	// Hidden state to output logits
+	outputLogits, err := d.OutputLayer.Forward(hiddenState)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder output layer forward failed: %w", err)
+	}
+
+	return outputLogits, hiddenState, cellState, nil
+}
+
 // Parameters returns all learnable parameters of the RNNDecoder.
 func (d *RNNDecoder) Parameters() []*Tensor {
 	params := []*Tensor{}

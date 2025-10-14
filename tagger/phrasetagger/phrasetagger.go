@@ -4,6 +4,27 @@ import (
 	"nlptagger/tagger/tag"
 )
 
+// PhraseTagger is a struct that holds any necessary state for phrase tagging.
+type PhraseTagger struct {
+	// Add any fields here if the tagger needs state (e.g., loaded models, vocabularies)
+}
+
+// NewPhraseTagger creates and returns a new instance of PhraseTagger.
+func NewPhraseTagger() *PhraseTagger {
+	return &PhraseTagger{}
+}
+
+// GenerateCommands processes a sequence of words and generates commands.
+// For now, it simply returns the input sequence as commands.
+// In a real scenario, this would involve more sophisticated logic using POS/NER tags.
+func (pt *PhraseTagger) GenerateCommands(words []string) []string {
+	// In a real implementation, you would create a tag.Tag struct,
+	// populate its Tokens, PosTag, and NerTag fields (perhaps from other taggers),
+	// and then call CheckPhrase.
+	// For this example, we'll just return the words as commands.
+	return words
+}
+
 // ParseCommand parses a command string and extracts relevant information.
 func CheckPhrase(text string, t tag.Tag) tag.Tag {
 	if len(t.PhraseTag) < len(t.Tokens) {
@@ -126,6 +147,10 @@ func CheckPhrase(text string, t tag.Tag) tag.Tag {
 			t.PhraseTag[i] = "verbPhrase:generate_a_webserver"
 		}
 
+		// Assign a default tag if no specific rule was matched
+		if t.PhraseTag[i] == "" {
+			t.PhraseTag[i] = "WORD:" + token
+		}
 	}
 	return t
 }
