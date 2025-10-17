@@ -99,34 +99,29 @@
                     <h2 class="display-small">🧠 Model Catalog</h2>
                     <p class="section-intro body-large mt-20">Explore the different model types available for training and inference.</p>
                     
-
-                    <div class="chip-container">
-                        <span class="body-medium">Filter by:</span>
-                        <button class="custom-chip input">
-                            <span class="label-large">Go Language</span>
-                            <span class="close-icon" aria-label="Remove filter">×</span>
-                        </button>
-                    </div>
-
-                    <div class="tabs custom-segmented-button">
-                        <button class="tab-button active label-large" data-tab="sequential">Sequential Models</button>
-                        <button class="tab-button label-large" data-tab="vector">Vector Embeddings</button>
-                        <button class="tab-button label-large" data-tab="classification">Classification</button>
-                    </div>
-
-                    <div id="tab-sequential" class="tab-content active model-cards">
+                    <div class="model-cards">
                         <div class="custom-card filled">
                             <h3 class="title-large">Mixture of Experts (MoE)</h3>
-                            <p class="body-medium text-secondary">A novel approach for handling sequential data with high sparsity and concurrency.</p>
+                            <p class="body-medium text-secondary">A novel approach for handling sequential data with high sparsity and concurrency. Ideal for complex NLP tasks like intent classification and sequence-to-sequence generation.</p>
                             <span class="card-status status-beta label-small">BETA</span>
                         </div>
                         <div class="custom-card outlined">
+                            <h3 class="title-large">Word2Vec</h3>
+                            <p class="body-medium text-secondary">Generates dense vector representations of words, capturing semantic relationships. Essential for feature extraction and as a foundational layer for other models.</p>
+                            <span class="card-status status-stable label-small">STABLE</span>
+                        </div>
+                        <div class="custom-card outlined">
+                            <h3 class="title-large">Intent Classification</h3>
+                            <p class="body-medium text-secondary">A model designed to understand and categorize user queries into predefined intents. It can discern both parent and child intents, allowing for nuanced command interpretation.</p>
+                            <span class="card-status status-stable label-small">STABLE</span>
+                        </div>
+                        <div class="custom-card outlined">
                             <h3 class="title-large">Transformer Encoder</h3>
-                            <p class="body-medium text-secondary">Classic self-attention mechanism implementation for baseline tasks.</p>
+                            <p class="body-medium text-secondary">A classic self-attention mechanism implementation for baseline tasks, providing a strong foundation for sequence-based analysis.</p>
                             <span class="card-status status-stable label-small">STABLE</span>
                         </div>
                     </div>
-                    </section>
+                </section>
 
                 <div class="custom-divider"></div>
 
