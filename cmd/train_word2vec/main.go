@@ -8,14 +8,14 @@ import (
 )
 
 var (
-	dimModel = flag.Int("dim", 50, "Dimension of the model")
+	dimModel = flag.Int("dim", 25, "Dimension of the model")
 )
 
 func main() {
 	flag.Parse()
 
 	// Train Word2Vec model first
-	word2vecTrainingDataPath := "trainingdata/WikiQA-train.txt"
+	word2vecTrainingDataPath := "./trainingdata/WikiQA-train.txt"
 	word2vecModelSavePath := "gob_models/word2vec_model.gob"
 	word2vecVectorSize := *dimModel
 	word2vecEpochs := 1

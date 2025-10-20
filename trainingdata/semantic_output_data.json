@@ -1,0 +1,77 @@
+[
+  {
+    "query": "in a new folder jack, create a go webserver jill",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jack",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Deployment::GoWebserver",
+            "name": "jill",
+            "properties": {
+              "port": 8080,
+              "runtime": "go",
+              "source": "boilerplate_v1"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create a file named 'test.txt'",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "test.txt",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "delete the file 'test.txt'",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "test.txt",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "list all files in the current directory",
+    "semantic_output": {
+      "operation": "Read",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": ".",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  }
+]

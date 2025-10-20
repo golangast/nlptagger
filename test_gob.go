@@ -84,7 +84,7 @@ func main_test() {
 	// Test forward pass with dummy input
 	dummyInput := tensor.NewTensor([]int{1, 32}, make([]float64, 1*32), false)
 	dummyInput2 := tensor.NewTensor([]int{1, 32}, make([]float64, 1*32), false)
-	_, _, _, _, err = loadedModel.Forward(dummyInput, dummyInput2)
+	_, _, err = loadedModel.Forward(dummyInput, dummyInput2)
 	if err != nil {
 		log.Fatalf("Forward pass on loaded model failed: %v", err)
 	}

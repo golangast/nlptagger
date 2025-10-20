@@ -182,7 +182,7 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 	childIntentIDs := make([]int, batchSize)
 	targetSentenceIDsBatch := make([]int, batchSize*maxSeqLength)
 
-	tokenizer, err := tokenizer.NewTokenizer(queryVocab)
+	tok, err := tokenizer.NewTokenizer(queryVocab)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create tokenizer: %w", err)
 	}
@@ -193,7 +193,7 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 	}
 
 	for i, example := range batch {
-		tokenIDs, err := tokenizer.Encode(example.Query)
+		tokenIDs, err := tok.Encode(example.Query)
 		if err != nil {
 			return 0, fmt.Errorf("query tokenization failed for item %d: %w", i, err)
 		}
@@ -244,7 +244,7 @@ func trainIntentModelBatch(model *moemodel.MoEClassificationModel, optimizer Opt
 	totalLoss := parentLoss + childLoss + sentenceLoss
 
 	// Backward pass
-	if parentGrad == nil || childGrad == nil || sentenceGrad == nil {
+	if parentGrad == nil || childGrad == nil {
 		log.Printf("Skipping backward pass due to nil gradient")
 		return totalLoss, nil
 	}
@@ -272,7 +272,8 @@ func SequenceCrossEntropyLoss(predictions *Tensor, targets []int, paddingID int)
 	vocabSize := predictions.Shape[2]
 
 	predictionsFlat, _ := predictions.Reshape([]int{batchSize * seqLen, vocabSize})
-	logSoftmax, _ := predictionsFlat.LogSoftmax(1)
+	softmax, _ := predictionsFlat.Softmax(1)
+	logSoftmax, _ := softmax.Log()
 
 	targetsFlat := targets
 

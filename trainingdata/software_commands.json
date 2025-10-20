@@ -291,5 +291,15 @@
     "Intent": "build_application",
     "Entities": {},
     "description": "Builds the current application."
+  },
+  {
+    "Query": "in a new folder jack, create a go webserver jill",
+    "ParentIntent": "create_resource",
+    "Intent": "create_folder_and_webserver",
+    "Entities": {
+      "folder_name": "jack",
+      "server_name": "jill"
+    },
+    "description": "Creates a folder named jack and a Go webserver named jill inside it."
   }
 ]

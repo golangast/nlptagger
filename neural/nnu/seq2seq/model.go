@@ -28,11 +28,15 @@ type Encoder struct {
 }
 
 // NewEncoder creates a new Encoder.
-func NewEncoder(inputVocabSize, embeddingDim, hiddenDim int) *Encoder {
+func NewEncoder(inputVocabSize, embeddingDim, hiddenDim int) (*Encoder, error) {
+	lstm, err := nn.NewLSTM(embeddingDim, hiddenDim, 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LSTM for encoder: %w", err)
+	}
 	return &Encoder{
 		Embedding: nn.NewEmbedding(inputVocabSize, embeddingDim),
-		LSTM:      nn.NewLSTM(embeddingDim, hiddenDim),
-	}
+		LSTM:      lstm,
+	}, nil
 }
 
 // Forward performs a forward pass through the encoder.
@@ -43,13 +47,30 @@ func (e *Encoder) Forward(inputIDs *tensor.Tensor) (*tensor.Tensor, *tensor.Tens
 		return nil, nil, fmt.Errorf("encoder embedding forward failed: %w", err)
 	}
 
-	// embedded: [batch_size, sequence_length, embedding_dim]
-	// LSTM.Forward expects input [batch_size, sequence_length, input_size]
-	_, hidden, cell, err := e.LSTM.Forward(embedded, nil, nil) // Initial hidden/cell states are nil
-	if err != nil {
-		return nil, nil, fmt.Errorf("encoder LSTM forward failed: %w", err)
+	batchSize := inputIDs.Shape[0]
+	seqLength := inputIDs.Shape[1]
+	hiddenSize := e.LSTM.HiddenSize
+
+	hidden := tensor.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), true)
+	cell := tensor.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), true)
+
+	for t := 0; t < seqLength; t++ {
+		// Get the input for the current time step
+		timeStepInput, err := embedded.Slice(1, t, t+1)
+		if err != nil {
+			return nil, nil, err
+		}
+		timeStepInput, err = timeStepInput.Reshape([]int{batchSize, e.Embedding.DimModel})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		hidden, cell, err = e.LSTM.Forward(timeStepInput, hidden, cell)
+		if err != nil {
+			return nil, nil, fmt.Errorf("encoder LSTM forward failed at step %d: %w", t, err)
+		}
 	}
-	// hidden, cell: [batch_size, hidden_dim] (last hidden/cell state)
+
 	return hidden, cell, nil
 }
 
@@ -70,16 +91,20 @@ type Decoder struct {
 }
 
 // NewDecoder creates a new Decoder.
-func NewDecoder(outputVocabSize, embeddingDim, hiddenDim int) *Decoder {
+func NewDecoder(outputVocabSize, embeddingDim, hiddenDim int) (*Decoder, error) {
 	outputLayer, err := nn.NewLinear(hiddenDim, outputVocabSize)
 	if err != nil {
-		log.Fatalf("Failed to create output linear layer for decoder: %v", err)
+		return nil, fmt.Errorf("failed to create output linear layer for decoder: %w", err)
+	}
+	lstm, err := nn.NewLSTM(embeddingDim, hiddenDim, 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LSTM for decoder: %w", err)
 	}
 	return &Decoder{
 		Embedding: nn.NewEmbedding(outputVocabSize, embeddingDim),
-		LSTM:      nn.NewLSTM(embeddingDim, hiddenDim), // Input to LSTM will be embedded token + context
+		LSTM:      lstm, // Input to LSTM will be embedded token + context
 		Output:    outputLayer,
-	}
+	}, nil
 }
 
 // Forward performs a forward pass through the decoder.
@@ -92,27 +117,27 @@ func (d *Decoder) Forward(inputTokenID *tensor.Tensor, hidden, cell *tensor.Tens
 	}
 	// embedded: [batch_size, 1, embedding_dim]
 
-	// LSTM expects input [batch_size, sequence_length, input_size]
-	// For a single token, sequence_length is 1
-	output, hidden, cell, err := d.LSTM.Forward(embedded, hidden, cell)
+	// Reshape embedded to [batch_size, embedding_dim]
+	embeddedReshaped, err := embedded.Reshape([]int{embedded.Shape[0], embedded.Shape[2]})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("decoder embedding reshape failed: %w", err)
+	}
+
+	// LSTM expects input [batch_size, input_size]
+	newHidden, newCell, err := d.LSTM.Forward(embeddedReshaped, hidden, cell)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decoder LSTM forward failed: %w", err)
 	}
-	// output: [batch_size, 1, hidden_dim]
+	// newHidden, newCell: [batch_size, hidden_dim]
 
 	// Apply linear layer to the output of the LSTM
-	// Reshape output to [batch_size, hidden_dim] for linear layer
-	outputReshaped, err := output.Reshape([]int{output.Shape[0], output.Shape[2]})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("decoder output reshape failed: %w", err)
-	}
-	prediction, err := d.Output.Forward(outputReshaped)
+	prediction, err := d.Output.Forward(newHidden)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decoder output linear layer failed: %w", err)
 	}
 	// prediction: [batch_size, output_vocab_size] (logits for next token)
 
-	return prediction, hidden, cell, nil
+	return prediction, newHidden, newCell, nil
 }
 
 // Parameters returns all learnable parameters of the Decoder.
@@ -134,14 +159,22 @@ type Seq2Seq struct {
 }
 
 // NewSeq2Seq creates a new Seq2Seq model.
-func NewSeq2Seq(inputVocabSize, outputVocabSize, embeddingDim, hiddenDim int, tok *tokenizer.Tokenizer, outVocab *vocab.Vocabulary) *Seq2Seq {
+func NewSeq2Seq(inputVocabSize, outputVocabSize, embeddingDim, hiddenDim int, tok *tokenizer.Tokenizer, outVocab *vocab.Vocabulary) (*Seq2Seq, error) {
+	encoder, err := NewEncoder(inputVocabSize, embeddingDim, hiddenDim)
+	if err != nil {
+		return nil, err
+	}
+	decoder, err := NewDecoder(outputVocabSize, embeddingDim, hiddenDim)
+	if err != nil {
+		return nil, err
+	}
 	return &Seq2Seq{
-		Encoder: NewEncoder(inputVocabSize, embeddingDim, hiddenDim),
-		Decoder: NewDecoder(outputVocabSize, embeddingDim, hiddenDim),
+		Encoder: encoder,
+		Decoder: decoder,
 		Tokenizer: tok,
 		OutputVocab: outVocab,
 		HiddenDim: hiddenDim,
-	}
+	}, nil
 }
 
 // Parameters returns all learnable parameters of the Seq2Seq model.
@@ -264,7 +297,6 @@ func (m *Seq2Seq) Predict(query string, maxLen int) (string, error) {
 		decoderCell = cell
 	}
 
-	// Decode output tokens to string
 	decodedDescription := m.OutputVocab.Decode(outputTokens)
 
 	return decodedDescription, nil

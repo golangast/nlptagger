@@ -1,8 +1,7 @@
 package moe
 
 import (
-	"bytes"
-	"encoding/gob"
+	
 	"fmt"
 	"math/rand"
 	"sort"
@@ -10,89 +9,7 @@ import (
 	. "nlptagger/neural/tensor"
 )
 
-// GobEncode implements the gob.GobEncoder interface for MoELayer.
-func (moe *MoELayer) GobEncode() ([]byte, error) {
-	// Use a buffer to encode the struct
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
 
-	// Encode the non-interface fields
-	if err := enc.Encode(moe.GatingNetwork); err != nil {
-		return nil, err
-	}
-	if err := enc.Encode(moe.K); err != nil {
-		return nil, err
-	}
-	if err := enc.Encode(moe.InputDim); err != nil {
-		return nil, err
-	}
-
-	// Encode the number of experts
-	if err := enc.Encode(len(moe.Experts)); err != nil {
-		return nil, err
-	}
-
-	// Encode each expert with its type information
-	for _, expert := range moe.Experts {
-		// Encode the type name of the expert
-		if err := enc.Encode(expert.Description()); err != nil {
-			return nil, err
-		}
-		// Encode the expert itself
-		if err := enc.Encode(expert); err != nil {
-			return nil, err
-		}
-	}
-
-	return buf.Bytes(), nil
-}
-
-// GobDecode implements the gob.GobDecoder interface for MoELayer.
-func (moe *MoELayer) GobDecode(data []byte) error {
-	buf := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buf)
-
-	// Decode the non-interface fields
-	if err := dec.Decode(&moe.GatingNetwork); err != nil {
-		return err
-	}
-	if err := dec.Decode(&moe.K); err != nil {
-		return err
-	}
-	if err := dec.Decode(&moe.InputDim); err != nil {
-		return err
-	}
-
-	// Decode the number of experts
-	var numExperts int
-	if err := dec.Decode(&numExperts); err != nil {
-		return err
-	}
-
-	// Decode each expert
-	moe.Experts = make([]Expert, numExperts)
-	for i := 0; i < numExperts; i++ {
-		var expertType string
-		if err := dec.Decode(&expertType); err != nil {
-			return err
-		}
-
-		var expert Expert
-		switch expertType {
-		case "FeedForwardExpert":
-			expert = &FeedForwardExpert{}
-		default:
-			return fmt.Errorf("unknown expert type: %s", expertType)
-		}
-
-		if err := dec.Decode(expert); err != nil {
-			return err
-		}
-		moe.Experts[i] = expert
-	}
-
-	return nil
-}
 
 
 
@@ -101,7 +18,7 @@ type MoELayer struct {
 	GatingNetwork *GatingNetwork
 	Experts       []Expert
 	K             int // Number of top experts to select
-	InputDim      int // Add InputDim to MoELayer struct
+	// InputDim      int // Add InputDim to MoELayer struct
 
 	// Stored for backward pass
 	inputTensor       *Tensor
@@ -141,7 +58,7 @@ func NewMoELayer(inputDim, numExperts, k int, expertBuilder func(int) (Expert, e
 		GatingNetwork: gatingNetwork,
 		Experts:       experts,
 		K:             k,
-		InputDim:      inputDim, // Initialize InputDim
+		// InputDim:      inputDim, // Initialize InputDim
 	}, nil
 }
 
@@ -406,7 +323,14 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 	}
 
 	// Finally, backpropagate through the gating network with the accumulated gateGrad.
-	return moe.GatingNetwork.Backward(gateGradReshaped)
+	err = moe.GatingNetwork.Backward(gateGradReshaped)
+	if err != nil {
+		return err
+	}
+
+	
+
+	return nil
 }
 
 // Inputs returns the input tensors of the MoELayer's last forward operation.

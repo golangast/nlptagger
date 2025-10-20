@@ -71,7 +71,7 @@ func CalculateAccuracy(nn *nnu.SimpleNN, trainingData []tag.Tag, tokenVocab map[
 				}
 			}
 
-			predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag := predict.PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
+			predictedPosTag, predictedNerTag, predictedPhraseTag, predictedDRTag, _ := predict.PredictTag(nn, inputs, posTagVocab, nerTagVocab, phraseTagVocab, drTagVocab)
 
 			if predictedPosTag == taggedSentence.PosTag[i] {
 				poscorrectPredictions++

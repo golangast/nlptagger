@@ -82,6 +82,14 @@ func (gn *GatingNetwork) Backward(grad *tensor.Tensor) error {
 		}
 	}
 
+	// Clear gradients after use
+	if gn.inputTensor != nil {
+		gn.inputTensor.Grad = nil
+	}
+	if gn.outputTensor != nil {
+		gn.outputTensor.Grad = nil
+	}
+
 	return nil
 }
 

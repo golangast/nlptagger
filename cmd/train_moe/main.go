@@ -16,17 +16,15 @@ import (
 	. "nlptagger/neural/nn"
 	mainvocab "nlptagger/neural/nnu/vocab"
 	"nlptagger/neural/nnu/word2vec"
+	"nlptagger/neural/semantic"
 	. "nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
 )
 
-// IntentTrainingExample represents a single training example for intent classification.
+// IntentTrainingExample represents a single training example with a query and its intents.
 type IntentTrainingExample struct {
-	Query        string `json:"query"`
-	ParentIntent string `json:"parent_intent"`
-	ChildIntent  string `json:"child_intent"`
-	Description  string `json:"description"`
-	Sentence     string `json:"sentence"`
+	Query          string                  `json:"query"`
+	SemanticOutput semantic.SemanticOutput `json:"semantic_output"`
 }
 
 // IntentTrainingData represents the structure of the intent training data JSON.
@@ -89,7 +87,7 @@ func TokenizeAndConvertToIDs(text string, tokenizer *tokenizer.Tokenizer, vocabu
 }
 
 // TrainIntentMoEModel trains the MoEClassificationModel.
-func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, queryTokenizer, sentenceTokenizer *tokenizer.Tokenizer, maxSequenceLength int, profileFile *os.File) error {
+func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs int, learningRate float64, batchSize int, queryVocab, semanticOutputVocab *mainvocab.Vocabulary, queryTokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, maxSequenceLength int, cpuProfileFile *os.File, memProfileFile *os.File) error {
 
 	if model == nil {
 		return errors.New("cannot train a nil model")
@@ -112,7 +110,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 			}
 			batch := (*data)[i:end]
 
-			loss, err := trainIntentMoEBatch(model, optimizer, batch, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab, queryTokenizer, sentenceTokenizer, maxSequenceLength)
+			loss, err := trainIntentMoEBatch(model, optimizer, batch, queryVocab, semanticOutputVocab, queryTokenizer, semanticOutputTokenizer, maxSequenceLength)
 			if err != nil {
 				log.Printf("Error training batch: %v", err)
 				continue // Or handle error more strictly
@@ -129,15 +127,13 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 }
 
 // trainIntentMoEBatch performs a single training step on a batch of data.
-func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, parentIntentVocab, childIntentVocab, sentenceVocab *mainvocab.Vocabulary, queryTokenizer, sentenceTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
+func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, semanticOutputVocab *mainvocab.Vocabulary, queryTokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, maxSequenceLength int) (float64, error) {
 	optimizer.ZeroGrad()
 
 	batchSize := len(batch)
 
 	inputIDsBatch := make([]int, batchSize*maxSequenceLength)
-	parentIntentIDsBatch := make([]int, batchSize)
-	childIntentIDsBatch := make([]int, batchSize)
-	sentenceIDsBatch := make([]int, batchSize*maxSequenceLength)
+	semanticOutputIDsBatch := make([]int, batchSize*maxSequenceLength)
 
 	for i, example := range batch {
 		// Tokenize and pad query
@@ -147,57 +143,47 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 		}
 		copy(inputIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], queryTokens)
 
-		// Get parent and child intent IDs
-		parentIntentIDsBatch[i] = parentIntentVocab.GetTokenID(example.ParentIntent)
-		childIntentIDsBatch[i] = childIntentVocab.GetTokenID(example.ChildIntent)
-
-		// Prepend BOS and append EOS to the sentence for training
-		trainingSentence := "<s> " + example.Sentence + " </s>"
-		// Tokenize and pad sentence
-		sentenceTokens, err := TokenizeAndConvertToIDs(trainingSentence, sentenceTokenizer, sentenceVocab, maxSequenceLength)
+		// Serialize and tokenize semantic output
+		semanticOutputJSON, err := json.Marshal(example.SemanticOutput)
 		if err != nil {
-			return 0, fmt.Errorf("sentence tokenization failed for item %d: %w", i, err)
+			return 0, fmt.Errorf("failed to marshal semantic output: %w", err)
 		}
-		copy(sentenceIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], sentenceTokens)
+
+		trainingSemanticOutput := "<s> " + string(semanticOutputJSON) + " </s>"
+		semanticOutputTokens, err := TokenizeAndConvertToIDs(trainingSemanticOutput, semanticOutputTokenizer, semanticOutputVocab, maxSequenceLength)
+		if err != nil {
+			return 0, fmt.Errorf("semantic output tokenization failed for item %d: %w", i, err)
+		}
+		copy(semanticOutputIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], semanticOutputTokens)
 	}
 
 	// Convert input IDs to a Tensor (embeddings will be handled by the model)
 	inputTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(inputIDsBatch), false)
-	sentenceTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(sentenceIDsBatch), false)
+	semanticOutputTensor := NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(semanticOutputIDsBatch), false)
 
 	// Forward pass through the IntentMoE model
-	parentLogits, childLogits, sentenceLogits, contextVector, err := intentMoEModel.Forward(inputTensor, sentenceTensor)
+	semanticOutputLogits, contextVector, err := intentMoEModel.Forward(inputTensor, semanticOutputTensor)
 	if err != nil {
 		return 0, fmt.Errorf("IntentMoE model forward pass failed: %w", err)
 	}
 
-	// Calculate loss for the parent and child intents
-	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDsBatch, parentIntentVocab.PaddingTokenID)
-	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDsBatch, childIntentVocab.PaddingTokenID)
-
-	// Calculate loss for the sentence
-	sentenceLoss := 0.0
-	var sentenceGrads []*Tensor
+	// Calculate loss for the semantic output
+	semanticOutputLoss := 0.0
+	semanticOutputGrads := make([]*Tensor, maxSequenceLength)
 	for t := 0; t < maxSequenceLength; t++ {
 		targets := make([]int, batchSize)
 		for i := 0; i < batchSize; i++ {
-			targets[i] = sentenceIDsBatch[i*maxSequenceLength+t]
+			targets[i] = semanticOutputIDsBatch[i*maxSequenceLength+t]
 		}
-		loss, grad := CrossEntropyLoss(sentenceLogits[t], targets, sentenceVocab.PaddingTokenID)
-		sentenceLoss += loss
-		sentenceGrads = append(sentenceGrads, grad)
+		loss, grad := CrossEntropyLoss(semanticOutputLogits[t], targets, semanticOutputVocab.PaddingTokenID)
+		semanticOutputLoss += loss
+		semanticOutputGrads[t] = grad
 	}
 
-	sentenceLossWeight := 0.1
-	totalLoss := parentLoss + childLoss + sentenceLoss*sentenceLossWeight
-	for _, grad := range sentenceGrads {
-		grad.MulScalar(sentenceLossWeight)
-	}
-	allGrads := []*Tensor{parentGrad, childGrad}
-	allGrads = append(allGrads, sentenceGrads...)
+	totalLoss := semanticOutputLoss
 
 	// Backward pass
-	err = intentMoEModel.Backward(allGrads...)
+	err = intentMoEModel.Backward(semanticOutputGrads...)
 	if err != nil {
 		return 0, fmt.Errorf("IntentMoE model backward pass failed: %w", err)
 	}
@@ -205,17 +191,18 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	optimizer.Step()
 
 	// Log guessed sentence
-	guessedIDs, err := intentMoEModel.GreedySearchDecode(contextVector, maxSequenceLength, sentenceVocab.GetTokenID("<s>"), sentenceVocab.GetTokenID("</s>"))
+	guessedIDs, err := intentMoEModel.GreedySearchDecode(contextVector, maxSequenceLength, semanticOutputVocab.GetTokenID("<s>"), semanticOutputVocab.GetTokenID("</s>"))
 	if err != nil {
 		log.Printf("Error decoding guessed sentence: %v", err)
 	} else {
-		guessedSentence, err := sentenceTokenizer.Decode(guessedIDs)
+		guessedSentence, err := semanticOutputTokenizer.Decode(guessedIDs)
 		if err != nil {
 			log.Printf("Error decoding guessed sentence: %v", err)
 		} else {
-			log.Printf("Guessed sentence: %s", guessedSentence)
+			log.Printf("Guessed semantic output: %s", guessedSentence)
 		}
-		log.Printf("Target sentence: %s", batch[0].Sentence)
+		targetJSON, _ := json.Marshal(batch[0].SemanticOutput)
+		log.Printf("Target semantic output: %s", string(targetJSON))
 	}
 
 	return totalLoss, nil
@@ -245,51 +232,53 @@ func convertW2VVocab(w2vVocab map[string]int) *mainvocab.Vocabulary {
 	return vocab
 }
 
-func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
+func BuildVocabularies(dataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
 	queryVocabulary := mainvocab.NewVocabulary()
-	parentIntentVocabulary := mainvocab.NewVocabulary()
-	childIntentVocabulary := mainvocab.NewVocabulary()
-	sentenceVocabulary := mainvocab.NewVocabulary()
+	semanticOutputVocabulary := mainvocab.NewVocabulary()
 
-	intentTrainingData, err := LoadIntentTrainingData(dataPath)
+	semanticTrainingData, err := LoadIntentTrainingData(dataPath)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to load intent training data from %s: %w", dataPath, err)
+		return nil, nil, fmt.Errorf("failed to load semantic training data from %s: %w", dataPath, err)
 	}
 
-	for _, pair := range *intentTrainingData {
+	for _, pair := range *semanticTrainingData {
 		// Use the same tokenizer logic as during inference to build the vocabulary
 		tokenizedQuery := tokenizer.Tokenize(strings.ToLower(pair.Query))
 		for _, word := range tokenizedQuery {
 			queryVocabulary.AddToken(word)
 		}
-		parentIntentVocabulary.AddToken(pair.ParentIntent)
-		childIntentVocabulary.AddToken(pair.ChildIntent)
+
+		semanticOutputJSON, err := json.Marshal(pair.SemanticOutput)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal semantic output: %w", err)
+		}
 
 		// Add BOS and EOS tokens to the sentence when building the vocabulary
-		trainingSentence := "<s> " + pair.Sentence + " </s>"
-		tokenizedSentence := tokenizer.Tokenize(strings.ToLower(trainingSentence))
-		for _, word := range tokenizedSentence {
-			sentenceVocabulary.AddToken(word)
+		trainingSemanticOutput := "<s> " + string(semanticOutputJSON) + " </s>"
+		tokenizedSemanticOutput := tokenizer.Tokenize(trainingSemanticOutput)
+		for _, word := range tokenizedSemanticOutput {
+			semanticOutputVocabulary.AddToken(word)
 		}
 	}
 
 	// Explicitly add BOS and EOS tokens to the sentence vocabulary
-	sentenceVocabulary.BosID = sentenceVocabulary.GetTokenID("<s>")
-	sentenceVocabulary.EosID = sentenceVocabulary.GetTokenID("</s>")
+	semanticOutputVocabulary.BosID = semanticOutputVocabulary.GetTokenID("<s>")
+	semanticOutputVocabulary.EosID = semanticOutputVocabulary.GetTokenID("</s>")
 
-	return queryVocabulary, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, nil
+	return queryVocabulary, semanticOutputVocabulary, nil
 }
 
 func main() {
-	const intentTrainingDataPath = "./trainingdata/intent_data.json"
+	const trainingDataPath = "./trainingdata/intent_data.json"
+	const semanticTrainingDataPath = "./trainingdata/semantic_output_data.json"
 	const word2vecModelPath = "gob_models/word2vec_model.gob"
 
 	// Start CPU profiling
-	f, err := os.Create("cpu.prof")
+	cpuProfileFile, err := os.Create("cpu.prof")
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
 	}
-	if err := pprof.StartCPUProfile(f); err != nil {
+	if err := pprof.StartCPUProfile(cpuProfileFile); err != nil {
 		log.Fatal("could not start CPU profile: ", err)
 	}
 
@@ -300,19 +289,28 @@ func main() {
 	// Goroutine to handle graceful shutdown on signal
 	go func() {
 		<-sigChan // Block until a signal is received
-		log.Println("Received interrupt signal. Stopping CPU profile and closing file.")
+		log.Println("Received interrupt signal. Stopping CPU and Memory profiles and closing files.")
 		pprof.StopCPUProfile()
-		f.Close()
+		cpuProfileFile.Close()
+
+		// Write heap profile on exit
+		memProfFile, err := os.Create("mem.prof")
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		if err := pprof.WriteHeapProfile(memProfFile); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+		memProfFile.Close()
+
 		os.Exit(0) // Exit gracefully
 	}()
 
 	// Define training parameters
-	epochs := 10
-	learningRate := 0.001
-	batchSize := 16
-	parentIntentVocabularySavePath := "gob_models/parent_intent_vocabulary.gob"
-	childIntentVocabularySavePath := "gob_models/child_intent_vocabulary.gob"
-	sentenceVocabularySavePath := "gob_models/sentence_vocabulary.gob"
+	epochs := 20
+	learningRate := 0.01
+	batchSize := 1
+	semanticOutputVocabularySavePath := "gob_models/semantic_output_vocabulary.gob"
 
 	// Load Word2Vec model
 	word2vecModel, err := word2vec.LoadModel(word2vecModelPath)
@@ -324,53 +322,40 @@ func main() {
 	queryVocabulary := convertW2VVocab(word2vecModel.Vocabulary)
 
 	// Try to load other vocabularies first
-	parentIntentVocabulary, err := mainvocab.LoadVocabulary(parentIntentVocabularySavePath)
+	semanticOutputVocabulary, err := mainvocab.LoadVocabulary(semanticOutputVocabularySavePath)
 	if err != nil {
-		log.Println("Failed to load parent intent vocabulary, creating a new one.")
-	}
-	childIntentVocabulary, err := mainvocab.LoadVocabulary(childIntentVocabularySavePath)
-	if err != nil {
-		log.Println("Failed to load child intent vocabulary, creating a new one.")
-	}
-	sentenceVocabulary, err := mainvocab.LoadVocabulary(sentenceVocabularySavePath)
-	if err != nil {
-		log.Println("Failed to load sentence vocabulary, creating a new one.")
+		log.Println("Failed to load semantic output vocabulary, creating a new one.")
 	}
 
-	if parentIntentVocabulary == nil || childIntentVocabulary == nil || sentenceVocabulary == nil {
+	if semanticOutputVocabulary == nil {
 		log.Println("Building vocabularies from scratch...")
-		_, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, err = BuildVocabularies(intentTrainingDataPath)
+		_, semanticOutputVocabulary, err = BuildVocabularies(semanticTrainingDataPath)
 		if err != nil {
 			log.Fatalf("Failed to build vocabularies: %v", err)
 		}
 	}
 
 	log.Printf("Query Vocabulary (after load/create): Size=%d", len(queryVocabulary.WordToToken))
-	log.Printf("Parent Intent Vocabulary (after load/create): Size=%d", len(parentIntentVocabulary.WordToToken))
-	log.Printf("Child Intent Vocabulary (after load/create): Size=%d", len(childIntentVocabulary.WordToToken))
-	log.Printf("Sentence Vocabulary (after load/create): Size=%d", len(sentenceVocabulary.WordToToken))
+	log.Printf("Semantic Output Vocabulary (after load/create): Size=%d", len(semanticOutputVocabulary.WordToToken))
 
 	// Load Intent training data
-	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
+	semanticTrainingData, err := LoadIntentTrainingData(semanticTrainingDataPath)
 	if err != nil {
-		log.Fatalf("Failed to load intent training data from %s: %v", intentTrainingDataPath, err)
+		log.Fatalf("Failed to load semantic training data from %s: %v", semanticTrainingDataPath, err)
 	}
-	log.Printf("Loaded %d training examples.", len(*intentTrainingData))
+	log.Printf("Loaded %d training examples.", len(*semanticTrainingData))
 
 	// After vocabularies are fully populated, determine vocab sizes and create/load model
 	inputVocabSize := len(queryVocabulary.WordToToken)
-	parentVocabSize := len(parentIntentVocabulary.WordToToken)
-	childVocabSize := len(childIntentVocabulary.WordToToken)
-	sentenceVocabSize := len(sentenceVocabulary.WordToToken)
+	semanticOutputVocabSize := len(semanticOutputVocabulary.WordToToken)
 	embeddingDim := word2vecModel.VectorSize // Use vector size from word2vec
-	numExperts := 2
-	maxSequenceLength := 32 // Max length for input query and output description
-	maxAttentionHeads := 5
+	numExperts := 1
+	maxSequenceLength := 4 // Max length for input query and output description
+	maxAttentionHeads := 1
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)
-	log.Printf("Parent Intent Vocabulary Size: %d", parentVocabSize)
-	log.Printf("Child Intent Vocabulary Size: %d", childVocabSize)
-	log.Printf("Sentence Vocabulary Size: %d", sentenceVocabSize)
+	log.Printf("Semantic Output Vocabulary Size: %d", semanticOutputVocabSize)
+	log.Printf("Embedding Dimension: %d", embeddingDim)
 
 	var intentMoEModel *moe.IntentMoE // Declare intentMoEModel here
 
@@ -378,7 +363,7 @@ func main() {
 
 	// Always create a new IntentMoE model for now to debug gob loading
 	log.Printf("Creating a new IntentMoE model.")
-	intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads, word2vecModel)
+	intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, 0, 0, semanticOutputVocabSize, maxAttentionHeads, word2vecModel)
 	if err != nil {
 		log.Fatalf("Failed to create new IntentMoE model: %v", err)
 	}
@@ -388,20 +373,31 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create query tokenizer: %v", err)
 	}
-	sentenceTokenizer, err := tokenizer.NewTokenizer(sentenceVocabulary)
+	semanticOutputTokenizer, err := tokenizer.NewTokenizer(semanticOutputVocabulary)
 	if err != nil {
-		log.Fatalf("Failed to create sentence tokenizer: %v", err)
+		log.Fatalf("Failed to create semantic output tokenizer: %v", err)
+	}
+
+	// Create a dedicated file for memory profiling after the first batch
+	memBatch1ProfileFile, err := os.Create("mem_batch_1.prof")
+	if err != nil {
+		log.Fatal("could not create memory profile for batch 1: ", err)
 	}
 
 	// Train the model
-	err = TrainIntentMoEModel(intentMoEModel, intentTrainingData, epochs, learningRate, batchSize, queryVocabulary, parentIntentVocabulary, childIntentVocabulary, sentenceVocabulary, queryTokenizer, sentenceTokenizer, maxSequenceLength, f)
+	err = TrainIntentMoEModel(intentMoEModel, semanticTrainingData, epochs, learningRate, batchSize, queryVocabulary, semanticOutputVocabulary, queryTokenizer, semanticOutputTokenizer, maxSequenceLength, cpuProfileFile, memBatch1ProfileFile)
 	if err != nil {
 		log.Fatalf("Failed to train IntentMoE model: %v", err)
 	}
 
 	// Save the trained model
-	fmt.Printf("Saving IntentMoE model to %s", modelSavePath)
-	err = moe.SaveIntentMoEModelToGOB(intentMoEModel, modelSavePath)
+	fmt.Printf("Saving IntentMoE model to %s\n", modelSavePath)
+	modelFile, err := os.Create(modelSavePath)
+	if err != nil {
+		log.Fatalf("Failed to create model file: %v", err)
+	}
+	defer modelFile.Close()
+	err = moe.SaveIntentMoEModelToGOB(intentMoEModel, modelFile)
 	if err != nil {
 		log.Fatalf("Failed to save IntentMoE model: %v", err)
 	}
@@ -412,16 +408,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to save query vocabulary: %v", err)
 	}
-	err = parentIntentVocabulary.Save(parentIntentVocabularySavePath)
+	err = semanticOutputVocabulary.Save(semanticOutputVocabularySavePath)
 	if err != nil {
-		log.Fatalf("Failed to save parent intent vocabulary: %v", err)
-	}
-	err = childIntentVocabulary.Save(childIntentVocabularySavePath)
-	if err != nil {
-		log.Fatalf("Failed to save child intent vocabulary: %v", err)
-	}
-	err = sentenceVocabulary.Save(sentenceVocabularySavePath)
-	if err != nil {
-		log.Fatalf("Failed to save sentence vocabulary: %v", err)
+		log.Fatalf("Failed to save semantic output vocabulary: %v", err)
 	}
 }

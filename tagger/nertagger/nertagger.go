@@ -258,6 +258,9 @@ func NerNounCheck(t tag.Tag) tag.Tag {
 }
 func NerVerbCheck(t tag.Tag) tag.Tag {
 	for i := 0; i < len(t.Tokens); i++ {
+		if t.NerTag[i] == "COMMAND" {
+			continue
+		}
 		if i > 0 {
 			prevToken := strings.ToLower(t.Tokens[i-1])
 			if prevToken == "create" && t.NerTag[i] == "OBJECT" {
@@ -272,11 +275,21 @@ func NerVerbCheck(t tag.Tag) tag.Tag {
 		}
 		if actionVerbs[t.Tokens[i]] {
 			t.NerTag[i] = "ACTION"
-		} else {
-			if i > 0 && t.Tokens[i-1] == "a" {
-				t.NerTag[i] = "ACTION"
-			}
 		}
 	}
 	return t
+}
+
+func TagTokens(tokens []string, posTags []string) []string {
+	t := tag.Tag{
+		Tokens:  tokens,
+		PosTag:  posTags,
+		NerTag: make([]string, len(tokens)),
+	}
+
+	t = Nertagger(t)
+	t = NerNounCheck(t)
+	t = NerVerbCheck(t)
+
+	return t.NerTag
 }

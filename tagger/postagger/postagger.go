@@ -135,6 +135,40 @@ func Postagger(text string) tag.Tag {
 
 	return t
 }
+
+func TagTokens(tokens []string) []string {
+	t := tag.Tag{
+		Tokens: tokens,
+	}
+	var stemtoken string
+	for _, token := range tokens { // Iterate over each token
+		if token != "tls" {
+			stemtoken = stem.Stem(token)
+		}
+
+		found := false
+		for pattern, tag := range posTags {
+			re := regexp.MustCompile(pattern)
+			if re.MatchString(stemtoken) {
+				t.PosTag = append(t.PosTag, tag)
+				found = true
+				break // Move to the next token once a match is found
+			}
+		}
+		if !found {
+			t.PosTag = append(t.PosTag, "NN") // Default to NN
+		}
+	}
+	t = VerbCheck(t)
+	t = NounCheck(t)
+
+	if len(t.PosTag) > len(tokens) {
+			t.PosTag = t.PosTag[:len(tokens)]
+	}
+
+	return t.PosTag
+}
+
 func addSpaces(word string) string {
 	return " " + word + " "
 }
@@ -192,7 +226,7 @@ func NounCheck(t tag.Tag) tag.Tag {
 	t.NerTag = make([]string, len(t.Tokens)) // or len(tokens) if that's where length comes from
 
 	var commonNouns = map[string]bool{
-		"Inventory": true, "Amazon": true, "Apple": true, "Google": true, "Microsoft": true, "Facebook": true, "Netflix": true, "Adobe": true, "Tesla": true, "SpaceX": true, "NASA": true, "United Nations": true, "European Union": true, "Red Cross": true, "World Bank": true, "International Monetary Fund": true, "IBM": true, "Samsung": true, "Sony": true, "Boeing": true, "Airbus": true, "Toyota": true, "Ford": true, "General Motors": true, "ExxonMobil": true, "Shell": true, "BP": true, "Walmart": true, "Disney": true, "London": true, "Paris": true, "New York": true, "Tokyo": true, "Beijing": true, "Los Angeles": true, "Berlin": true, "Rome": true, "Moscow": true, "Sydney": true, "United States": true, "United Kingdom": true, "Canada": true, "France": true, "Germany": true, "Japan": true, "China": true, "India": true, "Brazil": true, "Australia": true, "Spain": true, "Italy": true, "Mexico": true, "Russia": true, "John": true, "Jane": true, "David": true, "Michael": true, "Sarah": true, "Emily": true, "Jessica": true, "Ashley": true, "Brian": true, "Christopher": true, "Daniel": true, "Matthew": true, "Andrew": true, "James": true, "Justin": true, "Amanda": true, "Nicole": true, "Melissa": true, "Stephanie": true, "Rebecca": true, "Shakespeare": true, "Einstein": true, "Gandhi": true, "Napoleon": true, "Cleopatra": true, "Sherlock Holmes": true, "Harry Potter": true, "Leonardo da Vinci": true, "Nelson Mandela": true, "Martin Luther King Jr.": true, "Queen Elizabeth II": true, "Julius Caesar": true, "Albert Einstein": true, "Marie Curie": true, "Eiffel Tower": true, "Great Wall of China": true, "Statue of Liberty": true, "Taj Mahal": true, "Pyramids of Giza": true, "Big Ben": true, "Golden Gate Bridge": true, "Colosseum": true, "Sydney Opera House": true, "Mount Everest": true, "iPhone": true, "Windows": true, "Coca-Cola": true, "Nike": true, "Adidas": true, "Android": true, "PlayStation": true, "Xbox": true, "Amazon Prime": true, "Monday": true, "Tuesday": true, "Wednesday": true, "Thursday": true, "Friday": true, "Saturday": true, "Sunday": true, "January": true, "February": true, "March": true, "April": true, "May": true, "June": true, "July": true, "August": true, "September": true, "October": true, "November": true, "December": true, "Python": true, "JavaScript": true, "Java": true, "C++": true, "C#": true, "PHP": true, "Swift": true, "Go": true, "Ruby": true, "Kotlin": true,
+		"Inventory": true, "Amazon": true, "Apple": true, "Google": true, "Microsoft": true, "Facebook": true, "Netflix": true, "Adobe": true, "Tesla": true, "SpaceX": true, "NASA": true, "United Nations": true, "European Union": true, "Red Cross": true, "World Bank": true, "International Monetary Fund": true, "IBM": true, "Samsung": true, "Sony": true, "Boeing": true, "Airbus": true, "Toyota": true, "Ford": true, "General Motors": true, "ExxonMobil": true, "Shell": true, "BP": true, "Walmart": true, "Disney": true, "London": true, "Paris": true, "New York": true, "Tokyo": true, "Beijing": true, "Los Angeles": true, "Berlin": true, "Rome": true, "Moscow": true, "Sydney": true, "United States": true, "United Kingdom": true, "Canada": true, "France": true, "Germany": true, "Japan": true, "China": true, "India": true, "Brazil": true, "Australia": true, "Spain": true, "Italy": true, "Mexico": true, "Russia": true, "John": true, "Jane": true, "David": true, "Michael": true, "Sarah": true, "Emily": true, "Jessica": true, "Ashley": true, "Brian": true, "Christopher": true, "Daniel": true, "Matthew": true, "Andrew": true, "James": true, "Justin": true, "Amanda": true, "Nicole": true, "Melissa": true, "Stephanie": true, "Rebecca": true, "Shakespeare": true, "Einstein": true, "Gandhi": true, "Napoleon": true, "Cleopatra": true, "Sherlock Holmes": true, "Harry Potter": true, "Leonardo da Vinci": true, "Nelson Mandela": true, "Martin Luther King Jr.": true, "Queen Elizabeth II": true, "Julius Caesar": true, "Albert Einstein": true, "Marie Curie": true, "Eiffel Tower": true, "Great Wall of China": true, "Statue of Liberty": true, "Taj Mahal": true, "Pyramids of Giza": true, "Big Ben": true, "Golden Gate Bridge": true, "Colosseum": true, "Sydney Opera House": true, "Mount Everest": true, "iPhone": true, "Windows": true, "Coca-Cola": true, "Nike": true, "Adidas": true, "Android": true, "PlayStation": true, "Xbox": true, "Amazon Prime": true, "Monday": true, "Tuesday": true, "Wednesday": true, "Thursday": true, "Friday": true, "Saturday": true, "Sunday": true, "January": true, "February": true, "March": true, "April": true, "May": true, "June": true, "July": true, "August": true, "September": true, "October": true, "November": true, "December": true, "Christmas": true, "Easter": true, "Thanksgiving": true, "Halloween": true, "New Year's Day": true, "Valentine's Day": true, "Mount Rushmore": true, "Grand Canyon": true, "Yosemite National Park": true, "Yellowstone National Park": true, "Statue of David": true, "Mona Lisa": true, "The Starry Night": true, "The Last Supper": true, "Sistine Chapel ceiling": true, "Hamlet": true, "Romeo and Juliet": true, "The Great Gatsby": true, "To Kill a Mockingbird": true, "1984": true, "The Lord of the Rings": true, "The Hobbit": true, "Pride and Prejudice": true, "The Catcher in the Rye": true, "The Adventures of Huckleberry Finn": true, "The Bible": true, "The Quran": true, "The Torah": true, "The Bhagavad Gita": true, "The Iliad": true, "The Odyssey": true, "The Republic": true, "The Art of War": true, "The Communist Manifesto": true, "The Origin of Species": true, "A Brief History of Time": true, "Cosmos": true, "Sapiens: A Brief History of Humankind": true, "The Diary of a Young Girl": true, "I Am Malala": true, "Becoming": true, "The Autobiography of Malcolm X": true, "Long Walk to Freedom": true,
 		"cat": true, "person": true, "thing": true, "place": true, "time": true, "way": true, "year": true, "day": true, "man": true, "woman": true, "child": true, "book": true, "house": true, "car": true, "tree": true, "door": true, "table": true, "chair": true, "window": true, "computer": true, "phone": true, "pen": true, "pencil": true, "paper": true, "bag": true, "box": true, "animal": true, "plant": true, "dog": true, "bird": true, "fish": true, "insect": true, "flower": true, "idea": true, "thought": true, "feeling": true, "opinion": true, "problem": true, "solution": true, "story": true, "question": true, "answer": true, "reason": true, "action": true, "event": true, "meeting": true, "party": true, "trip": true, "game": true, "movie": true, "song": true, "dance": true, "group": true, "family": true, "company": true, "government": true, "country": true, "city": true, "school": true, "hospital": true, "world": true, "life": true, "work": true, "money": true, "food": true, "water": true, "air": true, "happiness": true, "freedom": true, "democracy": true, "love": true, "peace": true, "justice": true, "equality": true, "knowledge": true, "beauty": true, "truth": true, "walking": true, "reading": true, "eating": true, "sleeping": true, "working": true, "playing": true, "talking": true, "thinking": true, "running": true, "swimming": true,
 	}
 

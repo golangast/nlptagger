@@ -69,7 +69,7 @@ func main() {
 	}
 
 	log.Println("Initializing Seq2Seq model...")
-	model := seq2seq.NewSeq2Seq(
+	model, err := seq2seq.NewSeq2Seq(
 		inputVocab.Size(),
 		outputVocab.Size(),
 		*embeddingDim,
@@ -77,6 +77,9 @@ func main() {
 		queryTokenizer,
 		outputVocab,
 	)
+	if err != nil {
+		log.Fatalf("Failed to create Seq2Seq model: %v", err)
+	}
 
 	// Optimizer
 	optimizer := nn.NewOptimizer(model.Parameters(), *learningRate, 0.0)
