@@ -154,7 +154,10 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 		if err != nil {
 			return 0, fmt.Errorf("semantic output tokenization failed for item %d: %w", i, err)
 		}
-		copy(semanticOutputIDsBatch[i*maxSequenceLength:(i+1)*maxSequenceLength], semanticOutputTokens)
+				log.Printf("Query: %s", example.Query)
+		log.Printf("Tokenized Query: %v", queryTokens)
+		log.Printf("Semantic Output: %s", trainingSemanticOutput)
+		log.Printf("Tokenized Semantic Output: %v", semanticOutputTokens)
 	}
 
 	// Convert input IDs to a Tensor (embeddings will be handled by the model)
@@ -307,8 +310,8 @@ func main() {
 	}()
 
 	// Define training parameters
-	epochs := 20
-	learningRate := 0.01
+	epochs := 10
+	learningRate := 0.001
 	batchSize := 1
 	semanticOutputVocabularySavePath := "gob_models/semantic_output_vocabulary.gob"
 
@@ -350,7 +353,7 @@ func main() {
 	semanticOutputVocabSize := len(semanticOutputVocabulary.WordToToken)
 	embeddingDim := word2vecModel.VectorSize // Use vector size from word2vec
 	numExperts := 1
-	maxSequenceLength := 4 // Max length for input query and output description
+	maxSequenceLength := 64 // Max length for input query and output description
 	maxAttentionHeads := 1
 
 	log.Printf("Query Vocabulary Size: %d", inputVocabSize)

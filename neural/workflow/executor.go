@@ -86,6 +86,14 @@ func (e *Executor) handleCreate(node *Node) error {
 	case "Deployment::GoWebserver":
 		log.Printf("Simulating Go Webserver deployment: %s on port %v with image %s",
 			node.Resource.Name, node.Resource.Properties["port"], node.Resource.Properties["runtime_image"])
+		folderPath := node.Resource.Name
+		if node.Directory != "" {
+			folderPath = node.Directory + "/" + node.Resource.Name
+		}
+		log.Printf("Creating folder for GoWebserver: %s", folderPath)
+		if err := os.MkdirAll(folderPath, 0755); err != nil {
+			return fmt.Errorf("failed to create folder %s: %w", folderPath, err)
+		}
 	default:
 		log.Printf("No specific CREATE handler for resource type: %s", node.Resource.Type)
 	}

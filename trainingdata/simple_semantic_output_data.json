@@ -1,0 +1,1 @@
+[{"query":"create a folder foo","semantic_output":{"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"foo","properties":{"path":"./"}},"context":{"user_role":"admin"}}}]

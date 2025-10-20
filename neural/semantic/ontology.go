@@ -11,6 +11,7 @@ type SemanticOutput struct {
 type Resource struct {
 	Type       string                 `json:"type"`
 	Name       string                 `json:"name"`
+	Content    string                 `json:"content,omitempty"` // Add this line
 	Properties map[string]interface{} `json:"properties"`
 	Children   []Resource             `json:"children,omitempty"`
 	DependsOn  []string               `json:"depends_on,omitempty"`

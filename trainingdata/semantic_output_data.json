@@ -27,6 +27,86 @@
     }
   },
   {
+    "query": "create a folder jic in folder jack",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jic",
+        "properties": {
+          "path": "jack"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create a folder named foo",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "foo",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create a directory called my_new_folder",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "my_new_folder",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "make a new directory named another_dir",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "another_dir",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "in the folder my_app, create a directory called assets",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "assets",
+        "properties": {
+          "path": "my_app"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
     "query": "create a file named 'test.txt'",
     "semantic_output": {
       "operation": "Create",

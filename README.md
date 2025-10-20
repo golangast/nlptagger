@@ -93,41 +93,32 @@ To run predictions using a previously trained MoE model, use the `--moe_inferenc
 | :---------------- | :---------------- | :--------------------------------------------------------------------------- |
 | **MoE Inference** | `--moe_inference` | `go run main.go --moe_inference "schedule a meeting with John for tomorrow at 2pm"` |
 
-### 3. Running Command Generation
+### 3. Running Workflow Generation and Execution
 
-To run the command generation logic based on intent predictions and NER/POS tags, use the `example/main.go` with a query:
+The `example/main.go` program demonstrates how to parse a natural language query, generate a workflow, and execute it. This showcases the core capabilities of the `nlptagger` for understanding and acting upon user commands.
+
+To run the example, use the following command with a query:
 
 ```bash
-go run ./example/main.go -query "create a file named jack in folder named jill"
+go run ./example/main.go -query "create folder jack with a go webserver jill"
 ```
 
-Expected Output:
+You can also run it interactively:
+
+```bash
+go run ./example/main.go
+```
+Then, enter queries at the prompt.
+
+Expected Output (for the query "create folder jack with a go webserver jill"):
 
 ```
---- Top 3 Parent Intent Predictions ---
-  - Word: webserver_creation   (Confidence: 29.17%)
-  - Word: version_control      (Confidence: 20.43%)
-  - Word: deployment           (Confidence: 10.19%)
-------------------------------------
---- Top 3 Child Intent Predictions ---
-  - Word: create               (Confidence: 17.68%)
-  - Word: create_data_structure (Confidence: 14.66%)
-  - Word: create_server_and_handler (Confidence: 11.70%)
------------------------------------
+Processing query: "create folder jack with a go webserver jill"
 
-Description: The model's top prediction is an action related to webserver_creation, specifically to create.
-Intent Sentence: Not found in training data.
-
---- POS Tagging Results ---
-Tokens: [create a file named jack in folder named jill]
-POS Tags: [CODE_VB DET IN NN NN IN NN VBN NN]
-
---- NER Tagging Results ---
-Tokens: [create a file named jack in folder named jill]
-NER Tags: [COMMAND DETERMINER OBJECT_TYPE NAME_PREFIX NAME PREPOSITION OBJECT_TYPE NAME_PREFIX NAME]
-
---- Generating Command ---
-Generated Command: mkdir -p jill && touch jill/jack
+--- Generated Workflow (after inference and validation) ---
+Node ID: Filesystem::Folder-jack-0, Operation: CREATE, Resource Type: Filesystem::Folder, Resource Name: jack, Properties: map[permissions:493], Command: , Dependencies: []
+Node ID: Filesystem::File-jill-0, Operation: CREATE, Resource Type: Filesystem::File, Resource Name: jill, Properties: map[permissions:493], Command: , Dependencies: [Filesystem::Folder-jack-0]
+Node ID: file-createfile-0, Operation: WRITE_FILE, Resource Type: , Resource Name: , Properties: map[], Command: , Dependencies: [Filesystem::File-jill-0]
 ```
 
 ## 🧩 Integrating `nlptagger` into Your Projects
@@ -140,323 +131,75 @@ Example usage is in the /example folder.
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"math" // Keep math for softmax
-	"math/rand"
 	"os"
-	"os/exec"
-	"sort"
+	"strings"
 
-	"nlptagger/neural/moe"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
-	"nlptagger/tagger/nertagger"
-	"nlptagger/tagger/postagger"
-	"nlptagger/tagger/tag"
+	"nlptagger/neural/parser"
+	"nlptagger/neural/workflow"
 )
 
-// IntentTrainingExample represents a single training example for intent classification.
-type IntentTrainingExample struct {
-	Query        string `json:"query"`
-	ParentIntent string `json:"parent_intent"`
-	ChildIntent  string `json:"child_intent"`
-	Description  string `json:"description"`
-	Sentence     string `json:"sentence"`
-}
-
-// IntentTrainingData represents the structure of the intent training data JSON.
-type IntentTrainingData []IntentTrainingExample
-
-// LoadIntentTrainingData loads the intent training data from a JSON file.
-func LoadIntentTrainingData(filePath string) (*IntentTrainingData, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open training data file %s: %w", filePath, err)
-	}
-	defer file.Close()
-
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read training data file %s: %w", filePath, err)
-	}
-
-	var data IntentTrainingData
-	err = json.Unmarshal(bytes, &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal training data JSON from %s: %w", filePath, err)
-	}
-
-	return &data, nil
-}
-
-type Prediction struct {
-	TokenID    int
-	Word       string
-	Confidence float64
-}
-
-func getTopNPredictions(probabilities []float64, vocab []string, n int) []Prediction {
-	predictions := make([]Prediction, 0, len(probabilities))
-	for i, p := range probabilities {
-		if i < 2 { // Skip <pad> and UNK
-			continue
-		}
-		if i < len(vocab) {
-			word := vocab[i]
-			predictions = append(predictions, Prediction{
-				TokenID:    i,
-				Word:       word,
-				Confidence: p * 100.0,
-			})
-		}
-	}
-
-	// Sort predictions by confidence
-	sort.Slice(predictions, func(i, j int) bool {
-		return predictions[i].Confidence > predictions[j].Confidence
-	})
-
-	if len(predictions) < n {
-		return predictions
-	}
-	return predictions[:n]
-}
-
 var (
-	query        = flag.String("query", "", "Query for MoE inference")
-	maxSeqLength = flag.Int("maxlen", 32, "Maximum sequence length")
+	query = flag.String("query", "", "Natural language query for the parser")
 )
 
 func main() {
-	rand.Seed(1) // Seed the random number generator for deterministic behavior
 	flag.Parse()
 
-	if *query == "" {
-		log.Fatal("Please provide a query using the -query flag.")
+	// Create parser and executor instances
+	p := parser.NewParser()
+	executor := workflow.NewExecutor()
+
+	// Process initial query from flag, if provided
+	if *query != "" {
+		processAndExecuteQuery(*query, p, executor)
 	}
 
-	// Define paths
-	const vocabPath = "gob_models/query_vocabulary.gob"
-	const moeModelPath = "gob_models/moe_classification_model.gob"
-	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
-	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
-	const intentTrainingDataPath = "trainingdata/intent_data.json"
+	// Start interactive loop
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("\nEnter a query (e.g., \"create folder jack with a go webserver jill\"): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
 
-	// Load vocabularies
-	vocabulary, err := mainvocab.LoadVocabulary(vocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up input vocabulary: %v", err)
-	}
-
-	// Setup parent intent vocabulary
-	parentIntentVocabulary, err := mainvocab.LoadVocabulary(parentIntentVocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up parent intent vocabulary: %v", err)
-	}
-
-	// Setup child intent vocabulary
-	childIntentVocabulary, err := mainvocab.LoadVocabulary(childIntentVocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up child intent vocabulary: %v", err)
-	}
-
-	// Create tokenizer
-	tok, err := tokenizer.NewTokenizer(vocabulary)
-	if err != nil {
-		log.Fatalf("Failed to create tokenizer: %w", err)
-	}
-
-	// Load the trained MoEClassificationModel model
-	model, err := moe.LoadIntentMoEModelFromGOB(moeModelPath)
-	if err != nil {
-		log.Fatalf("Failed to load MoE model: %v", err)
-	}
-
-	// Load intent training data
-	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
-	if err != nil {
-		log.Fatalf("Failed to load intent training data: %v", err)
-	}
-
-	log.Printf("--- DEBUG: Parent Intent Vocabulary (TokenToWord): %v ---", parentIntentVocabulary.TokenToWord)
-	log.Printf("--- DEBUG: Child Intent Vocabulary (TokenToWord): %v ---", childIntentVocabulary.TokenToWord)
-
-	log.Printf("Running MoE inference for query: \"%s\"", *query)
-
-	// Encode the query
-	tokenIDs, err := tok.Encode(*query)
-	if err != nil {
-		log.Fatalf("Failed to encode query: %v", err)
-	}
-
-	// Pad or truncate the sequence to a fixed length
-	if len(tokenIDs) > *maxSeqLength {
-		tokenIDs = tokenIDs[:*maxSeqLength] // Truncate from the end
-	} else {
-		for len(tokenIDs) < *maxSeqLength {
-			tokenIDs = append(tokenIDs, vocabulary.PaddingTokenID) // Appends padding
-		}
-	}
-	inputData := make([]float64, len(tokenIDs))
-	for i, id := range tokenIDs {
-		inputData[i] = float64(id)
-	}
-	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
-
-	// Create a dummy target tensor for inference, as the Forward method expects two inputs.
-	// The actual content of this tensor won't be used for parent/child intent classification.
-	dummyTargetTokenIDs := make([]float64, *maxSeqLength)
-	for i := 0; i < *maxSeqLength; i++ {
-		dummyTargetTokenIDs[i] = float64(vocabulary.PaddingTokenID)
-	}
-	dummyTargetTensor := tensor.NewTensor([]int{1, *maxSeqLength}, dummyTargetTokenIDs, false)
-
-	// Forward pass
-	parentLogits, childLogits, _, _, err := model.Forward(inputTensor, dummyTargetTensor)
-	if err != nil {
-		log.Fatalf("MoE model forward pass failed: %v", err)
-	}
-
-	// Interpret parent intent output
-	parentProbabilities := softmax(parentLogits.Data)
-	topParentPredictions := getTopNPredictions(parentProbabilities, parentIntentVocabulary.TokenToWord, 3)
-
-	fmt.Println("--- Top 3 Parent Intent Predictions ---")
-	for _, p := range topParentPredictions {
-		importance := ""
-		if p.Confidence > 50.0 {
-			importance = " (Important)"
-		}
-		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
-	}
-	fmt.Println("------------------------------------")
-
-	// Interpret child intent output
-	childProbabilities := softmax(childLogits.Data)
-	topChildPredictions := getTopNPredictions(childProbabilities, childIntentVocabulary.TokenToWord, 3)
-
-	fmt.Println("--- Top 3 Child Intent Predictions ---")
-	for _, p := range topChildPredictions {
-		importance := ""
-		if p.Confidence > 50.0 {
-			importance = " (Important)"
-		}
-		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
-	}
-	fmt.Println("-----------------------------------")
-
-	if len(topParentPredictions) > 0 && len(topChildPredictions) > 0 {
-		predictedParentWord := topParentPredictions[0].Word
-		predictedChildWord := topChildPredictions[0].Word
-		fmt.Printf("\nDescription: The model's top prediction is an action related to %s, specifically to %s.\n", predictedParentWord, predictedChildWord)
-
-		// Find and print the intent sentence
-		foundSentence := ""
-		for _, example := range *intentTrainingData {
-			if example.ParentIntent == predictedParentWord && example.ChildIntent == predictedChildWord {
-				foundSentence = example.Sentence
-				break
-			}
+		if input == "exit" || input == "quit" {
+			break
 		}
 
-		if foundSentence != "" {
-			fmt.Printf("Intent Sentence: %s\n", foundSentence)
-		} else {
-			fmt.Println("Intent Sentence: Not found in training data.")
+		if input != "" {
+			processAndExecuteQuery(input, p, executor)
 		}
-	}
-
-	// Perform POS tagging
-	posResult := postagger.Postagger(*query)
-	fmt.Println("\n--- POS Tagging Results ---")
-	fmt.Printf("Tokens: %v\n", posResult.Tokens)
-	fmt.Printf("POS Tags: %v\n", posResult.PosTag)
-
-	// Perform NER tagging
-	nerResult := nertagger.Nertagger(posResult)
-	fmt.Println("\n--- NER Tagging Results ---")
-	fmt.Printf("Tokens: %v\n", nerResult.Tokens)
-	fmt.Printf("NER Tags: %v\n", nerResult.NerTag)
-
-	// Generate and execute command based on NER/POS tags and intent predictions
-	fmt.Println("\n--- Generating Command ---")
-	command := generateCommand("file_system", topChildPredictions[0].Word, nerResult)
-	if command != "" {
-		fmt.Printf("Generated Command: %s\n", command)
-		// Execute the command
-		cmd := exec.Command("bash", "-c", command)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			log.Printf("Error executing command: %v", err)
-		}
-	} else {
-		fmt.Println("Could not generate a command.")
 	}
 }
 
-// softmax applies the softmax function to a slice of float64.
-func softmax(logits []float64) []float64 {
-	if len(logits) == 0 {
-		return []float64{}
-	}
-	maxLogit := logits[0]
-	for _, logit := range logits {
-		if logit > maxLogit {
-			maxLogit = logit
-		}
-	}
-	expSum := 0.0
-	for _, logit := range logits {
-		expSum += math.Exp(logit - maxLogit)
+func processAndExecuteQuery(q string, p *parser.Parser, executor *workflow.Executor) {
+	log.Printf("Processing query: \"%s\"", q)
+
+	// Parse the query into a workflow
+	// The parser now handles semantic validation and inference internally.
+	wf, err := p.Parse(q)
+	if err != nil {
+		log.Printf("Error parsing query: %v", err)
+		return
 	}
 
-	probabilities := make([]float64, len(logits))
-	for i, logit := range logits {
-		probabilities[i] = math.Exp(logit-maxLogit) / expSum
+	fmt.Println("\n--- Generated Workflow (after inference and validation) ---")
+	for _, node := range wf.Nodes {
+		fmt.Printf("Node ID: %s, Operation: %s, Resource Type: %s, Resource Name: %s, Properties: %v, Command: %s, Dependencies: %v\n",
+			node.ID, node.Operation, node.Resource.Type, node.Resource.Name, node.Resource.Properties, node.Command, node.Dependencies)
 	}
-	return probabilities
+
+	// Execute the generated workflow
+	if err := executor.ExecuteWorkflow(wf); err != nil {
+		log.Printf("Error executing workflow: %v", err)
+		return
+	}
 }
 
-func generateCommand(parentIntent, childIntent string, nerResult tag.Tag) string {
-	switch parentIntent {
-	case "file_system":
-		switch childIntent {
-		case "create":
-			var fileName, folderName string
-			for i, tag := range nerResult.NerTag {
-				if tag == "OBJECT_TYPE" && nerResult.Tokens[i] == "file" {
-					if i+2 < len(nerResult.Tokens) && nerResult.NerTag[i+1] == "NAME_PREFIX" && nerResult.NerTag[i+2] == "NAME" {
-						fileName = nerResult.Tokens[i+2]
-					}
-				} else if tag == "OBJECT_TYPE" && nerResult.Tokens[i] == "folder" {
-					if i+2 < len(nerResult.Tokens) && nerResult.NerTag[i+1] == "NAME_PREFIX" && nerResult.NerTag[i+2] == "NAME" {
-						folderName = nerResult.Tokens[i+2]
-					}
-				}
-			}
-			if fileName != "" && folderName != "" {
-				return fmt.Sprintf("mkdir -p %s && touch %s/%s", folderName, folderName, fileName)
-			} else if fileName != "" {
-				return fmt.Sprintf("touch %s", fileName)
-			}
-		}
-		// Add other file_system child intents here (e.g., "delete", "read")
-	}
-	// Add other parent intents here
-
-	return ""
-}
 ```
-
-The output is usable and structured.
-![Alt text](docs/img/out.png?raw=true "Title")
 
 
 The `neural/` and `tagger/` directories contain the reusable components. Import them as needed.
@@ -496,9 +239,7 @@ This project is under active development. Here are some of the planned features 
 - [ ] Enhance documentation with more examples and API references.
 - [ ] Create a more user-friendly command-line interface.
 
-## Future Direction: Semantic Parsing and Reasoning
-
-The next level of abstraction for the Natural Language Processing (NLP) portion of the nlptagger project would be to move from Intent Recognition to Semantic Parsing and Reasoning.The current NLP process extracts a fixed set of elements (Parent Intent, Child Intent, Object Types, Names) and maps them directly to a command template.The next abstraction would involve creating an internal, structured data model of the user's request that captures meaning and relationships, independent of the final command format.
+## Future Direction: List of commands that it can generate.
 
 ### 1. Abstraction: Semantic Parsing and Ontology Mapping 🧠
 Instead of merely tagging words, the NLP layer would generate an Abstract Semantic Graph (ASG) or Structured Object that represents the complete meaning, including implicit details, constraints, and dependencies.
@@ -512,36 +253,6 @@ Instead of merely tagging words, the NLP layer would generate an Abstract Semant
 | Object Types | folder, webserver |
 | Names | jack, jill |
 
-**Next NLP Abstraction (Semantic Output):**
-
-The NLP model would output a structured Go object (or equivalent JSON/YAML) based on an internal Ontology (a formal definition of all possible resources and actions).
-
-```json
-{
-  "operation": "Create",
-  "target_resource": {
-    "type": "Filesystem::Folder",
-    "name": "jack",
-    "properties": {
-      "path": "./"
-    },
-    "children": [
-      {
-        "type": "Deployment::GoWebserver",
-        "name": "jill",
-        "properties": {
-          "source": "boilerplate_v1",
-          "port": 8080,
-          "runtime": "go"
-        }
-      }
-    ]
-  },
-  "context": {
-    "user_role": "admin"
-  }
-}
-```
 
 ### 2. Intelligent Capabilities Added by this Abstraction
 This abstraction provides the foundation for truly intelligent command generation:
@@ -556,11 +267,6 @@ The NLP can identify causal and temporal relationships (Dependency).
 *Example Query:* "Set up my Go server, but only after you create the database."
 *Semantic Output:* The output graph would establish a `depends_on` relationship between the `Deployment::GoWebserver` and the `Data::PostgreSQL` resource, ensuring the command executor runs them in the correct sequence.
 
-**C. Constraint and Policy Checking**
-By mapping the request to a resource Ontology, the system can apply policy checks before generating or running any command.
-*Example:* If the user attempts to create a folder with a restricted name, the semantic model could flag it:
-*Semantic Output:* Resource name validation fails against corporate naming policy.
-*Generated Response:* "Error: The name 'jack' is reserved for system use. Please choose a different name."
 
 ## 🤝 Contributing
 

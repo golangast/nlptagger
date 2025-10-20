@@ -81,7 +81,11 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 
 		switch nerTag {
 		case "COMMAND":
-			output.Operation = strings.ToUpper(token)
+			if strings.ToLower(token) == "add" {
+				output.Operation = "CREATE"
+			} else {
+				output.Operation = strings.ToUpper(token)
+			}
 		case "OBJECT_TYPE":
 			lastObjectType = token
 			switch token {
@@ -99,6 +103,24 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 				webserverResource.Name = token
 			} else if lastObjectType == "file" && fileResource != nil {
 				fileResource.Name = token
+			}
+		case "FILE_CONTENT_TYPE":
+			if fileResource != nil {
+				fileResource.Content = `package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello from handler!")
+}
+
+func main() {
+	http.HandleFunc("/", handler)
+	http.ListenAndServe(":8080", nil)
+}`
 			}
 		}
 	}
@@ -126,6 +148,13 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 					nextToken := tokens[i+1]
 					if nextToken != "with" && nextToken != "and" && nextToken != "called" && nextToken != "named" && nextToken != "in" {
 						folderResource.Name = nextToken
+						break
+					}
+				}
+				// Heuristic 4: folder in <name>
+				if i+1 < len(tokens) && tokens[i+1] == "in" {
+					if i+2 < len(tokens) {
+						folderResource.Name = tokens[i+2]
 						break
 					}
 				}
@@ -158,9 +187,27 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 	if fileResource != nil && fileResource.Name == "" {
 		for i, token := range tokens {
 			if token == "file" {
-				if i+1 < len(tokens) {
-					fileResource.Name = tokens[i+1]
+				// Heuristic 1: file called <name> or file named <name>
+				if i+2 < len(tokens) && (tokens[i+1] == "called" || tokens[i+1] == "named") {
+					fileResource.Name = tokens[i+2]
 					break
+				}
+				// Heuristic 2: <name> file
+				if i > 0 {
+					prevToken := tokens[i-1]
+					// Avoid grabbing keywords
+					if prevToken != "a" && prevToken != "the" && prevToken != "create" && prevToken != "go" {
+						fileResource.Name = prevToken
+						break
+					}
+				}
+				// Heuristic 3: file <name>
+				if i+1 < len(tokens) {
+					nextToken := tokens[i+1]
+					if nextToken != "with" && nextToken != "and" && nextToken != "called" && nextToken != "named" && nextToken != "in" {
+						fileResource.Name = nextToken
+						break
+					}
 				}
 			}
 		}
@@ -185,9 +232,22 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 	var parentFolder *semantic.Resource
 	for i, token := range tokens {
 		if token == "in" {
-			if i+1 < len(tokens) {
-				parentName := tokens[i+1]
+			// Check for "in the folder <name>"
+			if i+3 < len(tokens) && tokens[i+1] == "the" && tokens[i+2] == "folder" {
+				parentName := tokens[i+3]
 				if parentName != "with" && parentName != "and" {
+					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
+					break
+				}
+			} else if i+2 < len(tokens) && tokens[i+1] == "folder" { // Check for "in folder <name>"
+				parentName := tokens[i+2]
+				if parentName != "with" && parentName != "and" {
+					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
+					break
+				}
+			} else if i+1 < len(tokens) { // Check for "in <name>" (less specific, but might be needed)
+				parentName := tokens[i+1]
+				if parentName != "with" && parentName != "and" && parentName != "folder" && parentName != "the" { // Added "the" to exclusion
 					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
 					break
 				}
@@ -197,7 +257,7 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 
 	// Establish parent-child relationship
 	if parentFolder != nil {
-		if folderResource != nil {
+		if folderResource != nil && folderResource.Name != "" {
 			if webserverResource != nil {
 				folderResource.Children = append(folderResource.Children, *webserverResource)
 			}
@@ -215,7 +275,7 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 				output.TargetResource.Children = append(output.TargetResource.Children, *fileResource)
 			}
 		}
-	} else if folderResource != nil {
+	} else if folderResource != nil && folderResource.Name != "" {
 		output.TargetResource = *folderResource
 		if webserverResource != nil {
 			output.TargetResource.Children = append(output.TargetResource.Children, *webserverResource)

@@ -22,6 +22,7 @@ type Adam struct {
 	t          int
 	m          map[*Tensor]*Tensor // 1st moment vector
 	v          map[*Tensor]*Tensor // 2nd moment vector
+	clipValue  float64
 }
 
 // NewOptimizer creates a new Adam optimizer.
@@ -35,6 +36,7 @@ func NewOptimizer(parameters []*Tensor, learningRate float64, clipValue float64)
 		t:            0,
 		m:            make(map[*Tensor]*Tensor),
 		v:            make(map[*Tensor]*Tensor),
+		clipValue:    clipValue,
 	}
 }
 
@@ -46,6 +48,15 @@ func (o *Adam) Step() {
 			if _, ok := o.m[p]; !ok {
 				o.m[p] = NewTensor(p.Shape, make([]float64, len(p.Data)), false)
 				o.v[p] = NewTensor(p.Shape, make([]float64, len(p.Data)), false)
+			}
+
+			// Clip gradients
+			for i := range p.Grad.Data {
+				if p.Grad.Data[i] > o.clipValue {
+					p.Grad.Data[i] = o.clipValue
+				} else if p.Grad.Data[i] < -o.clipValue {
+					p.Grad.Data[i] = -o.clipValue
+				}
 			}
 
 			// Update biased first moment estimate

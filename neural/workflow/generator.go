@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"path"
 
 	"nlptagger/neural/semantic"
 )
@@ -26,22 +27,28 @@ func GenerateWorkflow(so *semantic.SemanticOutput) (*Workflow, error) {
 		return nil, fmt.Errorf("failed to add primary node to workflow: %w", err)
 	}
 
-	if err := addChildrenNodes(primaryResource, primaryNodeID, wf, so.Operation); err != nil {
-		return nil, err
-	}
+	if err := addChildrenNodes(primaryResource, primaryNodeID, wf, so.Operation, primaryResource.Name); err != nil {
+			return nil, err
+		}
 
-	return wf, nil
+		return wf, nil
 }
 
-func addChildrenNodes(parentResource semantic.Resource, parentNodeID string, wf *Workflow, operation string) error {
+// addChildrenNodes recursively adds nodes for child resources.
+// currentParentPath is the full relative path to the parentResource from the application's CWD.
+func addChildrenNodes(parentResource semantic.Resource, parentNodeID string, wf *Workflow, operation string, currentParentPath string) error {
 	for i, childResource := range parentResource.Children {
 		childNodeID := generateNodeID(childResource.Type, childResource.Name, i)
+
+		// The directory for the child node is the currentParentPath
+		childNodeDirectory := currentParentPath
+
 		childNode := &Node{
 			ID:           childNodeID,
 			Operation:    OperationType(operation),
 			Resource:     childResource,
 			Dependencies: []string{parentNodeID},
-			Directory:    parentResource.Name,
+			Directory:    childNodeDirectory, // This is the parent directory where the child resource will be created
 		}
 		if err := wf.AddNode(childNode); err != nil {
 			return fmt.Errorf("failed to add child node to workflow: %w", err)
@@ -49,6 +56,9 @@ func addChildrenNodes(parentResource semantic.Resource, parentNodeID string, wf 
 
 		// If the child is a GoWebserver, add setup and start commands
 		if childResource.Type == "Deployment::GoWebserver" && operation == "CREATE" {
+			// The webserver's directory is its own path: currentParentPath/childResource.Name
+			webserverDirectory := path.Join(currentParentPath, childResource.Name)
+
 			// Create go.mod
 			setupCommand := fmt.Sprintf("go mod init %s", childResource.Name)
 			setupNodeID := generateNodeID("command", "gomodinit", i)
@@ -57,7 +67,7 @@ func addChildrenNodes(parentResource semantic.Resource, parentNodeID string, wf 
 				Operation:    OperationExecute,
 				Command:      setupCommand,
 				Dependencies: []string{childNodeID}, // Setup depends on webserver creation
-				Directory:    childResource.Name,    // Execute in the webserver's own folder
+				Directory:    webserverDirectory,    // Execute in the webserver's own folder
 			}
 			if err := wf.AddNode(setupNode); err != nil {
 				return fmt.Errorf("failed to add setup command node to workflow: %w", err)
@@ -94,7 +104,7 @@ func main() {
 				FilePath:     "main.go",
 				Content:      mainGoContent,
 				Dependencies: []string{setupNodeID}, // main.go creation depends on go mod init
-				Directory:    childResource.Name,    // Write in the child resource's own directory
+				Directory:    webserverDirectory,    // Write in the child resource's own directory
 			}
 			if err := wf.AddNode(createMainGoNode); err != nil {
 				return fmt.Errorf("failed to add create main.go node to workflow: %w", err)
@@ -107,7 +117,7 @@ func main() {
 				Operation:    OperationExecute,
 				Command:      "test -f go.mod",
 				Dependencies: []string{createMainGoNodeID},
-				Directory:    childResource.Name,
+				Directory:    webserverDirectory,
 			}
 			if err := wf.AddNode(verifyGoModNode); err != nil {
 				return fmt.Errorf("failed to add verify go.mod node to workflow: %w", err)
@@ -120,7 +130,7 @@ func main() {
 				Operation:    OperationExecute,
 				Command:      "test -f main.go",
 				Dependencies: []string{verifyGoModNodeID},
-				Directory:    childResource.Name,
+				Directory:    webserverDirectory,
 			}
 			if err := wf.AddNode(verifyMainGoNode); err != nil {
 				return fmt.Errorf("failed to add verify main.go node to workflow: %w", err)
@@ -133,7 +143,7 @@ func main() {
 				Operation:    OperationStart,
 				Command:      fmt.Sprintf("PORT=%v go run main.go", childResource.Properties["port"]),
 				Dependencies: []string{verifyMainGoNodeID},
-				Directory:    childResource.Name,
+				Directory:    webserverDirectory,
 			}
 			if err := wf.AddNode(startNode); err != nil {
 				return fmt.Errorf("failed to add start command node to workflow: %w", err)
@@ -145,9 +155,9 @@ func main() {
 				ID:           createFileNodeID,
 				Operation:    OperationWriteFile,
 				FilePath:     childResource.Name,
-				Content:      "", // Empty content
+				Content:      childResource.Content, // Use content from semantic resource
 				Dependencies: []string{childNodeID},
-				Directory:    parentResource.Name,
+				Directory:    childNodeDirectory, // Corrected: This is the parent directory where the file will be written
 			}
 			if err := wf.AddNode(createFileNode); err != nil {
 				return fmt.Errorf("failed to add create file node to workflow: %w", err)
@@ -156,7 +166,9 @@ func main() {
 
 		// Recursive call for grandchildren
 		if len(childResource.Children) > 0 {
-			if err := addChildrenNodes(childResource, childNodeID, wf, operation); err != nil {
+			// The path for the grandchildren's parent is the path to the current child resource
+			nextParentPath := path.Join(currentParentPath, childResource.Name)
+			if err := addChildrenNodes(childResource, childNodeID, wf, operation, nextParentPath); err != nil {
 				return err
 			}
 		}
