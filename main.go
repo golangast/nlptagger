@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -44,6 +45,7 @@ func runModule(path string) {
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
+		fmt.Println(err, cmd.Stderr, cmd.Stdout)
 		log.Fatalf("Failed to run module %s: %v", path, err)
 	}
 }

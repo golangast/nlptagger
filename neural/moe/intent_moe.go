@@ -4,10 +4,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"os"
+
 	"nlptagger/neural/nn"
 	"nlptagger/neural/nnu/word2vec"
 	"nlptagger/neural/tensor"
-	"os"
 )
 
 func init() {
@@ -36,6 +37,7 @@ func init() {
 	gob.Register(&tensor.MulOperation{})
 	gob.Register(&tensor.SumOperation{})
 	gob.Register(&tensor.SplitOperation{})
+	gob.Register(&tensor.Tensor{})
 }
 
 // IntentMoE represents a Mixture of Experts model for intent classification.
@@ -76,11 +78,11 @@ func NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVoc
 	}
 
 	return &IntentMoE{
-		Encoder:           encoder,
-		Decoder:           decoder,
-		Embedding:         embedding,
-		SentenceVocabSize: sentenceVocabSize,
-	},
+			Encoder:           encoder,
+			Decoder:           decoder,
+			Embedding:         embedding,
+			SentenceVocabSize: sentenceVocabSize,
+		},
 		nil
 }
 
@@ -209,12 +211,33 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 	return decodedIDs, nil
 }
 
+// GreedySearchDecode ... (existing code)
+
 // SaveIntentMoEModelToGOB saves the IntentMoE to a file in Gob format.
 func SaveIntentMoEModelToGOB(model *IntentMoE, writer io.Writer) error {
 	encoder := gob.NewEncoder(writer)
-	err := encoder.Encode(model)
-	if err != nil {
-		return fmt.Errorf("failed to encode IntentMoE model to Gob: %w", err)
+
+	// Encode SentenceVocabSize
+	if err := encoder.Encode(model.SentenceVocabSize); err != nil {
+		return fmt.Errorf("failed to encode SentenceVocabSize: %w", err)
+	}
+
+	// Get all learnable parameters
+	params := model.Parameters()
+
+	// Encode the number of parameters
+	if err := encoder.Encode(len(params)); err != nil {
+		return fmt.Errorf("failed to encode number of parameters: %w", err)
+	}
+
+	// Encode each parameter (tensor) individually
+	for i, param := range params {
+		if err := encoder.Encode(param.Shape); err != nil {
+			return fmt.Errorf("failed to encode shape of parameter %d: %w", i, err)
+		}
+		if err := encoder.Encode(param.Data); err != nil {
+			return fmt.Errorf("failed to encode data of parameter %d: %w", i, err)
+		}
 	}
 
 	return nil
@@ -229,19 +252,52 @@ func LoadIntentMoEModelFromGOB(filePath string) (*IntentMoE, error) {
 	defer file.Close()
 
 	decoder := gob.NewDecoder(file)
-	var loadedModel IntentMoE
-	err = decoder.Decode(&loadedModel)
+
+	var sentenceVocabSize int
+	if err := decoder.Decode(&sentenceVocabSize); err != nil {
+		return nil, fmt.Errorf("failed to decode SentenceVocabSize: %w", err)
+	}
+
+	var numParams int
+	if err := decoder.Decode(&numParams); err != nil {
+		return nil, fmt.Errorf("failed to decode number of parameters: %w", err)
+	}
+
+	// These values are hardcoded based on main.go. In a real application,
+	// these would ideally be saved in the gob file or passed as arguments.
+	vocabSize := 30 // From main.go: len(queryVocabulary.WordToToken)
+	embeddingDim := 25
+	numExperts := 1
+	parentVocabSize := 0
+	childVocabSize := 0
+	maxAttentionHeads := 1
+
+	loadedModel, err := NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding IntentMoE model from gob: %w", err)
+		return nil, fmt.Errorf("failed to create new IntentMoE model during loading: %w", err)
 	}
 
-	if loadedModel.Encoder == nil {
-		return nil, fmt.Errorf("loaded IntentMoE model has a nil Encoder after decoding")
+	modelParams := loadedModel.Parameters()
+	if len(modelParams) != numParams {
+		return nil, fmt.Errorf("mismatch in number of parameters: expected %d, got %d", numParams, len(modelParams))
 	}
 
-	if loadedModel.Decoder == nil {
-		return nil, fmt.Errorf("loaded IntentMoE model's Decoder has a nil Decoder after decoding")
+	for i := 0; i < numParams; i++ {
+		var shape []int
+		if err := decoder.Decode(&shape); err != nil {
+			return nil, fmt.Errorf("failed to decode shape of parameter %d: %w", i, err)
+		}
+		var data []float64
+		if err := decoder.Decode(&data); err != nil {
+			return nil, fmt.Errorf("failed to decode data of parameter %d: %w", i, err)
+		}
+
+		// Assign the decoded data to the corresponding parameter in the loaded model
+		// This assumes that the order of parameters returned by model.Parameters()
+		// is consistent with the order they were saved.
+		modelParams[i].Shape = shape
+		modelParams[i].Data = data
 	}
 
-	return &loadedModel, nil
+	return loadedModel, nil
 }
