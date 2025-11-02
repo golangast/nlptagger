@@ -362,5 +362,47 @@
     "child_intent": "create_server_and_handler",
     "description": "Generates a new webserver with a specified name.",
     "sentence": "This will generate a new webserver named jim."
+  },
+  {
+    "query": "add folder named handler in jim",
+    "parent_intent": "file_system",
+    "child_intent": "create_folder",
+    "description": "Adds a new folder.",
+    "sentence": "This will add a new folder named handler in jim."
+  },
+  {
+    "query": "create folder handler in jim",
+    "parent_intent": "file_system",
+    "child_intent": "create_folder",
+    "description": "Creates a new folder.",
+    "sentence": "This will create a new folder named handler in jim."
+  },
+  {
+    "query": "add file handler.go in folder jim",
+    "parent_intent": "file_system",
+    "child_intent": "create_file",
+    "description": "Adds a new file.",
+    "sentence": "This will add a new file named handler.go in folder jim."
+  },
+  {
+    "query": "create file handler.go in folder jim",
+    "parent_intent": "file_system",
+    "child_intent": "create_file",
+    "description": "Creates a new file.",
+    "sentence": "This will create a new file named handler.go in folder jim."
+  },
+  {
+    "query": "add folder handler in jim with file handler.go",
+    "parent_intent": "file_system",
+    "child_intent": "create_folder_with_file",
+    "description": "Adds a new folder with a file inside.",
+    "sentence": "intent:CREATE, resource_type:Filesystem::Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
+  },
+  {
+    "query": "create folder handler in jim with file handler.go",
+    "parent_intent": "file_system",
+    "child_intent": "create_folder_with_file",
+    "description": "Creates a new folder with a file inside.",
+    "sentence": "intent:CREATE, resource_type:Filesystem::Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
   }
 ]

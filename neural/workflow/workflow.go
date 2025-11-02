@@ -3,7 +3,7 @@ package workflow
 import (
 	"fmt"
 
-	"nlptagger/neural/semantic"
+	"github.com/zendrulat/nlptagger/neural/semantic"
 )
 
 // OperationType defines the type of operation a node represents.
@@ -28,6 +28,7 @@ type Node struct {
 	Content      string                   `json:"content,omitempty"`      // For WRITE_FILE operations
 	Directory    string                   `json:"directory,omitempty"`    // Directory to execute command in
 	Dependencies []string                 `json:"dependencies,omitempty"` // IDs of nodes this node depends on
+	Context      semantic.Context         `json:"context,omitempty"`
 }
 
 // Workflow represents a Directed Acyclic Graph (DAG) of operations.

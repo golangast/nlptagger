@@ -8,30 +8,30 @@ import (
 	"os"
 	"strings"
 
-	"nlptagger/neural/parser"
-	"nlptagger/neural/workflow"
+	"github.com/zendrulat/nlptagger/neural/parser"
+	"github.com/zendrulat/nlptagger/neural/workflow"
 )
 
 var (
-	query = flag.String("query", "", "Natural language query for the parser")
+	query = flag.String("query", "", "Natural language query for the executor")
 )
 
 func main() {
 	flag.Parse()
 
-	// Create parser and executor instances
-	p := parser.NewParser()
+	// Create parser and executor instances.
+	parser := parser.NewParser()
 	executor := workflow.NewExecutor()
 
 	// Process initial query from flag, if provided
 	if *query != "" {
-		processAndExecuteQuery(*query, p, executor)
+		processAndExecuteQuery(*query, parser, executor)
 	}
 
 	// Start interactive loop
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("\nEnter a query (e.g., \"create folder jack with a go webserver jill\"): ")
+		fmt.Print("\nEnter a query (e.g., \"create folder my_app\"): ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
@@ -40,31 +40,24 @@ func main() {
 		}
 
 		if input != "" {
-			processAndExecuteQuery(input, p, executor)
+			processAndExecuteQuery(input, parser, executor)
 		}
 	}
 }
 
-func processAndExecuteQuery(q string, p *parser.Parser, executor *workflow.Executor) {
+func processAndExecuteQuery(q string, parser *parser.Parser, executor *workflow.Executor) {
 	log.Printf("Processing query: \"%s\"", q)
 
-	// Parse the query into a workflow
-	// The parser now handles semantic validation and inference internally.
-	wf, err := p.Parse(q)
+	wf, err := parser.Parse(q)
 	if err != nil {
 		log.Printf("Error parsing query: %v", err)
 		return
 	}
 
-	fmt.Println("\n--- Generated Workflow (after inference and validation) ---")
-	for _, node := range wf.Nodes {
-		fmt.Printf("Node ID: %s, Operation: %s, Resource Type: %s, Resource Name: %s, Properties: %v, Command: %s, Dependencies: %v\n",
-			node.ID, node.Operation, node.Resource.Type, node.Resource.Name, node.Resource.Properties, node.Command, node.Dependencies)
-	}
-
-	// Execute the generated workflow
 	if err := executor.ExecuteWorkflow(wf); err != nil {
 		log.Printf("Error executing workflow: %v", err)
 		return
 	}
+
+	log.Println("Query processed and executed successfully.")
 }

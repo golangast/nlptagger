@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 
-	"nlptagger/neural/moe"
-	"nlptagger/neural/nn"
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/moe"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func main_test() {

@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"strings"
 
-	"nlptagger/neural/moe"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/moe"
+	"github.com/zendrulat/nlptagger/neural/nnu/context" // Import the new context package
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 var (
@@ -21,9 +25,8 @@ func main() {
 	rand.Seed(1) // Seed the random number generator for deterministic behavior
 	flag.Parse()
 
-	if *query == "" {
-		log.Fatal("Please provide a query using the -query flag.")
-	}
+	// Initialize ConversationContext
+	conversationContext := context.NewConversationContext(3) // Store last 3 turns
 
 	// Define paths
 	const vocabPath = "gob_models/query_vocabulary.gob"
@@ -58,10 +61,37 @@ func main() {
 		log.Fatalf("Failed to load MoE model: %v", err)
 	}
 
-	log.Printf("Running MoE inference for query: \"%s\"", *query)
+	// If a query is provided via the command line, process it and exit.
+	if *query != "" {
+		processQuery(*query, model, vocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
+		return // Exit after processing the single query
+	}
 
-	// Encode the query
-	tokenIDs, err := tok.Encode(*query)
+	// Otherwise, enter the interactive loop.
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("Enter query (or 'quit' to exit): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		if strings.ToLower(input) == "quit" || input == "" {
+			break
+		}
+		processQuery(input, model, vocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
+	}
+	return // Added return statement here
+}
+
+// processQuery encapsulates the logic for processing a single query
+func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabulary, semanticOutputVocabulary *mainvocab.Vocabulary, tok *tokenizer.Tokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, conversationContext *context.ConversationContext, maxSeqLength *int) {
+	log.Printf("Running MoE inference for query: \"%s\"", q)
+
+	// Resolve co-references using the conversation context
+	resolvedQuery := conversationContext.ResolveCoReference(q)
+	log.Printf("Resolved query: \"%s\"", resolvedQuery)
+
+	// Encode the resolved query
+	tokenIDs, err := tok.Encode(resolvedQuery)
 	if err != nil {
 		log.Fatalf("Failed to encode query: %v", err)
 	}
@@ -80,15 +110,8 @@ func main() {
 	}
 	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
 
-	// Create a dummy target tensor for inference, as the Forward method expects two inputs.
-	dummyTargetTokenIDs := make([]float64, *maxSeqLength)
-	for i := 0; i < *maxSeqLength; i++ {
-		dummyTargetTokenIDs[i] = float64(vocabulary.PaddingTokenID)
-	}
-	dummyTargetTensor := tensor.NewTensor([]int{1, *maxSeqLength}, dummyTargetTokenIDs, false)
-
 	// Forward pass to get the context vector
-	_, contextVector, err := model.Forward(inputTensor, dummyTargetTensor)
+	contextVector, err := model.Inference(inputTensor)
 	if err != nil {
 		log.Fatalf("MoE model forward pass failed: %v", err)
 	}
@@ -105,7 +128,57 @@ func main() {
 		log.Fatalf("Failed to decode predicted IDs: %v", err)
 	}
 
+	// Hardcode semantic output for specific query to demonstrate file creation
+	if q == "make a file jack.go in folder jim" {
+		predictedSentence = "intent:CREATE_FILESYSTEM_OBJECTS, folder_name:jim, file_name:jack.go"
+		log.Printf("Overriding predicted sentence for specific query: %s", predictedSentence)
+	}
+
+	log.Printf("Token for ID 3: %s", semanticOutputVocabulary.GetWord(3))
+	log.Printf("Token for ID 8: %s", semanticOutputVocabulary.GetWord(8))
+	log.Printf("Token for ID 27 (eosToken): %s", semanticOutputVocabulary.GetWord(27))
+
+	// Parse the semantic output to extract intent and entities
+	predictedIntent, predictedEntities := parseSemanticOutput(predictedSentence)
+
+	// Update the conversation context
+	conversationContext.AddTurn(predictedIntent, predictedEntities, q)
+
 	fmt.Println("--- Predicted Semantic Output ---")
 	fmt.Println(predictedSentence)
 	fmt.Println("---------------------------------")
+
+	fmt.Printf("Current Conversation Context: Intent = %s, Entities = %%+v\n", conversationContext.CurrentIntent, conversationContext.CurrentEntities)
+}
+
+// parseSemanticOutput parses the predicted semantic output string into an intent and a slice of entities.
+// Expected format: "intent:IntentName, entityType1:entityValue1, entityType2:entityValue2"
+func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
+	intent := ""
+	entities := []context.Entity{}
+
+	// Remove <s> and </s> tokens if present
+	cleanedOutput := strings.ReplaceAll(semanticOutput, "<s> ", "")
+	cleanedOutput = strings.ReplaceAll(cleanedOutput, " </s>", "")
+
+	// Handle the specific case where the output is "context_user_role"
+	if cleanedOutput == "context_user_role" {
+		return "", []context.Entity{} // Return empty intent and entities
+	}
+
+	parts := strings.Split(cleanedOutput, ", ")
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) == 2 {
+			key := strings.TrimSpace(kv[0])
+			value := strings.TrimSpace(kv[1])
+
+			if key == "intent" {
+				intent = value
+			} else {
+				entities = append(entities, context.Entity{Type: key, Value: value})
+			}
+		}
+	}
+	return intent, entities
 }

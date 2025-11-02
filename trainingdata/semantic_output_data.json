@@ -153,5 +153,93 @@
         "user_role": "admin"
       }
     }
+  },
+  {
+    "query": "create folder jim and add webserver jill in it",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Deployment::GoWebserver",
+            "name": "jill",
+            "properties": {
+              "port": 8080,
+              "runtime": "go",
+              "source": "boilerplate_v1"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "add folder handler in jim with file handler.go",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Filesystem::Folder",
+            "name": "handler",
+            "properties": {
+              "path": "jim"
+            },
+            "children": [
+              {
+                "type": "Filesystem::File",
+                "name": "handler.go",
+                "properties": {
+                  "path": "jim/handler"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "add a webserver to the folder jim",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Deployment::GoWebserver",
+            "name": "mywebserver",
+            "properties": {
+              "port": 8080,
+              "runtime": "go",
+              "source": "boilerplate_v1"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
   }
 ]

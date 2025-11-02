@@ -11,11 +11,11 @@ import (
 	"os"
 	"strings"
 
-	"nlptagger/neural/nn/dr"
-	"nlptagger/neural/nn/ner"
-	"nlptagger/neural/nn/phrase"
-	"nlptagger/neural/nn/pos"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/neural/nn/dr"
+	"github.com/zendrulat/nlptagger/neural/nn/ner"
+	"github.com/zendrulat/nlptagger/neural/nn/phrase"
+	"github.com/zendrulat/nlptagger/neural/nn/pos"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 // Vocabulary represents a mapping from words to integer IDs.

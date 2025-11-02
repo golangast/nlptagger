@@ -3,8 +3,8 @@ package moe
 import (
 	"encoding/gob"
 	"fmt"
-	"nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {
@@ -17,12 +17,12 @@ type RNNDecoder struct {
 	LSTM *nn.LSTM
 	// Linear layer to project LSTM output to vocabulary size
 	OutputLayer *nn.Linear
+	// Attention layer
+	Attention *nn.MultiHeadCrossAttention
 	// Output vocabulary size
 	OutputVocabSize int
 	// Embedding layer for the decoder input
 	Embedding *nn.Embedding
-	MaxAttentionHeads int
-	Attention *nn.MultiHeadCrossAttention
 	// Initial hidden and cell states for the LSTM
 	InitialHiddenState *Tensor
 	InitialCellState *Tensor
@@ -35,9 +35,8 @@ func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads in
 	// For simplicity, let's assume hiddenDim is the same as inputDim for now.
 	hiddenDim := inputDim
 
-	// LSTM input dimension will be embeddingDim + attentionOutputDim
-	// Assuming attentionOutputDim is also embeddingDim for simplicity in this setup
-	lstmInputDim := embeddingDim + embeddingDim // embeddedInput + attentionOutput
+	// LSTM input dimension will be embeddingDim + attention output dim
+	lstmInputDim := embeddingDim * 2
 
 	// numLayers for LSTM is 1 for a single-layer LSTM
 	lstm, err := nn.NewLSTM(lstmInputDim, hiddenDim, 1)
@@ -54,7 +53,7 @@ func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads in
 
 	attention, err := nn.NewMultiHeadCrossAttention(embeddingDim, maxAttentionHeads, maxAttentionHeads)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create multi-head attention for decoder: %w", err)
+		return nil, fmt.Errorf("failed to create attention layer for decoder: %w", err)
 	}
 
 	return &RNNDecoder{
@@ -62,8 +61,7 @@ func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads in
 		OutputLayer:       outputLayer,
 		OutputVocabSize: outputVocabSize,
 		Embedding:       embedding,
-		MaxAttentionHeads: maxAttentionHeads,
-		Attention: attention,
+		Attention:         attention,
 	},
 	nil
 }
@@ -127,13 +125,13 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 		}
 
 		// Concatenate embedded input and attention output
-		combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 1)
+		combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 2)
 		if err != nil {
 			return nil, fmt.Errorf("decoder concat failed: %w", err)
 		}
 
-		// Reshape combinedInput from [batchSize, 2, embeddingDim] to [batchSize, 2 * embeddingDim]
-		reshapedCombinedInput, err := combinedInput.Reshape([]int{batchSize, combinedInput.Shape[1] * combinedInput.Shape[2]})
+		// Reshape combinedInput from [batchSize, 1, 2 * embeddingDim] to [batchSize, 2 * embeddingDim]
+		reshapedCombinedInput, err := combinedInput.Reshape([]int{batchSize, combinedInput.Shape[2]})
 		if err != nil {
 			return nil, fmt.Errorf("failed to reshape combined input for LSTM: %w", err)
 		}
@@ -259,14 +257,14 @@ func (d *RNNDecoder) DecodeStep(inputToken *Tensor, prevHiddenState, prevCellSta
 	}
 
 	// Concatenate embedded input and attention output
-	combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 1)
+	combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 2)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decoder concat failed: %w", err)
 	}
 
-	// Reshape combinedInput from [batchSize, 2, embeddingDim] to [batchSize, 2 * embeddingDim]
+	// Reshape combinedInput from [batchSize, 1, 2 * embeddingDim] to [batchSize, 2 * embeddingDim]
 	batchSize := combinedInput.Shape[0]
-	reshapedCombinedInput, err := combinedInput.Reshape([]int{batchSize, combinedInput.Shape[1] * combinedInput.Shape[2]})
+	reshapedCombinedInput, err := combinedInput.Reshape([]int{batchSize, combinedInput.Shape[2]})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to reshape combined input for LSTM: %w", err)
 	}

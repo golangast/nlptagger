@@ -28,6 +28,13 @@ func InferProperties(resource *Resource) {
 			}
 			resource.Properties["permissions"] = "0755"
 		}
+	case "Filesystem::File":
+		if resource.Name == "" {
+			resource.Name = "untitled.txt" // Default file name
+		}
+		if resource.Directory == "" {
+			resource.Directory = "/home/user/documents" // Default directory
+		}
 	}
 
 	// Recursively infer properties for children

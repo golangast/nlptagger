@@ -1,6 +1,6 @@
 package dependencyrelation
 
-import "nlptagger/tagger/tag"
+import "github.com/zendrulat/nlptagger/tagger/tag"
 
 var (
 	DRToID = map[string]int{

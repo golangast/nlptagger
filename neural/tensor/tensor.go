@@ -1,6 +1,8 @@
 package tensor
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"math"
@@ -99,11 +101,72 @@ type Operation interface {
 type Tensor struct {
 	Data         []float64
 	Shape        []int
-	Grad         *Tensor
+	Grad         *Tensor `gob:"-"` // Exclude Grad from gob serialization
 	Mask         *Tensor
-	Creator      Operation
+	Creator      Operation `gob:"-"` // Exclude Creator from gob serialization
 	RequiresGrad bool
-	Operation    Operation
+	Operation    Operation `gob:"-"` // Exclude Operation from gob serialization
+}
+
+// GobEncode implements the gob.GobEncoder interface.
+func (t *Tensor) GobEncode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+
+	if err := enc.Encode(t.Data); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(t.Shape); err != nil {
+		return nil, err
+	}
+
+	// Explicitly handle nil for Mask
+	maskIsNil := t.Mask == nil
+	if err := enc.Encode(maskIsNil); err != nil {
+		return nil, err
+	}
+	if !maskIsNil {
+		if err := enc.Encode(t.Mask); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := enc.Encode(t.RequiresGrad); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// GobDecode implements the gob.GobDecoder interface.
+func (t *Tensor) GobDecode(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+
+	if err := dec.Decode(&t.Data); err != nil {
+		return err
+	}
+	if err := dec.Decode(&t.Shape); err != nil {
+		return err
+	}
+
+	// Explicitly handle nil for Mask
+	var maskIsNil bool
+	if err := dec.Decode(&maskIsNil); err != nil {
+		return err
+	}
+	if !maskIsNil {
+		t.Mask = &Tensor{} // Initialize Mask before decoding into it
+		if err := dec.Decode(t.Mask); err != nil {
+			return err
+		}
+	} else {
+		t.Mask = nil // Ensure Mask is nil if it was nil during encoding
+	}
+
+	if err := dec.Decode(&t.RequiresGrad); err != nil {
+		return err
+	}
+	return nil
 }
 
 // NewTensor creates a new Tensor with the given shape and optional data.
@@ -190,9 +253,8 @@ func (it *MatMul4DIterator) Current() (b, h, i, j int) {
 // It handles cases where the last chunk in a dimension might be smaller.
 func (it *MatMul4DIterator) CurrentChunkSize() (rows, cols int) {
 
-
-rows = it.chunkSizeRows
-cols = it.chunkSizeCols
+	rows = it.chunkSizeRows
+	cols = it.chunkSizeCols
 
 	if it.currentI+rows > it.resultRows {
 		rows = it.resultRows - it.currentI
@@ -221,18 +283,17 @@ func (it *BatchHeadIterator) Current() (b, h int) {
 
 // RowIterator iterates over rows of a 2D tensor.
 type RowIterator struct {
-
-rows       int
+	rows       int
 	cols       int
 	currentRow int
 }
 
 func NewRowIterator(rows, cols int) *RowIterator {
 	return &RowIterator{
-	
-rows:       rows,
-	
-cols:       cols,
+
+		rows: rows,
+
+		cols:       cols,
 		currentRow: -1, // Start before the first row
 	}
 }
@@ -316,8 +377,7 @@ func (t *Tensor) MatMul(other *Tensor) (*Tensor, error) {
 			return nil, fmt.Errorf("incompatible shapes for 2D matrix multiplication: %v and %v", t.Shape, other.Shape)
 		}
 
-	
-rowsA := t.Shape[0]
+		rowsA := t.Shape[0]
 		colsA := t.Shape[1]
 		colsB := other.Shape[1]
 
@@ -371,13 +431,12 @@ rowsA := t.Shape[0]
 			return nil, fmt.Errorf("incompatible shapes for 4D batched matrix multiplication: %v and %v", t.Shape, other.Shape)
 		}
 
-	
-batchSize := t.Shape[0]
+		batchSize := t.Shape[0]
 		numHeads := t.Shape[1]
-	
-rowsA := t.Shape[2]
+
+		rowsA := t.Shape[2]
 		colsA := t.Shape[3]
-	
+
 		rowsB := other.Shape[2]
 		colsB := other.Shape[3]
 
@@ -398,7 +457,7 @@ rowsA := t.Shape[2]
 					for j := 0; j < resultCols; j++ {
 						sum := 0.0
 						for k := 0; k < colsA; k++ {
-													sum += t.Data[tOffset+i*colsA+k] * other.Data[otherOffset+k*colsB+j]
+							sum += t.Data[tOffset+i*colsA+k] * other.Data[otherOffset+k*colsB+j]
 						}
 						resultData[resultOffset+i*resultCols+j] = sum
 					}
@@ -1011,7 +1070,7 @@ func (t *Tensor) Backward(grad *Tensor) error {
 	for i := len(topo) - 1; i >= 0; i-- {
 		v := topo[i]
 		if v.Creator != nil {
-			
+
 			err := v.Creator.Backward(v.Grad)
 			if err != nil {
 				return fmt.Errorf("error during backward pass for tensor with shape %v: %w", v.Shape, err)
@@ -1141,7 +1200,6 @@ func (op *DivScalarOperation) Backward(grad *Tensor) error {
 	return nil
 }
 
-
 // MulScalar performs element-wise multiplication by a scalar.
 func (t *Tensor) MulScalar(val float64) (*Tensor, error) {
 	resultData := make([]float64, len(t.Data))
@@ -1178,7 +1236,6 @@ func (op *MulScalarOperation) Backward(grad *Tensor) error {
 	}
 	return nil
 }
-
 
 // Select returns a new Tensor containing the element at the given index.
 // This operation is differentiable.
@@ -1294,7 +1351,6 @@ func (op *SigmoidOperation) Backward(grad *Tensor) error {
 	}
 	return nil
 }
-
 
 // Log applies the natural logarithm element-wise to the tensor.
 func (t *Tensor) Log() (*Tensor, error) {
@@ -1525,8 +1581,6 @@ func (op *SumOperation) Backward(grad *Tensor) error {
 
 	// The gradient of sum is to broadcast the incoming gradient back to the original shape.
 	// This means repeating the gradient along the summed axis.
-
-	
 
 	// Calculate strides for the input and gradient tensors
 	inputStrides := calculateStrides(op.Input.Shape)
@@ -1812,9 +1866,9 @@ func Split(t *Tensor, axis int, splitSizes []int) ([]*Tensor, error) {
 
 // splitOperation represents the split operation for backward pass.
 type SplitOperation struct {
-	InputTensor      *Tensor
-	Axis       int
-	SplitSizes []int
+	InputTensor *Tensor
+	Axis        int
+	SplitSizes  []int
 }
 
 func (op *SplitOperation) Inputs() []*Tensor {
@@ -1886,7 +1940,6 @@ func (op *SplitOperation) Backward(grad *Tensor) error {
 
 	return nil
 }
-
 
 // Next moves the iterator to the next row.
 func (it *RowIterator) Next() bool {

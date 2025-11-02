@@ -3,8 +3,8 @@ package moe
 import (
 	
 	"fmt"
-	"nlptagger/neural/nn"
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 

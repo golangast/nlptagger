@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"nlptagger/tagger/dependencyrelation"
-	"nlptagger/tagger/nertagger"
-	"nlptagger/tagger/phrasetagger"
-	"nlptagger/tagger/postagger"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/tagger/dependencyrelation"
+	"github.com/zendrulat/nlptagger/tagger/nertagger"
+	"github.com/zendrulat/nlptagger/tagger/phrasetagger"
+	"github.com/zendrulat/nlptagger/tagger/postagger"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 const (
@@ -28,10 +28,6 @@ func Tagging(text string) tag.Tag {
 	tag = postagger.VerbCheck(tag)
 	tag = postagger.NounCheck(tag)
 	tag = nertagger.Nertagger(tag)
-
-	//Ner checking nouns/verbs
-	tag = nertagger.NerNounCheck(tag)
-	tag = nertagger.NerVerbCheck(tag)
 
 	tag = phrasetagger.CheckPhrase(text, tag)
 

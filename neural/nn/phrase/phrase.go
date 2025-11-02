@@ -5,8 +5,8 @@ package phrase
 import (
 	"fmt"
 
-	"nlptagger/neural/nnu"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/neural/nnu"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 type SimpleNNPhrase struct {

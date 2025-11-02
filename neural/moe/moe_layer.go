@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"sort"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 

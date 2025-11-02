@@ -4,40 +4,18 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"log"
+	"math/rand"
 	"os"
+	"sort"
 
-	"nlptagger/neural/nn"
-	"nlptagger/neural/nnu/word2vec"
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {
-	gob.Register(&IntentMoE{})
-	gob.Register(&RNNDecoder{})
-	gob.Register(&MoELayer{})
 	gob.Register(&FeedForwardExpert{})
-	gob.Register(&GatingNetwork{})
-	gob.Register(&nn.Linear{})
-	gob.Register(&nn.Embedding{})
-	gob.Register(&nn.LSTM{})
-	gob.Register(&nn.LSTMCell{})
-	gob.Register([]*nn.LSTMCell{})
-	gob.Register([][]*nn.LSTMCell{})
-	gob.Register(&tensor.ConcatOperation{})
-	gob.Register(&tensor.DivScalarOperation{})
-	gob.Register(&tensor.AddOperation{})
-	gob.Register(&tensor.MatmulOperation{})
-	gob.Register(&tensor.AddWithBroadcastOperation{})
-	gob.Register(&tensor.SoftmaxOperation{})
-	gob.Register(&tensor.MulScalarOperation{})
-	gob.Register(&tensor.SelectOperation{})
-	gob.Register(&tensor.TanhOperation{})
-	gob.Register(&tensor.SigmoidOperation{})
-	gob.Register(&tensor.LogOperation{})
-	gob.Register(&tensor.MulOperation{})
-	gob.Register(&tensor.SumOperation{})
-	gob.Register(&tensor.SplitOperation{})
-	gob.Register(&tensor.Tensor{})
 }
 
 // IntentMoE represents a Mixture of Experts model for intent classification.
@@ -84,6 +62,28 @@ func NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVoc
 			SentenceVocabSize: sentenceVocabSize,
 		},
 		nil
+}
+
+// Inference performs the forward pass of the IntentMoE model for inference.
+func (m *IntentMoE) Inference(inputs ...*tensor.Tensor) (*tensor.Tensor, error) {
+	if len(inputs) != 1 {
+		return nil, fmt.Errorf("IntentMoE.Inference expects 1 input (query token IDs), got %d", len(inputs))
+	}
+	queryTokenIDs := inputs[0]
+
+	// Pass token IDs through embedding layer
+	queryEmbeddings, err := m.Embedding.Forward(queryTokenIDs)
+	if err != nil {
+		return nil, fmt.Errorf("embedding layer forward failed: %w", err)
+	}
+
+	// Encoder forward pass
+	contextVector, err := m.Encoder.Forward(queryEmbeddings)
+	if err != nil {
+		return nil, fmt.Errorf("MoE encoder forward failed: %w", err)
+	}
+
+	return contextVector, nil
 }
 
 // Forward performs the forward pass of the IntentMoE model.
@@ -148,6 +148,49 @@ func (m *IntentMoE) Parameters() []*tensor.Tensor {
 	return params
 }
 
+type probIndex struct {
+	prob  float64
+	index int
+}
+
+func sampleTopK(probabilities []float64, k int) int {
+	// Create a slice of probIndex to store probabilities and their original indices
+	probIndices := make([]probIndex, len(probabilities))
+	for i, p := range probabilities {
+		probIndices[i] = probIndex{prob: p, index: i}
+	}
+
+	// Sort the probabilities in descending order
+	sort.Slice(probIndices, func(i, j int) bool {
+		return probIndices[i].prob > probIndices[j].prob
+	})
+
+	// Take the top k probabilities
+	topK := probIndices[:k]
+
+	// Normalize the top k probabilities
+	var sumProb float64
+	for _, pi := range topK {
+		sumProb += pi.prob
+	}
+	for i := range topK {
+		topK[i].prob /= sumProb
+	}
+
+	// Sample from the normalized top k probabilities
+	r := rand.Float64()
+	var cumulativeProb float64
+	for _, pi := range topK {
+		cumulativeProb += pi.prob
+		if r < cumulativeProb {
+			return pi.index
+		}
+	}
+
+	// Fallback to the most likely token
+	return topK[0].index
+}
+
 func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sosToken, eosToken int) ([]int, error) {
 	var decodedIDs []int
 	decoderInputIDs := tensor.NewTensor([]int{1, 1}, []float64{float64(sosToken)}, false)
@@ -161,6 +204,7 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 	batchSize := contextVector.Shape[0]
 	hiddenSize := m.Decoder.LSTM.HiddenSize
 
+	// Take the mean of the context vector as the initial hidden state
 	initialHidden, err := contextVector.Mean(1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mean of context vector for initial hidden state: %w", err)
@@ -193,19 +237,24 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 		hiddenState = newHidden
 		cellState = newCell
 
-		argmax, err := outputLogits.Argmax(1)
+		// Apply softmax to get probabilities
+		probabilities, err := outputLogits.Softmax(1)
 		if err != nil {
-			return nil, fmt.Errorf("argmax failed: %w", err)
+			return nil, fmt.Errorf("softmax failed: %w", err)
 		}
-		predictedID := int(argmax.Data[0])
 
+		// Sample from the top-k probabilities
+		predictedID := sampleTopK(probabilities.Data, 5)
+
+		log.Printf("GreedySearchDecode: Iteration %d, predictedID: %d, eosToken: %d", i, predictedID, eosToken)
+		log.Printf("GreedySearchDecode: outputLogits: %v", outputLogits.Data)
 		if predictedID == eosToken {
+			log.Printf("GreedySearchDecode: EOS token encountered, breaking.")
 			break
 		}
-
 		decodedIDs = append(decodedIDs, predictedID)
 
-		decoderInputIDs = tensor.NewTensor([]int{1, 1}, []float64{float64(predictedID)}, false)
+		decoderInputIDs.Data[0] = float64(predictedID)
 	}
 
 	return decodedIDs, nil
@@ -216,30 +265,10 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 // SaveIntentMoEModelToGOB saves the IntentMoE to a file in Gob format.
 func SaveIntentMoEModelToGOB(model *IntentMoE, writer io.Writer) error {
 	encoder := gob.NewEncoder(writer)
-
-	// Encode SentenceVocabSize
-	if err := encoder.Encode(model.SentenceVocabSize); err != nil {
-		return fmt.Errorf("failed to encode SentenceVocabSize: %w", err)
+	log.Printf("Saving model of type %T", model)
+	if err := encoder.Encode(model); err != nil {
+		return fmt.Errorf("failed to encode model: %w", err)
 	}
-
-	// Get all learnable parameters
-	params := model.Parameters()
-
-	// Encode the number of parameters
-	if err := encoder.Encode(len(params)); err != nil {
-		return fmt.Errorf("failed to encode number of parameters: %w", err)
-	}
-
-	// Encode each parameter (tensor) individually
-	for i, param := range params {
-		if err := encoder.Encode(param.Shape); err != nil {
-			return fmt.Errorf("failed to encode shape of parameter %d: %w", i, err)
-		}
-		if err := encoder.Encode(param.Data); err != nil {
-			return fmt.Errorf("failed to encode data of parameter %d: %w", i, err)
-		}
-	}
-
 	return nil
 }
 
@@ -253,51 +282,11 @@ func LoadIntentMoEModelFromGOB(filePath string) (*IntentMoE, error) {
 
 	decoder := gob.NewDecoder(file)
 
-	var sentenceVocabSize int
-	if err := decoder.Decode(&sentenceVocabSize); err != nil {
-		return nil, fmt.Errorf("failed to decode SentenceVocabSize: %w", err)
+	var model IntentMoE
+	log.Printf("Loading model of type %T", &model)
+	if err := decoder.Decode(&model); err != nil {
+		return nil, fmt.Errorf("failed to decode model: %w", err)
 	}
 
-	var numParams int
-	if err := decoder.Decode(&numParams); err != nil {
-		return nil, fmt.Errorf("failed to decode number of parameters: %w", err)
-	}
-
-	// These values are hardcoded based on main.go. In a real application,
-	// these would ideally be saved in the gob file or passed as arguments.
-	vocabSize := 30 // From main.go: len(queryVocabulary.WordToToken)
-	embeddingDim := 25
-	numExperts := 1
-	parentVocabSize := 0
-	childVocabSize := 0
-	maxAttentionHeads := 1
-
-	loadedModel, err := NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new IntentMoE model during loading: %w", err)
-	}
-
-	modelParams := loadedModel.Parameters()
-	if len(modelParams) != numParams {
-		return nil, fmt.Errorf("mismatch in number of parameters: expected %d, got %d", numParams, len(modelParams))
-	}
-
-	for i := 0; i < numParams; i++ {
-		var shape []int
-		if err := decoder.Decode(&shape); err != nil {
-			return nil, fmt.Errorf("failed to decode shape of parameter %d: %w", i, err)
-		}
-		var data []float64
-		if err := decoder.Decode(&data); err != nil {
-			return nil, fmt.Errorf("failed to decode data of parameter %d: %w", i, err)
-		}
-
-		// Assign the decoded data to the corresponding parameter in the loaded model
-		// This assumes that the order of parameters returned by model.Parameters()
-		// is consistent with the order they were saved.
-		modelParams[i].Shape = shape
-		modelParams[i].Data = data
-	}
-
-	return loadedModel, nil
+	return &model, nil
 }

@@ -12,7 +12,7 @@ import (
 
 	// Package word2vec implements a basic Word2Vec model for creating word embeddings.
 
-	"nlptagger/neural/nn/g"
+	"github.com/zendrulat/nlptagger/neural/nn/g"
 )
 
 // SimpleWord2Vec is a basic Word2Vec implementation in Go.

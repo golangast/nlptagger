@@ -3,7 +3,7 @@ package nn
 import (
 	"fmt"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 // FeedForward represents a simple feed-forward layer.

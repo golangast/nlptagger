@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"nlptagger/tagger"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/tagger"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 // IntentExample represents a single intent training example
