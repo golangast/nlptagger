@@ -4,7 +4,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/zendrulat/nlptagger/neural/nn"
-	. "github.com/zendrulat/nlptagger/neural/tensor"
+	tn "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {
@@ -24,8 +24,8 @@ type RNNDecoder struct {
 	// Embedding layer for the decoder input
 	Embedding *nn.Embedding
 	// Initial hidden and cell states for the LSTM
-	InitialHiddenState *Tensor
-	InitialCellState *Tensor
+		InitialHiddenState *tn.Tensor
+		InitialCellState   *tn.Tensor
 }
 
 // NewRNNDecoder creates a new RNNDecoder.
@@ -68,7 +68,7 @@ func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads in
 
 // Forward performs the forward pass of the RNNDecoder.
 // It takes the context vector from the encoder and the target sequence (for teacher forcing) and generates a sequence of tokens.
-func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, error) {
+func (d *RNNDecoder) Forward(contextVector, targetSequence *tn.Tensor) ([]*tn.Tensor, error) {
 	batchSize := targetSequence.Shape[0]
 	maxSequenceLength := targetSequence.Shape[1]
 	hiddenSize := d.LSTM.HiddenSize
@@ -94,8 +94,8 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 			}
 		} else if initialHidden.Shape[1] < hiddenSize {
 			// Pad with zeros if hiddenSize is larger
-			padding := NewTensor([]int{batchSize, hiddenSize - initialHidden.Shape[1]}, make([]float64, batchSize*(hiddenSize-initialHidden.Shape[1])), false)
-			initialHidden, err = Concat([]*Tensor{initialHidden, padding}, 1)
+			padding := tn.NewTensor([]int{batchSize, hiddenSize - initialHidden.Shape[1]}, make([]float64, batchSize*(hiddenSize-initialHidden.Shape[1])), false)
+			initialHidden, err = tn.Concat([]*tn.Tensor{initialHidden, padding}, 1)
 			if err != nil {
 				return nil, fmt.Errorf("failed to pad initial hidden state: %w", err)
 			}
@@ -103,13 +103,13 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 	}
 
 	hiddenState := initialHidden
-	cellState := NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false) // Initialize cell state to zeros
+	cellState := tn.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false) // Initialize cell state to zeros
 
 	// Create a tensor to hold the decoder outputs
-	var outputs []*Tensor
+	var outputs []*tn.Tensor
 
 	// Start with a start-of-sequence token (e.g., token ID 0)
-	decoderInput := NewTensor([]int{batchSize, 1}, make([]float64, batchSize), false)
+	decoderInput := tn.NewTensor([]int{batchSize, 1}, make([]float64, batchSize), false)
 
 	for t := 0; t < maxSequenceLength; t++ {
 		// Embed the decoder input
@@ -125,7 +125,7 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 		}
 
 		// Concatenate embedded input and attention output
-		combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 2)
+		combinedInput, err := tn.Concat([]*tn.Tensor{embeddedInput, attentionOutput}, 2)
 		if err != nil {
 			return nil, fmt.Errorf("decoder concat failed: %w", err)
 		}
@@ -164,14 +164,14 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 }
 
 // Backward performs the backward pass of the RNNDecoder.
-func (d *RNNDecoder) Backward(grads []*Tensor) error {
-	var lstmHiddenGrad *Tensor
-	var lstmCellGrad *Tensor
+func (d *RNNDecoder) Backward(grads []*tn.Tensor) error {
+	var lstmHiddenGrad *tn.Tensor
+	var lstmCellGrad *tn.Tensor
 
 	// Initialize hidden and cell gradients for the LSTM
 	// These will accumulate gradients from all timesteps
-	lstmHiddenGrad = NewTensor(d.LSTM.Cells[0][0].PrevHidden.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevHidden.Data)), true)
-	lstmCellGrad = NewTensor(d.LSTM.Cells[0][0].PrevCell.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevCell.Data)), true)
+	lstmHiddenGrad = tn.NewTensor(d.LSTM.Cells[0][0].PrevHidden.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevHidden.Data)), true)
+	lstmCellGrad = tn.NewTensor(d.LSTM.Cells[0][0].PrevCell.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevCell.Data)), true)
 
 	for t := len(grads) - 1; t >= 0; t-- {
 		outputGrad := grads[t]
@@ -201,7 +201,7 @@ func (d *RNNDecoder) Backward(grads []*Tensor) error {
 		prevCellGrad := d.LSTM.Cells[0][0].PrevCell.Grad
 
 		// Split the gradient for the concatenated input (embeddedInput and attentionOutput)
-		splitGrads, err := Split(inputGrad, 1, []int{d.Embedding.DimModel, d.Attention.DimModel})
+		splitGrads, err := tn.Split(inputGrad, 1, []int{d.Embedding.DimModel, d.Attention.DimModel})
 		if err != nil {
 			return fmt.Errorf("decoder split failed: %w", err)
 		}
@@ -243,7 +243,7 @@ func (d *RNNDecoder) Backward(grads []*Tensor) error {
 // DecodeStep performs a single decoding step.
 // It takes the current input token, the previous hidden and cell states, and the encoder's context vector.
 // It returns the output logits for the current step, and the new hidden and cell states.
-func (d *RNNDecoder) DecodeStep(inputToken *Tensor, prevHiddenState, prevCellState, contextVector *Tensor) (*Tensor, *Tensor, *Tensor, error) {
+func (d *RNNDecoder) DecodeStep(inputToken *tn.Tensor, prevHiddenState, prevCellState, contextVector *tn.Tensor) (*tn.Tensor, *tn.Tensor, *tn.Tensor, error) {
 	// Embed the decoder input
 	embeddedInput, err := d.Embedding.Forward(inputToken)
 	if err != nil {
@@ -257,7 +257,7 @@ func (d *RNNDecoder) DecodeStep(inputToken *Tensor, prevHiddenState, prevCellSta
 	}
 
 	// Concatenate embedded input and attention output
-	combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 2)
+	combinedInput, err := tn.Concat([]*tn.Tensor{embeddedInput, attentionOutput}, 2)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("decoder concat failed: %w", err)
 	}
@@ -285,8 +285,8 @@ func (d *RNNDecoder) DecodeStep(inputToken *Tensor, prevHiddenState, prevCellSta
 }
 
 // Parameters returns all learnable parameters of the RNNDecoder.
-func (d *RNNDecoder) Parameters() []*Tensor {
-	params := []*Tensor{}
+func (d *RNNDecoder) Parameters() []*tn.Tensor {
+	params := []*tn.Tensor{}
 	params = append(params, d.Embedding.Parameters()...)
 	params = append(params, d.LSTM.Parameters()...)
 	params = append(params, d.OutputLayer.Parameters()...)
