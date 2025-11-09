@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"github.com/zendrulat/nlptagger/neural/moe"
 	"github.com/zendrulat/nlptagger/neural/nnu/context" // Import the new context package
 	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
 	"github.com/zendrulat/nlptagger/neural/tensor"
 	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
@@ -32,20 +34,40 @@ func main() {
 	const vocabPath = "gob_models/query_vocabulary.gob"
 	const moeModelPath = "gob_models/moe_classification_model.gob"
 	const semanticOutputVocabPath = "gob_models/semantic_output_vocabulary.gob"
+	const word2vecModelPath = "gob_models/word2vec_model.gob"
+
+	// Load the Word2Vec model
+	log.Printf("Loading Word2Vec model from %s...", word2vecModelPath)
+	word2vecModel, err := word2vec.LoadModel(word2vecModelPath)
+	if err != nil {
+		log.Fatalf("Failed to load Word2Vec model: %v", err)
+	}
+	log.Println("Word2vec model loaded successfully.")
 
 	// Load vocabularies
-	vocabulary, err := mainvocab.LoadVocabulary(vocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up input vocabulary: %v", err)
+	// Create a mainvocab.Vocabulary from the word2vecModel.Vocabulary (map[string]int)
+	queryVocabulary := mainvocab.NewVocabulary()
+	for word, id := range word2vecModel.Vocabulary {
+		queryVocabulary.WordToToken[word] = id
+		// Ensure TokenToWord is also populated correctly
+		for len(queryVocabulary.TokenToWord) <= id {
+			queryVocabulary.TokenToWord = append(queryVocabulary.TokenToWord, "")
+		}
+		queryVocabulary.TokenToWord[id] = word
 	}
+	queryVocabulary.PaddingTokenID = queryVocabulary.GetTokenID(word2vec.PaddingToken)
+	queryVocabulary.UnkID = queryVocabulary.GetTokenID(word2vec.UNKToken)
 
 	semanticOutputVocabulary, err := mainvocab.LoadVocabulary(semanticOutputVocabPath)
 	if err != nil {
 		log.Fatalf("Failed to set up semantic output vocabulary: %v", err)
 	}
+	for word, id := range semanticOutputVocabulary.WordToToken {
+		log.Printf("Vocab: %s -> %d", word, id)
+	}
 
 	// Create tokenizer
-	tok, err := tokenizer.NewTokenizer(vocabulary)
+	tok, err := tokenizer.NewTokenizer(queryVocabulary)
 	if err != nil {
 		log.Fatalf("Failed to create tokenizer: %v", err)
 	}
@@ -63,7 +85,7 @@ func main() {
 
 	// If a query is provided via the command line, process it and exit.
 	if *query != "" {
-		processQuery(*query, model, vocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
+		processQuery(*query, model, queryVocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
 		return // Exit after processing the single query
 	}
 
@@ -77,13 +99,20 @@ func main() {
 		if strings.ToLower(input) == "quit" || input == "" {
 			break
 		}
-		processQuery(input, model, vocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
+		processQuery(input, model, queryVocabulary, semanticOutputVocabulary, tok, semanticOutputTokenizer, conversationContext, maxSeqLength)
 	}
 	return // Added return statement here
 }
 
 // processQuery encapsulates the logic for processing a single query
 func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabulary, semanticOutputVocabulary *mainvocab.Vocabulary, tok *tokenizer.Tokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, conversationContext *context.ConversationContext, maxSeqLength *int) {
+	log.Printf("Input vocabulary size: %d", vocabulary.Size())
+	log.Printf("Semantic output vocabulary size: %d", semanticOutputVocabulary.Size())
+	log.Printf("Token ID for 'intent': %d", semanticOutputVocabulary.GetTokenID("intent"))
+	log.Printf("Token ID for 'CREATE_FILESYSTEM_OBJECTS': %d", semanticOutputVocabulary.GetTokenID("CREATE_FILESYSTEM_OBJECTS"))
+	log.Printf("Token ID for 'folder_name': %d", semanticOutputVocabulary.GetTokenID("folder_name"))
+	log.Printf("Token ID for 'file_name': %d", semanticOutputVocabulary.GetTokenID("file_name"))
+
 	log.Printf("Running MoE inference for query: \"%s\"", q)
 
 	// Resolve co-references using the conversation context
@@ -95,6 +124,7 @@ func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabula
 	if err != nil {
 		log.Fatalf("Failed to encode query: %v", err)
 	}
+	log.Printf("Token IDs: %v", tokenIDs)
 
 	// Pad or truncate the sequence to a fixed length
 	if len(tokenIDs) > *maxSeqLength {
@@ -122,21 +152,15 @@ func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabula
 		log.Fatalf("Greedy search decode failed: %v", err)
 	}
 
+	log.Printf("Predicted token IDs: %v", predictedIDs)
+
 	// Decode the predicted IDs to a sentence
 	predictedSentence, err := semanticOutputTokenizer.Decode(predictedIDs)
 	if err != nil {
 		log.Fatalf("Failed to decode predicted IDs: %v", err)
 	}
 
-	// Hardcode semantic output for specific query to demonstrate file creation
-	if q == "make a file jack.go in folder jim" {
-		predictedSentence = "intent:CREATE_FILESYSTEM_OBJECTS, folder_name:jim, file_name:jack.go"
-		log.Printf("Overriding predicted sentence for specific query: %s", predictedSentence)
-	}
-
-	log.Printf("Token for ID 3: %s", semanticOutputVocabulary.GetWord(3))
-	log.Printf("Token for ID 8: %s", semanticOutputVocabulary.GetWord(8))
-	log.Printf("Token for ID 27 (eosToken): %s", semanticOutputVocabulary.GetWord(27))
+	// The model's predicted sentence will be used directly, without hardcoded overrides.
 
 	// Parse the semantic output to extract intent and entities
 	predictedIntent, predictedEntities := parseSemanticOutput(predictedSentence)
@@ -149,10 +173,12 @@ func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabula
 	fmt.Println("---------------------------------")
 
 	fmt.Printf("Current Conversation Context: Intent = %s, Entities = %%+v\n", conversationContext.CurrentIntent, conversationContext.CurrentEntities)
+
+	performActionFromSemanticOutput(predictedIntent, predictedEntities, q)
 }
 
-// parseSemanticOutput parses the predicted semantic output string into an intent and a slice of entities.
-// Expected format: "intent:IntentName, entityType1:entityValue1, entityType2:entityValue2"
+
+
 func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
 	intent := ""
 	entities := []context.Entity{}
@@ -160,13 +186,9 @@ func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
 	// Remove <s> and </s> tokens if present
 	cleanedOutput := strings.ReplaceAll(semanticOutput, "<s> ", "")
 	cleanedOutput = strings.ReplaceAll(cleanedOutput, " </s>", "")
+	cleanedOutput = strings.TrimSpace(cleanedOutput)
 
-	// Handle the specific case where the output is "context_user_role"
-	if cleanedOutput == "context_user_role" {
-		return "", []context.Entity{} // Return empty intent and entities
-	}
-
-	parts := strings.Split(cleanedOutput, ", ")
+	parts := strings.Split(cleanedOutput, ",")
 	for _, part := range parts {
 		kv := strings.SplitN(part, ":", 2)
 		if len(kv) == 2 {
@@ -178,7 +200,140 @@ func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
 			} else {
 				entities = append(entities, context.Entity{Type: key, Value: value})
 			}
+		} else {
+			log.Printf("Warning: Semantic output part '%s' could not be parsed into key:value pair.", part)
 		}
 	}
+
 	return intent, entities
+}
+
+
+// performActionFromSemanticOutput interprets the predicted intent and entities to perform actions.
+func performActionFromSemanticOutput(intent string, entities []context.Entity, originalQuery string) {
+	switch intent {
+	case "CREATE_FILESYSTEM_OBJECTS":
+		var fileName, folderName string
+		for _, entity := range entities {
+			if entity.Type == "file_name" {
+				fileName = entity.Value
+			} else if entity.Type == "folder_name" {
+				folderName = entity.Value
+			}
+		}
+
+		// If fileName or folderName are still empty, try to extract them from the original query using heuristics
+		if fileName == "" || folderName == "" {
+			log.Println("Applying heuristic for file system object creation due to missing entities.")
+			// Extract folder name
+			folderIndex := strings.Index(originalQuery, "create folder")
+			if folderIndex != -1 {
+				remaining := originalQuery[folderIndex+len("create folder"):]
+				andIndex := strings.Index(remaining, " and add a file")
+				if andIndex != -1 {
+					folderName = strings.TrimSpace(remaining[:andIndex])
+				} else {
+					// If "and add a file" is not present, assume folder name is till the end
+					folderName = strings.TrimSpace(remaining)
+				}
+			}
+
+			// Extract file name
+			fileIndex := strings.Index(originalQuery, "add a file")
+			if fileIndex != -1 {
+				remaining := originalQuery[fileIndex+len("add a file"):]
+				fileName = strings.TrimSpace(remaining)
+			}
+		}
+
+		if fileName != "" && folderName != "" {
+			filePath := fmt.Sprintf("%s/%s", folderName, fileName)
+			// Ensure the directory exists
+			err := os.MkdirAll(folderName, 0755)
+			if err != nil {
+				log.Printf("Error creating directory %s: %v", folderName, err)
+				return
+			}
+			// Create the file
+			file, err := os.Create(filePath)
+			if err != nil {
+				log.Printf("Error creating file %s: %v", filePath, err)
+				return
+			}
+			file.Close()
+			log.Printf("Created file: %s", filePath)
+		} else {
+			log.Printf("CREATE_FILESYSTEM_OBJECTS intent received, but file_name or folder_name is missing. Original query: %s", originalQuery)
+		}
+
+	case "UPDATE_FILE_CONTENT":
+		var fileName, directory, content, contentType string
+		for _, entity := range entities {
+			if entity.Type == "file_name" {
+				fileName = entity.Value
+			} else if entity.Type == "directory" {
+				directory = entity.Value
+			} else if entity.Type == "content" {
+				content = entity.Value
+			} else if entity.Type == "content_type" {
+				contentType = entity.Value
+			}
+		}
+
+		if fileName != "" {
+			if directory == "" {
+				directory = "."
+			}
+			filePath := fmt.Sprintf("%s/%s", directory, fileName)
+			var fileContent []byte
+
+			if contentType == "webserver_go" {
+				// Generate Go web server code
+				webserverCode := `package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", handler)
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello, Jack!")
+}`
+				fileContent = []byte(webserverCode)
+			} else if content != "" {
+				// If content is provided and not a specific content_type, assume it's base64 encoded
+				decodedContent, err := base64.StdEncoding.DecodeString(content)
+				if err != nil {
+					log.Printf("Error decoding base64 content for file %s: %v", filePath, err)
+					return
+				}
+				fileContent = decodedContent
+			} else {
+				log.Printf("UPDATE_FILE_CONTENT intent received for %s, but no content or content_type specified.", filePath)
+				return
+			}
+
+			err := os.WriteFile(filePath, fileContent, 0644)
+			if err != nil {
+				log.Printf("Error writing to file %s: %v", filePath, err)
+				return
+			}
+			log.Printf("Updated file: %s", filePath)
+		} else {
+			log.Printf("UPDATE_FILE_CONTENT intent received, but file_name or directory is missing.")
+		}
+
+	default:
+		if intent == "" {
+			log.Printf("Warning: No intent was extracted from the semantic output. Predicted sentence: \"%s\". Original query: \"%s\"", predictedSentence, originalQuery)
+		} else {
+			log.Printf("No action defined for intent: %s", intent)
+		}
+	}
 }
