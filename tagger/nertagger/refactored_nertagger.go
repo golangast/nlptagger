@@ -16,11 +16,13 @@ func init() {
 	rules = []nerRule{
 		{regexp.MustCompile(`\b(create|add|make)\b`), "COMMAND"},
 		{regexp.MustCompile(`\b(delete|remove)\b`), "COMMAND"},
+		{regexp.MustCompile(`\b(move|mv)\b`), "COMMAND"},
 		{regexp.MustCompile(`\b(webserver|database|handler|structure|field|data|file|folder)\b`), "OBJECT_TYPE"},
 		{regexp.MustCompile(`[a-zA-Z0-9_.-]+\.[a-zA-Z0-9_.-]+`), "NAME"},
 		{regexp.MustCompile(`\b(in|on|to|from|for)\b`), "PREPOSITION"},
 		{regexp.MustCompile(`\b(the|a|an)\b`), "DETERMINER"},
 		{regexp.MustCompile(`\bnamed\b`), "NAME_PREFIX"},
+		{regexp.MustCompile(`[a-zA-Z0-9_./-]+`), "PATH"},
 	}
 }
 

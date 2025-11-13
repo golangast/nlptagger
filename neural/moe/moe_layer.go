@@ -1,17 +1,11 @@
 package moe
 
 import (
-	
 	"fmt"
-	"math/rand"
 	"sort"
 
 	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
-
-
-
-
 
 // MoELayer implements a Mixture of Experts layer.
 type MoELayer struct {
@@ -23,7 +17,7 @@ type MoELayer struct {
 	// Stored for backward pass
 	inputTensor       *Tensor
 	expertOutputs     []*Tensor
-	expertActivations []*Tensor // Output of experts before combining
+	expertActivations [][]*Tensor // Output of experts before combining
 	selectedExperts   [][]int   // Indices of selected experts for each input in the batch
 	gateOutputs       *Tensor   // Output of the gating network (probabilities)
 	LoadBalancingLoss float64   // Load balancing loss
@@ -80,143 +74,76 @@ func (moe *MoELayer) Forward(inputs ...*Tensor) (*Tensor, error) {
 	input := inputs[0]
 	moe.inputTensor = input
 
-	batchSize := input.Shape[0]
-	var seqLength int
-	var embeddingDim int
-
-	if len(input.Shape) == 3 {
-		seqLength = input.Shape[1]
-		embeddingDim = input.Shape[2]
-	} else if len(input.Shape) == 2 {
-		seqLength = 1 // Assuming each row is a single token's embedding
-		embeddingDim = input.Shape[1]
-	} else {
-		return nil, fmt.Errorf("MoELayer.Forward expects 2D or 3D input, got shape %v", input.Shape)
-	}
-
-	reshapedInput, err := input.Reshape([]int{batchSize * seqLength, embeddingDim})
-	if err != nil {
-		return nil, fmt.Errorf("failed to reshape input for gating network: %w", err)
-	}
-
 	// 1. Gating Network (Router) forward pass to get logits
-	gateLogitsReshaped, err := moe.GatingNetwork.Forward(reshapedInput)
+	gateLogits, err := moe.GatingNetwork.Forward(input)
 	if err != nil {
 		return nil, fmt.Errorf("moe layer gating network forward failed: %w", err)
 	}
 
-	// Add noise for soft selection during training
-	if moe.Training {
-		noise := make([]float64, len(gateLogitsReshaped.Data))
-		for i := range noise {
-			noise[i] = rand.NormFloat64()
-		}
-		noiseTensor := NewTensor(gateLogitsReshaped.Shape, noise, false)
-		gateLogitsReshaped, err = gateLogitsReshaped.Add(noiseTensor)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add noise to gate logits: %w", err)
-		}
-	}
-
 	// Apply softmax to get probabilities
-	gateOutputsReshaped, err := gateLogitsReshaped.Softmax(len(gateLogitsReshaped.Shape) - 1)
+	gateOutputs, err := gateLogits.Softmax(len(gateLogits.Shape) - 1)
 	if err != nil {
 		return nil, fmt.Errorf("gating network softmax failed: %w", err)
 	}
+	moe.gateOutputs = gateOutputs
 
-	// Reshape gateOutputs back to [batchSize, seqLength, numExperts]
+	batchSize := input.Shape[0]
+	seqLength := input.Shape[1]
+	embeddingDim := input.Shape[2]
 	numExperts := len(moe.Experts)
-	// Create a new Tensor with the desired shape and copy data to avoid potential aliasing issues
-	gateOutputsData := make([]float64, batchSize*seqLength*numExperts)
-	copy(gateOutputsData, gateOutputsReshaped.Data)
-	moe.gateOutputs = NewTensor([]int{batchSize, seqLength, numExperts}, gateOutputsData, gateOutputsReshaped.RequiresGrad)
 
-	// Ensure gateOutputs has the expected shape [batch_size, sequence_length, num_experts]
-	if len(moe.gateOutputs.Shape) != 3 || moe.gateOutputs.Shape[0] != batchSize || moe.gateOutputs.Shape[1] != seqLength || moe.gateOutputs.Shape[2] != numExperts {
-		return nil, fmt.Errorf("unexpected gateOutputs shape after explicit copy: %v, expected [%d, %d, %d]", moe.gateOutputs.Shape, batchSize, seqLength, numExperts)
-	}
-
-	// Prepare to store expert outputs and selected expert indices
-	moe.expertOutputs = make([]*Tensor, numExperts)
-	moe.expertActivations = make([]*Tensor, numExperts)
 	moe.selectedExperts = make([][]int, batchSize*seqLength)
+	moe.expertActivations = make([][]*Tensor, batchSize*seqLength) // Initialize expertActivations
+	finalOutput := NewTensor([]int{batchSize, seqLength, embeddingDim}, make([]float64, batchSize*seqLength*embeddingDim), true)
 
-	// Output tensor will have the same shape as input
-	outputShape := input.Shape
-	combinedOutputData := make([]float64, batchSize*seqLength*embeddingDim)
-	combinedOutput := NewTensor(outputShape, combinedOutputData, false)
-	if input.RequiresGrad {
-		combinedOutput.RequiresGrad = true
-	}
+	for i := 0; i < batchSize*seqLength; i++ {
+		scores := gateOutputs.Data[i*numExperts : (i+1)*numExperts]
+		topKIndices := make([]int, numExperts)
+		for j := range topKIndices {
+			topKIndices[j] = j
+		}
+		sort.SliceStable(topKIndices, func(a, b int) bool {
+			return scores[topKIndices[a]] > scores[topKIndices[b]]
+		})
+		moe.selectedExperts[i] = topKIndices[:moe.K]
 
-	// Load balancing loss calculation
-	tokensPerExpert := make([]float64, numExperts)
-	routerProbPerExpert := make([]float64, numExperts)
+		moe.expertActivations[i] = make([]*Tensor, numExperts) // Initialize inner slice for current token
 
-	// Process each token in the batch
-	for b := 0; b < batchSize; b++ {
-		for s := 0; s < seqLength; s++ {
-			tokenIdx := b*seqLength + s
+		// Get the input for the current token by slicing the main input tensor
+		// This preserves the computation graph for backpropagation.
+		b := i / seqLength
+		s := i % seqLength
+		tokenInput3D, err := input.Slice(0, b, b+1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to slice input for token (batch): %w", err)
+		}
+		tokenInput3D, err = tokenInput3D.Slice(1, s, s+1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to slice input for token (seq): %w", err)
+		}
+		tokenInput, err := tokenInput3D.Reshape([]int{1, embeddingDim})
+		if err != nil {
+			return nil, fmt.Errorf("failed to reshape input for token: %w", err)
+		}
 
-			// Get gate scores for the current token
-			scores := make([]float64, numExperts)
-			for e := 0; e < numExperts; e++ {
-				scores[e] = moe.gateOutputs.Data[tokenIdx*numExperts+e]
-				routerProbPerExpert[e] += scores[e]
+		// Run selected experts and combine their outputs
+		for _, expertIdx := range moe.selectedExperts[i] {
+			expert := moe.Experts[expertIdx]
+			expertOutput, err := expert.Forward(tokenInput)
+			if err != nil {
+				return nil, fmt.Errorf("moe layer expert %d forward failed: %w", expertIdx, err)
 			}
+			moe.expertActivations[i][expertIdx] = expertOutput // Store expert output
 
-			// Select top-K experts
-			topKIndices := make([]int, numExperts)
-			for i := range topKIndices {
-				topKIndices[i] = i
-			}
-
-			sort.SliceStable(topKIndices, func(i, j int) bool {
-				return scores[topKIndices[i]] > scores[topKIndices[j]]
-			})
-
-			moe.selectedExperts[tokenIdx] = topKIndices[:moe.K]
-
-			// Extract input for the current token
-			inputForExpertData := make([]float64, embeddingDim)
-			copy(inputForExpertData, input.Data[tokenIdx*embeddingDim:(tokenIdx+1)*embeddingDim])
-			inputForExpert := NewTensor([]int{1, embeddingDim}, inputForExpertData, false)
-			if input.RequiresGrad {
-				inputForExpert.RequiresGrad = true
-			}
-
-			// Run selected experts and combine their outputs
-			for _, expertIdx := range moe.selectedExperts[tokenIdx] {
-				tokensPerExpert[expertIdx]++
-				expert := moe.Experts[expertIdx]
-
-				expertOutput, err := expert.Forward(inputForExpert)
-				if err != nil {
-					return nil, fmt.Errorf("moe layer expert %d forward failed: %w", expertIdx, err)
-				}
-				moe.expertActivations[expertIdx] = expertOutput
-
-				weight := scores[expertIdx]
-				for i := 0; i < embeddingDim; i++ {
-					combinedOutput.Data[tokenIdx*embeddingDim+i] += expertOutput.Data[i] * weight
-				}
+			weight := scores[expertIdx]
+			for j := 0; j < embeddingDim; j++ {
+				finalOutput.Data[i*embeddingDim+j] += expertOutput.Data[j] * weight
 			}
 		}
 	}
 
-	// Finalize load balancing loss
-	if moe.Training {
-		totalTokens := float64(batchSize * seqLength)
-		for e := 0; e < numExperts; e++ {
-			fractionTokens := tokensPerExpert[e] / totalTokens
-			fractionRouterProb := routerProbPerExpert[e] / totalTokens
-			moe.LoadBalancingLoss += fractionTokens * fractionRouterProb
-		}
-		moe.LoadBalancingLoss *= float64(numExperts)
-	}
-
-	combinedOutput.Creator = moe
-	return combinedOutput, nil
+	finalOutput.Creator = moe
+	return finalOutput, nil
 }
 
 // Backward performs the backward pass for the MoELayer.
@@ -251,15 +178,17 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 		}
 	}
 
-	// Reshape incoming gradient for Gating Network: [batchSize, seqLength, embeddingDim] -> [batchSize * seqLength, embeddingDim]
+	// Initialize a temporary tensor to accumulate gradients for moe.inputTensor
+	inputGradAccumulator := NewTensor(moe.inputTensor.Shape, make([]float64, len(moe.inputTensor.Data)), false)
+
+	// Reshape grad to be [batchSize*seqLength, embeddingDim]
 	gradReshaped, err := grad.Reshape([]int{batchSize * seqLength, embeddingDim})
 	if err != nil {
-		return fmt.Errorf("failed to reshape incoming gradient for gating network: %w", err)
+		return fmt.Errorf("failed to reshape grad: %w", err)
 	}
 
-	// Gradient for the gating network's output (gateOutputs - softmax probabilities)
-	gateGradData := make([]float64, batchSize*seqLength*numExperts)
-	gateGradReshaped := NewTensor([]int{batchSize * seqLength, numExperts}, gateGradData, false)
+	// Initialize a tensor to accumulate gradients for the gating network
+	gateGradReshaped := NewTensor([]int{batchSize * seqLength, numExperts}, make([]float64, batchSize*seqLength*numExperts), true)
 
 	// Iterate through the batch and sequence to distribute gradients
 	for b := 0; b < batchSize; b++ {
@@ -272,12 +201,9 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 			gradForToken := NewTensor([]int{1, embeddingDim}, gradForTokenData, false)
 
 			// Get the original input for this token
-			inputForExpertData := make([]float64, embeddingDim)
-			copy(inputForExpertData, moe.inputTensor.Data[tokenIdx*embeddingDim:(tokenIdx+1)*embeddingDim])
-			inputForExpert := NewTensor([]int{1, embeddingDim}, inputForExpertData, false)
-			if moe.inputTensor.RequiresGrad {
-				inputForExpert.RequiresGrad = true
-			}
+			tokenInputData := moe.inputTensor.Data[tokenIdx*embeddingDim : (tokenIdx+1)*embeddingDim]
+			inputForExpert := NewTensor([]int{1, embeddingDim}, tokenInputData, false)
+			inputForExpert.RequiresGrad = moe.inputTensor.RequiresGrad
 
 			// Get gate scores for the current token (softmax probabilities)
 			scores := make([]float64, numExperts)
@@ -304,21 +230,31 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 				}
 
 				// Accumulate gradient for the input to the MoE layer from experts
-				if moe.inputTensor.RequiresGrad && expert.Inputs() != nil && len(expert.Inputs()) > 0 && expert.Inputs()[0].Grad != nil {
+				if moe.inputTensor.RequiresGrad && inputForExpert.Grad != nil {
 					for i := 0; i < embeddingDim; i++ {
-						moe.inputTensor.Grad.Data[tokenIdx*embeddingDim+i] += expert.Inputs()[0].Grad.Data[i]
+						inputGradAccumulator.Data[tokenIdx*embeddingDim+i] += inputForExpert.Grad.Data[i]
 					}
 				}
 
 				// 2. Accumulate gradient for the gating network
 				gradForGateProb := 0.0
-				if moe.expertActivations[expertIdx] != nil {
+				if moe.expertActivations[tokenIdx][expertIdx] != nil {
 					for i := 0; i < embeddingDim; i++ {
-						gradForGateProb += gradForToken.Data[i] * moe.expertActivations[expertIdx].Data[i]
+						gradForGateProb += gradForToken.Data[i] * moe.expertActivations[tokenIdx][expertIdx].Data[i]
 					}
 				}
 				gateGradReshaped.Data[tokenIdx*numExperts+expertIdx] += gradForGateProb
 			}
+		}
+	}
+
+	// After all experts have processed, add the accumulated input gradients to moe.inputTensor.Grad
+	if moe.inputTensor.RequiresGrad {
+		if moe.inputTensor.Grad == nil {
+			moe.inputTensor.Grad = NewTensor(moe.inputTensor.Shape, make([]float64, len(moe.inputTensor.Data)), false)
+		}
+		for i := range moe.inputTensor.Grad.Data {
+			moe.inputTensor.Grad.Data[i] += inputGradAccumulator.Data[i]
 		}
 	}
 
@@ -327,8 +263,6 @@ func (moe *MoELayer) Backward(grad *Tensor) error {
 	if err != nil {
 		return err
 	}
-
-	
 
 	return nil
 }

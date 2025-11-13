@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 
@@ -49,7 +50,20 @@ func NewVocabulary() *Vocabulary {
 	if v.PaddingTokenID == -1 || v.UnkID == -1 {
 		panic("NewVocabulary: PaddingTokenID or UnkID is -1 after initialization")
 	}
+	log.Printf("NewVocabulary: Initial size after adding <pad> and UNK: %d", v.Size())
 
+	return v
+}
+
+func NewVocabularyFromMap(wordMap map[string]int) *Vocabulary {
+	v := NewVocabulary()
+	for word, id := range wordMap {
+		v.WordToToken[word] = id
+		if id >= len(v.TokenToWord) {
+			v.TokenToWord = append(v.TokenToWord, make([]string, id-len(v.TokenToWord)+1)...)
+		}
+		v.TokenToWord[id] = word
+	}
 	return v
 }
 

@@ -8,11 +8,11 @@ import (
 	"log"
 	"os"
 
-	"nlptagger/neural/moe"
-	. "nlptagger/neural/nn"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	tensor "nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/moe"
+	. "github.com/zendrulat/nlptagger/neural/nn"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	tensor "github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 // TaggedTrainingExample represents a single training example for the tagger model.

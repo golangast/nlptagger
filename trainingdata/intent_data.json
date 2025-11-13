@@ -4,405 +4,405 @@
     "parent_intent": "service",
     "child_intent": "create",
     "description": "Creates a new service.",
-    "sentence": "This will create a new service."
+    "sentence": "intent:CREATE, resource_type:Service"
   },
   {
     "query": "make a service",
     "parent_intent": "service",
     "child_intent": "create",
     "description": "Creates a new service.",
-    "sentence": "This will make a new service."
+    "sentence": "intent:CREATE, resource_type:Service"
   },
   {
     "query": "delete the service",
     "parent_intent": "service",
     "child_intent": "delete",
     "description": "Deletes a service.",
-    "sentence": "This will delete the service."
+    "sentence": "intent:DELETE, resource_type:Service"
   },
   {
     "query": "remove the service",
     "parent_intent": "service",
     "child_intent": "delete",
     "description": "Deletes a service.",
-    "sentence": "This will remove the service."
+    "sentence": "intent:DELETE, resource_type:Service"
   },
   {
     "query": "update the service",
     "parent_intent": "service",
     "child_intent": "update",
     "description": "Updates a service.",
-    "sentence": "This will update the service."
+    "sentence": "intent:UPDATE, resource_type:Service"
   },
   {
     "query": "refactor the service",
     "parent_intent": "service",
     "child_intent": "refactor",
     "description": "Refactors a service.",
-    "sentence": "This will refactor the service."
+    "sentence": "intent:REFACTOR, resource_type:Service"
   },
   {
     "query": "create a new database",
     "parent_intent": "database",
     "child_intent": "create",
     "description": "Creates a new database.",
-    "sentence": "This will create a new database."
+    "sentence": "intent:CREATE, resource_type:Database"
   },
   {
     "query": "delete the database",
     "parent_intent": "database",
     "child_intent": "delete",
     "description": "Deletes a database.",
-    "sentence": "This will delete the database."
+    "sentence": "intent:DELETE, resource_type:Database"
   },
   {
     "query": "backup the database",
     "parent_intent": "database",
     "child_intent": "backup",
     "description": "Backs up a database.",
-    "sentence": "This will backup the database."
+    "sentence": "intent:BACKUP, resource_type:Database"
   },
   {
     "query": "restore the database",
     "parent_intent": "database",
     "child_intent": "restore",
     "description": "Restores a database.",
-    "sentence": "This will restore the database."
+    "sentence": "intent:RESTORE, resource_type:Database"
   },
   {
     "query": "create a database migration",
     "parent_intent": "database",
     "child_intent": "migration",
     "description": "Creates a database migration.",
-    "sentence": "This will create a database migration."
+    "sentence": "intent:CREATE, resource_type:DatabaseMigration"
   },
   {
     "query": "read from the database",
     "parent_intent": "database",
     "child_intent": "read",
     "description": "Reads from a database.",
-    "sentence": "This will read from the database."
+    "sentence": "intent:READ, resource_type:Database"
   },
   {
     "query": "create a new data structure",
     "parent_intent": "code",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure.",
-    "sentence": "This will generate a new data structure."
+    "sentence": "intent:CREATE, resource_type:Code, resource_name:data_structure"
   },
   {
     "query": "generate a data structure",
     "parent_intent": "code",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure.",
-    "sentence": "This will generate a new data structure."
+    "sentence": "intent:CREATE, resource_type:Code, resource_name:data_structure"
   },
   {
     "query": "deploy the application",
     "parent_intent": "deployment",
     "child_intent": "deploy",
     "description": "Deploys the application.",
-    "sentence": "This will deploy the application."
+    "sentence": "intent:DEPLOY, resource_type:Application"
   },
   {
     "query": "start the deployment",
     "parent_intent": "deployment",
     "child_intent": "start",
     "description": "Starts a deployment.",
-    "sentence": "This will start a deployment."
+    "sentence": "intent:START, resource_type:Deployment"
   },
   {
     "query": "stop the deployment",
     "parent_intent": "deployment",
     "child_intent": "stop",
     "description": "Stops a deployment.",
-    "sentence": "This will stop a deployment."
+    "sentence": "intent:STOP, resource_type:Deployment"
   },
   {
     "query": "restart the deployment",
     "parent_intent": "deployment",
     "child_intent": "restart",
     "description": "Restarts a deployment.",
-    "sentence": "This will restart a deployment."
+    "sentence": "intent:RESTART, resource_type:Deployment"
   },
   {
     "query": "debug the application",
     "parent_intent": "deployment",
     "child_intent": "debug",
     "description": "Debugs the application.",
-    "sentence": "This will debug the application."
+    "sentence": "intent:DEBUG, resource_type:Application"
   },
   {
     "query": "create a new user",
     "parent_intent": "user_management",
     "child_intent": "create",
     "description": "Creates a new user.",
-    "sentence": "This will create a new user."
+    "sentence": "intent:CREATE, resource_type:User"
   },
   {
     "query": "delete a user",
     "parent_intent": "user_management",
     "child_intent": "delete",
     "description": "Deletes a user.",
-    "sentence": "This will delete a user."
+    "sentence": "intent:DELETE, resource_type:User"
   },
   {
     "query": "update a user",
     "parent_intent": "user_management",
     "child_intent": "update",
     "description": "Updates a user's information.",
-    "sentence": "This will update a user's information."
+    "sentence": "intent:UPDATE, resource_type:User"
   },
   {
     "query": "read a file",
     "parent_intent": "file_system",
     "child_intent": "read",
     "description": "Reads a file.",
-    "sentence": "This will read a file."
+    "sentence": "intent:READ, resource_type:Filesystem_File"
   },
   {
     "query": "delete a file",
     "parent_intent": "file_system",
     "child_intent": "delete",
     "description": "Deletes a file.",
-    "sentence": "This will delete a file."
+    "sentence": "intent:DELETE, resource_type:Filesystem_File"
   },
   {
     "query": "update a file",
     "parent_intent": "file_system",
     "child_intent": "update",
     "description": "Updates a file.",
-    "sentence": "This will update a file."
+    "sentence": "intent:UPDATE, resource_type:Filesystem_File"
   },
   {
     "query": "create a file named foo.txt",
     "parent_intent": "file_system",
     "child_intent": "create",
     "description": "Creates a file.",
-    "sentence": "This will create a file named foo.txt."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:foo.txt"
   },
   {
     "query": "make a new file called bar.log",
     "parent_intent": "file_system",
     "child_intent": "create",
     "description": "Creates a file.",
-    "sentence": "This will create a file named bar.log."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:bar.log"
   },
   {
     "query": "create a file named jack in folder named jill",
     "parent_intent": "file_system",
     "child_intent": "create",
     "description": "Creates a file in a folder.",
-    "sentence": "This will create a file named jack in the folder jill."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:jack, folder_name:jill"
   },
   {
     "query": "in the jill directory, create a file called jack",
     "parent_intent": "file_system",
     "child_intent": "create",
     "description": "Creates a file in a folder.",
-    "sentence": "This will create a file named jack in the directory jill."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:jack, directory:jill"
   },
   {
     "query": "delete the file foo.txt",
     "parent_intent": "file_system",
     "child_intent": "delete",
     "description": "Deletes a file.",
-    "sentence": "This will delete the file foo.txt."
+    "sentence": "intent:DELETE, resource_type:Filesystem_File, resource_name:foo.txt"
   },
   {
     "query": "remove bar.log",
     "parent_intent": "file_system",
     "child_intent": "delete",
     "description": "Deletes a file.",
-    "sentence": "This will remove the file bar.log."
+    "sentence": "intent:DELETE, resource_type:Filesystem_File, resource_name:bar.log"
   },
   {
     "query": "commit the changes",
     "parent_intent": "version_control",
     "child_intent": "commit",
     "description": "Commits the current changes to the version control system.",
-    "sentence": "This will commit the current changes to the version control system."
+    "sentence": "intent:COMMIT, resource_type:VersionControl"
   },
   {
     "query": "commit my work",
     "parent_intent": "version_control",
     "child_intent": "commit",
     "description": "Commits the current changes to the version control system.",
-    "sentence": "This will commit the current changes to the version control system."
+    "sentence": "intent:COMMIT, resource_type:VersionControl"
   },
   {
     "query": "push the changes",
     "parent_intent": "version_control",
     "child_intent": "push",
     "description": "Pushes the changes to the remote repository.",
-    "sentence": "This will push the changes to the remote repository."
+    "sentence": "intent:PUSH, resource_type:VersionControl"
   },
   {
     "query": "pull the latest changes",
     "parent_intent": "version_control",
     "child_intent": "pull",
     "description": "Pulls the latest changes from the remote repository.",
-    "sentence": "This will pull the latest changes from the remote repository."
+    "sentence": "intent:PULL, resource_type:VersionControl"
   },
   {
     "query": "clone the repository",
     "parent_intent": "version_control",
     "child_intent": "clone",
     "description": "Clones a remote repository.",
-    "sentence": "This will clone a remote repository."
+    "sentence": "intent:CLONE, resource_type:VersionControl"
   },
   {
     "query": "merge the branches",
     "parent_intent": "version_control",
     "child_intent": "merge",
     "description": "Merges two branches.",
-    "sentence": "This will merge two branches."
+    "sentence": "intent:MERGE, resource_type:VersionControl"
   },
   {
     "query": "create a webserver and handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_server_and_handler",
     "description": "Creates a web server and a handler.",
-    "sentence": "This will create a web server and a handler."
+    "sentence": "intent:CREATE, resource_type:Webserver, resource_name:webserver, child_resource_type:Handler"
   },
   {
     "query": "generate a webserver with a handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_server_and_handler",
     "description": "Creates a web server and a handler.",
-    "sentence": "This will create a web server and a handler."
+    "sentence": "intent:CREATE, resource_type:Webserver, resource_name:webserver, child_resource_type:Handler"
   },
   {
     "query": "create a data structure in the handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "This will create a data structure within a specified handler in a web server."
+    "sentence": "intent:CREATE, resource_type:DataStructure, parent_resource_type:Handler"
   },
   {
     "query": "generate a data structure in the handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "This will create a data structure within a specified handler in a web server."
+    "sentence": "intent:CREATE, resource_type:DataStructure, parent_resource_type:Handler"
   },
   {
     "query": "generate a data structure named foo in webserver named bar in handler named baz",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure in a web server.",
-    "sentence": "This will generate a new data structure named foo in a web server named bar in a handler named baz."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:foo, parent_resource_type:Handler, parent_resource_name:baz, grandparent_resource_type:Webserver, grandparent_resource_name:bar"
   },
   {
     "query": "create a data structure named my_struct in handler my_handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "This will create a data structure named my_struct within a specified handler my_handler in a web server."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:my_struct, parent_resource_type:Handler, parent_resource_name:my_handler"
   },
   {
     "query": "in webserver jill in handler jack generate a data structure named jim",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure in a web server.",
-    "sentence": "In the webserver jill and handler jack, this will generate a new data structure named jim."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:jim, parent_resource_type:Handler, parent_resource_name:jack, grandparent_resource_type:Webserver, grandparent_resource_name:jill"
   },
   {
     "query": "generate a data structure named jim in webserver named jill in handler named jack",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Generates a new data structure in a web server.",
-    "sentence": "This will generate a new data structure named jim in a web server named jill in a handler named jack."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:jim, parent_resource_type:Handler, parent_resource_name:jack, grandparent_resource_type:Webserver, grandparent_resource_name:jill"
   },
   {
     "query": "in handler qux create a data structure named my_model",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler.",
-    "sentence": "In the handler qux, this will create a data structure named my_model."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:my_model, parent_resource_type:Handler, parent_resource_name:qux"
   },
   {
     "query": "in webserver my_server, create a data structure named my_variable in handler my_handler",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "In the webserver my_server, this will create a data structure named my_variable in the handler my_handler."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:my_variable, parent_resource_type:Handler, parent_resource_name:my_handler, grandparent_resource_type:Webserver, grandparent_resource_name:my_server"
   },
   {
     "query": "in handler main, make a struct called Person",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler.",
-    "sentence": "In the handler main, this will make a struct called Person."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:Person, parent_resource_type:Handler, parent_resource_name:main"
   },
   {
     "query": "for the webserver AdminPortal, in the handler Users, create a data model named UserProfile",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "For the webserver AdminPortal, in the handler Users, this will create a data model named UserProfile."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:UserProfile, parent_resource_type:Handler, parent_resource_name:Users, grandparent_resource_type:Webserver, grandparent_resource_name:AdminPortal"
   },
   {
     "query": "new data structure Post in handler Blog",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler.",
-    "sentence": "This will create a new data structure named Post in the handler Blog."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:Post, parent_resource_type:Handler, parent_resource_name:Blog"
   },
   {
     "query": "webserver API, handler v1, data structure User",
     "parent_intent": "webserver_creation",
     "child_intent": "create_data_structure",
     "description": "Creates a data structure within a specified handler in a web server.",
-    "sentence": "In the webserver API and handler v1, this will create a data structure named User."
+    "sentence": "intent:CREATE, resource_type:DataStructure, resource_name:User, parent_resource_type:Handler, parent_resource_name:v1, grandparent_resource_type:Webserver, grandparent_resource_name:API"
   },
   {
     "query": "generate a webserver named jim",
     "parent_intent": "webserver_creation",
     "child_intent": "create_server_and_handler",
     "description": "Generates a new webserver with a specified name.",
-    "sentence": "This will generate a new webserver named jim."
+    "sentence": "intent:CREATE, resource_type:Webserver, resource_name:jim"
   },
   {
     "query": "add folder named handler in jim",
     "parent_intent": "file_system",
     "child_intent": "create_folder",
     "description": "Adds a new folder.",
-    "sentence": "This will add a new folder named handler in jim."
+    "sentence": "intent:CREATE, resource_type:Filesystem_Folder, resource_name:handler, directory:jim"
   },
   {
     "query": "create folder handler in jim",
     "parent_intent": "file_system",
     "child_intent": "create_folder",
     "description": "Creates a new folder.",
-    "sentence": "This will create a new folder named handler in jim."
+    "sentence": "intent:CREATE, resource_type:Filesystem_Folder, resource_name:handler, directory:jim"
   },
   {
     "query": "add file handler.go in folder jim",
     "parent_intent": "file_system",
     "child_intent": "create_file",
     "description": "Adds a new file.",
-    "sentence": "This will add a new file named handler.go in folder jim."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:handler.go, directory:jim"
   },
   {
     "query": "create file handler.go in folder jim",
     "parent_intent": "file_system",
     "child_intent": "create_file",
     "description": "Creates a new file.",
-    "sentence": "This will create a new file named handler.go in folder jim."
+    "sentence": "intent:CREATE, resource_type:Filesystem_File, resource_name:handler.go, directory:jim"
   },
   {
     "query": "add folder handler in jim with file handler.go",
     "parent_intent": "file_system",
     "child_intent": "create_folder_with_file",
     "description": "Adds a new folder with a file inside.",
-    "sentence": "intent:CREATE, resource_type:Filesystem::Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
+    "sentence": "intent:CREATE, resource_type:Filesystem_Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
   },
   {
     "query": "create folder handler in jim with file handler.go",
     "parent_intent": "file_system",
     "child_intent": "create_folder_with_file",
     "description": "Creates a new folder with a file inside.",
-    "sentence": "intent:CREATE, resource_type:Filesystem::Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
+    "sentence": "intent:CREATE, resource_type:Filesystem_Folder, resource_name:handler, directory:jim, child_file_name:handler.go"
   }
 ]

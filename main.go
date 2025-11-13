@@ -25,7 +25,7 @@ func main() {
 	} else if *moeInferenceQuery != "" {
 		runMoeInference(*moeInferenceQuery)
 	} else {
-		log.Println("No action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, or -moe_inference <query>.")
+		log.Println("No action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, -moe_inference <query>, or -jill.")
 	}
 }
 

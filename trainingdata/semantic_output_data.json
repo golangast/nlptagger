@@ -241,5 +241,611 @@
         "user_role": "admin"
       }
     }
+  },
+  {
+    "query": "update jack.go with a webserver",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "jack.go",
+        "properties": {
+          "path": "jim",
+          "content_type": "webserver_go"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "updatge jack.go with a webserver",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "jack.go",
+        "properties": {
+          "path": "jim",
+          "content_type": "webserver_go"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create folder jim and add a file jill.go",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Filesystem::File",
+            "name": "jill.go",
+            "properties": {
+              "path": "jim"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+    {
+    "query": "create a folder called jim and a file called jill.go in it",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Filesystem::File",
+            "name": "jill.go",
+            "properties": {
+              "path": "jim"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "in a new folder jim, create a file jill.go",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "jim",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Filesystem::File",
+            "name": "jill.go",
+            "properties": {
+              "path": "jim"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create folder myapp and add a file main.go",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "myapp",
+        "properties": {
+          "path": "./"
+        },
+        "children": [
+          {
+            "type": "Filesystem::File",
+            "name": "main.go",
+            "properties": {
+              "path": "myapp"
+            }
+          }
+        ]
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "add webserver to main.go",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "main.go",
+        "properties": {
+          "content_type": "webserver_go"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "move the document 'report.pdf' from the downloads folder to my desktop",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "report.pdf",
+        "properties": {
+          "path": "downloads",
+          "destination": "desktop"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "relocate 'old_data.zip' into the archives directory",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "old_data.zip",
+        "properties": {
+          "path": "./",
+          "destination": "archives"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "shift the 'temp' folder out of here and into 'project_files'",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "temp",
+        "properties": {
+          "path": "./",
+          "destination": "project_files"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+
+  {
+    "query": "make a new directory named 'Q4_assets'",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "Q4_assets",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "create a directory called 'client_reports' in the 'finance' folder",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "client_reports",
+        "properties": {
+          "path": "finance"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "can you generate a folder for the latest backups",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "latest backups",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+
+  {
+    "query": "get rid of the old log files",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "*.log",
+        "properties": {
+          "path": "./",
+          "qualifier": "old"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "remove the folder named 'trash_data'",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "trash_data",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "delete the file 'temp_config.json'",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "temp_config.json",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+
+  {
+    "query": "launch the Firefox browser immediately",
+    "semantic_output": {
+      "operation": "Run",
+      "target_resource": {
+        "type": "System::Application",
+        "name": "Firefox",
+        "properties": {
+          "state": "running"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "execute the 'my_script.py' file",
+    "semantic_output": {
+      "operation": "Run",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "my_script.py",
+        "properties": {
+          "runtime": "python"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "start the terminal application",
+    "semantic_output": {
+      "operation": "Run",
+      "target_resource": {
+        "type": "System::Application",
+        "name": "terminal",
+        "properties": {
+          "state": "running"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Transfer the document 'report.docx' from 'documents' to 'archive'.",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "report.docx",
+        "directory": "documents",
+        "destination": "archive"
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Shift 'image.png' into the 'pictures' directory.",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "image.png",
+        "directory": "./",
+        "destination": "pictures"
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Relocate the entire 'old_project' folder to 'backup_drive'.",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::Folder",
+        "name": "old_project",
+        "directory": "./",
+        "destination": "backup_drive"
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Move 'config.yaml' to the root directory.",
+    "semantic_output": {
+      "operation": "Move",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "config.yaml",
+        "directory": "./",
+        "destination": "/"
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Generate a new file called 'notes.txt'.",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "notes.txt",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Make a blank document named 'draft.md'.",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "draft.md",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Create an empty file 'log.txt' in the 'logs' folder.",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "log.txt",
+        "properties": {
+          "path": "logs"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Add a file named 'index.html' to the 'web' directory.",
+    "semantic_output": {
+      "operation": "Create",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "index.html",
+        "properties": {
+          "path": "web"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Remove the file 'temp_data.csv'.",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "temp_data.csv",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Erase 'old_report.pdf' from the system.",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "old_report.pdf",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Delete 'cache.tmp' from the current folder.",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "cache.tmp",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Get rid of 'unwanted.jpg'.",
+    "semantic_output": {
+      "operation": "Delete",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "unwanted.jpg",
+        "properties": {
+          "path": "./"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Modify 'settings.json' to include new configurations.",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "settings.json",
+        "properties": {
+          "path": "./",
+          "content_type": "configuration"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Change the content of 'README.md'.",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "README.md",
+        "properties": {
+          "path": "./",
+          "content_type": "text"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Update 'version.txt' with '2.0.0'.",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "version.txt",
+        "properties": {
+          "path": "./",
+          "content": "2.0.0"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
+  },
+  {
+    "query": "Append 'new_entry' to 'journal.log'.",
+    "semantic_output": {
+      "operation": "Update",
+      "target_resource": {
+        "type": "Filesystem::File",
+        "name": "journal.log",
+        "properties": {
+          "path": "./",
+          "content": "new_entry",
+          "update_type": "append"
+        }
+      },
+      "context": {
+        "user_role": "admin"
+      }
+    }
   }
 ]

@@ -24,8 +24,9 @@ type RNNDecoder struct {
 	// Embedding layer for the decoder input
 	Embedding *nn.Embedding
 	// Initial hidden and cell states for the LSTM
-		InitialHiddenState *tn.Tensor
-		InitialCellState   *tn.Tensor
+	InitialHiddenState *tn.Tensor
+	InitialCellState   *tn.Tensor
+	ContextVector      *tn.Tensor
 }
 
 // NewRNNDecoder creates a new RNNDecoder.
@@ -69,6 +70,7 @@ func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads in
 // Forward performs the forward pass of the RNNDecoder.
 // It takes the context vector from the encoder and the target sequence (for teacher forcing) and generates a sequence of tokens.
 func (d *RNNDecoder) Forward(contextVector, targetSequence *tn.Tensor) ([]*tn.Tensor, error) {
+	d.ContextVector = contextVector
 	batchSize := targetSequence.Shape[0]
 	maxSequenceLength := targetSequence.Shape[1]
 	hiddenSize := d.LSTM.HiddenSize
@@ -109,9 +111,11 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *tn.Tensor) ([]*tn.Te
 	var outputs []*tn.Tensor
 
 	// Start with a start-of-sequence token (e.g., token ID 0)
-	decoderInput := tn.NewTensor([]int{batchSize, 1}, make([]float64, batchSize), false)
-
-	for t := 0; t < maxSequenceLength; t++ {
+	for t := 0; t < maxSequenceLength-1; t++ {
+		decoderInput, err := targetSequence.Slice(1, t, t+1)
+		if err != nil {
+			return nil, fmt.Errorf("error slicing target sequence: %w", err)
+		}
 		// Embed the decoder input
 		embeddedInput, err := d.Embedding.Forward(decoderInput)
 		if err != nil {
@@ -149,13 +153,6 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *tn.Tensor) ([]*tn.Te
 		}
 
 		outputs = append(outputs, outputLogits)
-
-		// Use the target token as the next input (teacher forcing)
-		slicedTensor, err := targetSequence.Slice(1, t, t+1)
-		if err != nil {
-			return nil, fmt.Errorf("error slicing target sequence: %w", err)
-		}
-		decoderInput = slicedTensor
 	}
 
 	d.InitialHiddenState = initialHidden // Store the initial hidden state for backward pass
@@ -183,10 +180,12 @@ func (d *RNNDecoder) Backward(grads []*tn.Tensor) error {
 		}
 
 		// Accumulate gradients for the LSTM hidden state
-		if lstmHiddenGrad == nil {
-			lstmHiddenGrad = d.OutputLayer.Input().Grad
-		} else {
-			lstmHiddenGrad.Add(d.OutputLayer.Input().Grad)
+		if d.OutputLayer.Input().Grad != nil {
+			if lstmHiddenGrad == nil {
+				lstmHiddenGrad = d.OutputLayer.Input().Grad
+			} else {
+				lstmHiddenGrad.Add(d.OutputLayer.Input().Grad)
+			}
 		}
 
 		// Backpropagate through the LSTM

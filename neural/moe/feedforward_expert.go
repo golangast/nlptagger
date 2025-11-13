@@ -81,13 +81,7 @@ func (e *FeedForwardExpert) Backward(grad *tensor.Tensor) error {
 		return fmt.Errorf("expert layer 1 backward failed: %w", err)
 	}
 
-	// Clear gradients after use
-	if e.inputTensor != nil {
-		e.inputTensor.Grad = nil
-	}
-	if e.intermediateOutput != nil {
-		e.intermediateOutput.Grad = nil
-	}
+
 
 	return nil
 }

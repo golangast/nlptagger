@@ -854,12 +854,38 @@ func (t *Tensor) Reshape(newShape []int) (*Tensor, error) {
 
 	// Create a new tensor with the new shape, sharing the underlying data array.
 	// This is efficient as it avoids copying large amounts of data.
-	return &Tensor{
+	resultTensor := &Tensor{
 		Data:         t.Data, // Share the underlying data array
 		Shape:        newShape,
 		RequiresGrad: t.RequiresGrad,
-		// Grad, Mask, Creator, RequiresGrad, Operation fields will be nil/default for the new tensor
-	}, nil
+	}
+	if resultTensor.RequiresGrad {
+		resultTensor.Creator = &ReshapeOperation{t, t.Shape}
+	}
+	return resultTensor, nil
+}
+
+type ReshapeOperation struct {
+	Input    *Tensor
+	OldShape []int
+}
+
+func (op *ReshapeOperation) Inputs() []*Tensor {
+	return []*Tensor{op.Input}
+}
+
+func (op *ReshapeOperation) Backward(grad *Tensor) error {
+	if op.Input.RequiresGrad {
+		if op.Input.Grad == nil {
+			op.Input.Grad = NewTensor(op.Input.Shape, make([]float64, len(op.Input.Data)), false)
+		}
+		// The gradient of reshape is just reshaping the gradient back.
+		// The data is the same, so we can just add the gradients.
+		for i := range grad.Data {
+			op.Input.Grad.Data[i] += grad.Data[i]
+		}
+	}
+	return nil
 }
 
 // Softmax applies the softmax function along a specified axis.
@@ -1113,6 +1139,11 @@ func (t *Tensor) Slice(axis, start, end int) (*Tensor, error) {
 	copy(newShape, t.Shape)
 	newShape[axis] = end - start
 
+	newTensor := NewTensor(newShape, nil, t.RequiresGrad)
+	if newTensor.RequiresGrad {
+		newTensor.Creator = &SliceOperation{t, axis, start, end}
+	}
+
 	// Calculate strides for the original tensor
 	strides := make([]int, len(t.Shape))
 	stride := 1
@@ -1120,9 +1151,6 @@ func (t *Tensor) Slice(axis, start, end int) (*Tensor, error) {
 		strides[i] = stride
 		stride *= t.Shape[i]
 	}
-
-	newTensor := NewTensor(newShape, nil, false) // Create new tensor with correct shape, data will be filled
-	newTensor.RequiresGrad = t.RequiresGrad      // Inherit RequiresGrad
 
 	// Calculate strides for the new tensor
 	newStrides := make([]int, len(newShape))
@@ -1162,6 +1190,49 @@ func (t *Tensor) Slice(axis, start, end int) (*Tensor, error) {
 	}
 
 	return newTensor, nil
+}
+
+type SliceOperation struct {
+	Input *Tensor
+	Axis  int
+	Start int
+	End   int
+}
+
+func (op *SliceOperation) Inputs() []*Tensor {
+	return []*Tensor{op.Input}
+}
+
+func (op *SliceOperation) Backward(grad *Tensor) error {
+	if op.Input.RequiresGrad {
+		if op.Input.Grad == nil {
+			op.Input.Grad = NewTensor(op.Input.Shape, make([]float64, len(op.Input.Data)), false)
+		}
+
+		inputStrides := calculateStrides(op.Input.Shape)
+		gradStrides := calculateStrides(grad.Shape)
+
+		gradSize := 1
+		for _, dim := range grad.Shape {
+			gradSize *= dim
+		}
+
+		for i := 0; i < gradSize; i++ {
+			gradCoords := getCoords(i, grad.Shape, gradStrides)
+
+			originalCoords := make([]int, len(op.Input.Shape))
+			copy(originalCoords, gradCoords)
+			originalCoords[op.Axis] += op.Start
+
+			originalFlatIndex := 0
+			for dim := 0; dim < len(op.Input.Shape); dim++ {
+				originalFlatIndex += originalCoords[dim] * inputStrides[dim]
+			}
+
+			op.Input.Grad.Data[originalFlatIndex] += grad.Data[i]
+		}
+	}
+	return nil
 }
 
 func (t *Tensor) DivScalar(val float64) (*Tensor, error) {
@@ -1548,25 +1619,6 @@ type SumOperation struct {
 	Axis  int
 }
 
-// Mean calculates the mean of the tensor along a given axis.
-func (t *Tensor) Mean(axis int) (*Tensor, error) {
-	if axis < 0 || axis >= len(t.Shape) {
-		return nil, fmt.Errorf("axis %d out of bounds for tensor with shape %v", axis, t.Shape)
-	}
-
-	sumTensor, err := t.Sum(axis)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sum tensor for mean calculation: %w", err)
-	}
-
-	meanTensor, err := sumTensor.DivScalar(float64(t.Shape[axis]))
-	if err != nil {
-		return nil, fmt.Errorf("failed to divide tensor by scalar for mean calculation: %w", err)
-	}
-
-	return meanTensor, nil
-}
-
 func (op *SumOperation) Inputs() []*Tensor {
 	return []*Tensor{op.Input}
 }
@@ -1610,6 +1662,26 @@ func (op *SumOperation) Backward(grad *Tensor) error {
 	}
 
 	return nil
+}
+
+// Mean returns the mean of all elements in a tensor along a given axis.
+func (t *Tensor) Mean(axis int) (*Tensor, error) {
+	if axis < 0 || axis >= len(t.Shape) {
+		return nil, fmt.Errorf("axis %d out of bounds for tensor with shape %v", axis, t.Shape)
+	}
+
+	summed, err := t.Sum(axis)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sum tensor for mean calculation: %w", err)
+	}
+
+	dimSize := float64(t.Shape[axis])
+	mean, err := summed.DivScalar(dimSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to divide tensor for mean calculation: %w", err)
+	}
+
+	return mean, nil
 }
 
 // TanhBackward computes the gradient of tanh(x) given the output gradient and tanh(x).
@@ -1975,14 +2047,13 @@ func (t *Tensor) Argmax(axis int) (*Tensor, error) {
 		return nil, fmt.Errorf("axis %d out of bounds for tensor with shape %v", axis, t.Shape)
 	}
 
-	// Calculate the new shape for the output tensor
 	newShape := make([]int, 0, len(t.Shape)-1)
 	for i, dim := range t.Shape {
 		if i != axis {
 			newShape = append(newShape, dim)
 		}
 	}
-	if len(newShape) == 0 { // This happens if the input is a 1D tensor
+	if len(newShape) == 0 {
 		newShape = []int{1}
 	}
 
@@ -1992,30 +2063,41 @@ func (t *Tensor) Argmax(axis int) (*Tensor, error) {
 	}
 	newData := make([]float64, newSize)
 
-	axisDimSize := t.Shape[axis]
-	outerSize := 1
-	for i := 0; i < axis; i++ {
-		outerSize *= t.Shape[i]
-	}
-	innerSize := 1
-	for i := axis + 1; i < len(t.Shape); i++ {
-		innerSize *= t.Shape[i]
-	}
+	strides := calculateStrides(t.Shape)
+	newStrides := calculateStrides(newShape)
 
-	for i := 0; i < outerSize; i++ {
-		for j := 0; j < innerSize; j++ {
-			maxVal := -math.MaxFloat64
-			maxIndex := 0
-			for k := 0; k < axisDimSize; k++ {
-				idx := i*axisDimSize*innerSize + k*innerSize + j
-				if t.Data[idx] > maxVal {
-					maxVal = t.Data[idx]
-					maxIndex = k
+	for i := 0; i < newSize; i++ {
+		newCoords := getCoords(i, newShape, newStrides)
+
+		maxVal := -math.MaxFloat64
+		maxIndex := 0
+
+		for k := 0; k < t.Shape[axis]; k++ {
+			oldCoords := make([]int, len(t.Shape))
+			// copy newCoords to oldCoords, inserting k at the axis
+			newCoordIdx := 0
+			for oldCoordIdx := 0; oldCoordIdx < len(t.Shape); oldCoordIdx++ {
+				if oldCoordIdx == axis {
+					oldCoords[oldCoordIdx] = k
+				} else {
+					if newCoordIdx < len(newCoords) {
+						oldCoords[oldCoordIdx] = newCoords[newCoordIdx]
+						newCoordIdx++
+					}
 				}
 			}
-			newIndex := i*innerSize + j
-			newData[newIndex] = float64(maxIndex)
+
+			flatIndex := 0
+			for d, c := range oldCoords {
+				flatIndex += c * strides[d]
+			}
+
+			if t.Data[flatIndex] > maxVal {
+				maxVal = t.Data[flatIndex]
+				maxIndex = k
+			}
 		}
+		newData[i] = float64(maxIndex)
 	}
 
 	return NewTensor(newShape, newData, false), nil

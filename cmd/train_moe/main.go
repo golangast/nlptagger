@@ -16,6 +16,7 @@ import (
 	"github.com/zendrulat/nlptagger/neural/moe"
 	. "github.com/zendrulat/nlptagger/neural/nn"
 	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
 	"github.com/zendrulat/nlptagger/neural/semantic"
 	tensor "github.com/zendrulat/nlptagger/neural/tensor"
 	"github.com/zendrulat/nlptagger/neural/tokenizer"
@@ -133,7 +134,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 		if numBatches > 0 {
 			log.Printf("Epoch %d, Average Loss: %f", epoch+1, totalLoss/float64(numBatches))
 		}
-		writeMemProfile(epoch + 1)
+
 	}
 
 	return nil
@@ -158,6 +159,7 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 
 		// Serialize and tokenize semantic output
 		serializedSemanticOutput := serializeSemanticOutput(example.SemanticOutput)
+		log.Printf("DEBUG: Serialized Semantic Output (raw): %s", serializedSemanticOutput)
 		trainingSemanticOutput := "<s> " + serializedSemanticOutput + " </s>"
 		semanticOutputTokens, err := TokenizeAndConvertToIDs(trainingSemanticOutput, semanticOutputTokenizer, semanticOutputVocab, maxSequenceLength)
 		if err != nil {
@@ -175,18 +177,18 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	semanticOutputTensor := tensor.NewTensor([]int{batchSize, maxSequenceLength}, convertIntsToFloat64s(semanticOutputIDsBatch), false)
 
 	// Forward pass through the IntentMoE model
-	semanticOutputLogits, _, err := intentMoEModel.Forward(inputTensor, semanticOutputTensor)
+	semanticOutputLogits, contextVector, err := intentMoEModel.Forward(inputTensor, semanticOutputTensor)
 	if err != nil {
 		return 0, fmt.Errorf("IntentMoE model forward pass failed: %w", err)
 	}
 
 	// Calculate loss for the semantic output
 	semanticOutputLoss := 0.0
-	semanticOutputGrads := make([]*tensor.Tensor, maxSequenceLength)
-	for t := 0; t < maxSequenceLength; t++ {
+	semanticOutputGrads := make([]*tensor.Tensor, len(semanticOutputLogits))
+	for t := 0; t < len(semanticOutputLogits); t++ {
 		targets := make([]int, batchSize)
 		for i := 0; i < batchSize; i++ {
-			targets[i] = semanticOutputIDsBatch[i*maxSequenceLength+t]
+			targets[i] = semanticOutputIDsBatch[i*maxSequenceLength+t+1]
 		}
 		loss, grad := CrossEntropyLoss(semanticOutputLogits[t], targets, semanticOutputVocab.PaddingTokenID)
 		semanticOutputLoss += loss
@@ -204,21 +206,19 @@ func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, bat
 	optimizer.Step()
 
 	// Log guessed sentence
-	/*
-		guessedIDs, err := intentMoEModel.GreedySearchDecode(contextVector, maxSequenceLength, semanticOutputVocab.GetTokenID("<s>"), semanticOutputVocab.GetTokenID("</s>"))
+	guessedIDs, err := intentMoEModel.GreedySearchDecode(contextVector, maxSequenceLength, semanticOutputVocab.GetTokenID("<s>"), semanticOutputVocab.GetTokenID("</s>"))
+	if err != nil {
+		log.Printf("Error decoding guessed sentence: %v", err)
+	} else {
+		guessedSentence, err := semanticOutputTokenizer.Decode(guessedIDs)
 		if err != nil {
 			log.Printf("Error decoding guessed sentence: %v", err)
 		} else {
-			guessedSentence, err := semanticOutputTokenizer.Decode(guessedIDs)
-			if err != nil {
-				log.Printf("Error decoding guessed sentence: %v", err)
-			} else {
-				log.Printf("Guessed semantic output: %s", guessedSentence)
-			}
-			targetJSON, _ := json.Marshal(batch[0].SemanticOutput)
-			log.Printf("Target semantic output: %s", string(targetJSON))
+			log.Printf("Guessed semantic output: %s", guessedSentence)
 		}
-	*/
+		targetJSON, _ := json.Marshal(batch[0].SemanticOutput)
+		log.Printf("Target semantic output: %s", string(targetJSON))
+	}
 
 	return totalLoss, nil
 }
@@ -232,50 +232,49 @@ func convertIntsToFloat64s(input []int) []float64 {
 }
 
 func serializeSemanticOutput(so semantic.SemanticOutput) string {
-	var parts []string
-
-	// Operation
-	parts = append(parts, fmt.Sprintf("operation:%s", so.Operation))
-
-	// TargetResource
-	parts = append(parts, serializeTargetResource(*so.TargetResource))
-
-	// Context
-	if so.Context.UserRole != "" {
-		parts = append(parts, fmt.Sprintf("context_user_role:%s", so.Context.UserRole))
+	// Create a temporary struct to hold the data for JSON marshaling.
+	// This helps in flattening the structure if needed or selectively including fields.
+	// For now, we directly marshal the SemanticOutput struct.
+	jsonBytes, err := json.Marshal(so)
+	if err != nil {
+		log.Printf("Error marshalling semantic output to JSON: %v", err)
+		return "" // Return an empty string or handle error as appropriate
 	}
-
-	return strings.Join(parts, " ")
+	return string(jsonBytes)
 }
 
 func serializeTargetResource(tr semantic.Resource) string {
+	// This function is no longer called by serializeSemanticOutput, but we'll keep it
+	// in case it's used elsewhere. Or we can remove it if it's confirmed to be unused.
 	var parts []string
-
-	parts = append(parts, fmt.Sprintf("resource_type:%s", tr.Type))
+	resourceType := strings.ReplaceAll(tr.Type, "::", "_")
+	parts = append(parts, fmt.Sprintf("resource_type:%s", resourceType))
 	parts = append(parts, fmt.Sprintf("resource_name:%s", tr.Name))
-
-	// Properties
 	if tr.Properties != nil {
 		for k, v := range tr.Properties {
 			parts = append(parts, fmt.Sprintf("property_%s:%v", k, v))
 		}
 	}
-
-	// Children
-	if len(tr.Children) > 0 {
-		childrenParts := []string{}
-		for _, child := range tr.Children {
-			childrenParts = append(childrenParts, serializeTargetResource(child))
-		}
-		parts = append(parts, fmt.Sprintf("children:[%s]", strings.Join(childrenParts, " ")))
+	for _, child := range tr.Children {
+		childParts := serializeTargetResource(child)
+		parts = append(parts, childParts)
 	}
-
-	return strings.Join(parts, " ")
+	return strings.Join(parts, ", ")
 }
 
 // BuildVocabularies builds vocabularies from intent_data.json and WikiQA-train.txt.
-func BuildVocabularies(intentDataPath, wikiQADataPath string) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
-	queryVocabulary := mainvocab.NewVocabulary()
+func BuildVocabularies(intentDataPath, wikiQADataPath string, word2vecModel *word2vec.SimpleWord2Vec) (*mainvocab.Vocabulary, *mainvocab.Vocabulary, error) {
+	localQueryVocabulary := mainvocab.NewVocabulary() // Always start with a fresh vocabulary
+	log.Printf("queryVocabulary size after initial creation: %d", localQueryVocabulary.Size())
+
+	if word2vecModel != nil {
+		// Add all words from the Word2Vec model to the new queryVocabulary
+		// This will assign new, contiguous IDs starting from where queryVocabulary currently is.
+		for word := range word2vecModel.Vocabulary {
+			localQueryVocabulary.AddToken(word)
+		}
+		log.Printf("queryVocabulary size after adding words from Word2Vec: %d", localQueryVocabulary.Size())
+	}
 	semanticOutputVocabulary := mainvocab.NewVocabulary()
 
 	// Process intent_data.json
@@ -296,10 +295,10 @@ func BuildVocabularies(intentDataPath, wikiQADataPath string) (*mainvocab.Vocabu
 	}
 
 	for _, example := range intents {
-		// Query vocabulary
+		// Always add query tokens to queryVocabulary
 		tokenizedQuery := tokenizer.Tokenize(strings.ToLower(example.Query))
 		for _, word := range tokenizedQuery {
-			queryVocabulary.AddToken(word)
+			localQueryVocabulary.AddToken(word)
 		}
 
 		// Semantic output vocabulary
@@ -311,7 +310,7 @@ func BuildVocabularies(intentDataPath, wikiQADataPath string) (*mainvocab.Vocabu
 		}
 	}
 
-	// Process WikiQA-train.txt
+	// Process WikiQA-train.txt (always add to query vocab)
 	wikiQAFile, err := os.Open(wikiQADataPath)
 	if err != nil {
 		log.Printf("Warning: Failed to open WikiQA training data %s: %v. Continuing without it.", wikiQADataPath, err)
@@ -326,12 +325,12 @@ func BuildVocabularies(intentDataPath, wikiQADataPath string) (*mainvocab.Vocabu
 				// Tokenize question part
 				questionTokens := tokenizer.Tokenize(strings.ToLower(parts[0]))
 				for _, token := range questionTokens {
-					queryVocabulary.AddToken(token)
+					localQueryVocabulary.AddToken(token)
 				}
 				// Tokenize answer part
 				answerTokens := tokenizer.Tokenize(strings.ToLower(parts[1]))
 				for _, token := range answerTokens {
-					queryVocabulary.AddToken(token)
+					localQueryVocabulary.AddToken(token)
 				}
 			}
 		}
@@ -341,13 +340,14 @@ func BuildVocabularies(intentDataPath, wikiQADataPath string) (*mainvocab.Vocabu
 		}
 	}
 
+	log.Printf("queryVocabulary size before final return: %d", localQueryVocabulary.Size())
 	// Explicitly add BOS and EOS tokens to the semantic output vocabulary
 	semanticOutputVocabulary.AddToken("<s>")
 	semanticOutputVocabulary.AddToken("</s>")
 	semanticOutputVocabulary.BosID = semanticOutputVocabulary.GetTokenID("<s>")
 	semanticOutputVocabulary.EosID = semanticOutputVocabulary.GetTokenID("</s>")
 
-	return queryVocabulary, semanticOutputVocabulary, nil
+	return localQueryVocabulary, semanticOutputVocabulary, nil
 }
 
 func main() {
@@ -374,8 +374,16 @@ func main() {
 	const wikiQADataPath = "./trainingdata/WikiQA-train.txt"
 	const word2vecModelPath = "gob_models/word2vec_model.gob"
 
+	// Load the Word2Vec model
+	log.Printf("Loading Word2Vec model from %s...", word2vecModelPath)
+	word2vecModel, err := word2vec.LoadModel(word2vecModelPath)
+	if err != nil {
+		log.Fatalf("Failed to load Word2Vec model: %v", err)
+	}
+	log.Println("Word2Vec model loaded successfully.")
+
 	// Define training parameters
-	epochs := 200
+	epochs := 100
 	learningRate := 0.001
 	batchSize := 32
 	semanticOutputVocabularySavePath := "gob_models/semantic_output_vocabulary.gob"
@@ -383,7 +391,7 @@ func main() {
 	var queryVocabulary *mainvocab.Vocabulary
 	var semanticOutputVocabulary *mainvocab.Vocabulary
 	log.Println("Building vocabularies from intent_data.json and WikiQA-train.txt...")
-	queryVocabulary, semanticOutputVocabulary, err := BuildVocabularies(intentDataPath, wikiQADataPath)
+	queryVocabulary, semanticOutputVocabulary, err = BuildVocabularies(intentDataPath, wikiQADataPath, word2vecModel)
 	if err != nil {
 		log.Fatalf("Failed to build vocabularies: %v", err)
 	}
@@ -416,7 +424,7 @@ func main() {
 
 	// Always create a new IntentMoE model for now to debug gob loading
 	log.Printf("Creating a new IntentMoE model.")
-	intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, 0, 0, semanticOutputVocabSize, maxAttentionHeads, nil)
+	intentMoEModel, err = moe.NewIntentMoE(inputVocabSize, embeddingDim, numExperts, 0, 0, semanticOutputVocabSize, maxAttentionHeads, word2vecModel)
 	if err != nil {
 		log.Fatalf("Failed to create new IntentMoE model: %v", err)
 	}
@@ -439,7 +447,6 @@ func main() {
 
 	// Save the trained model
 	fmt.Printf("Saving IntentMoE model to %s\n", modelSavePath)
-	writeMemProfile(11) // Memory profile before saving
 	modelFile, err := os.Create(modelSavePath)
 	if err != nil {
 		log.Fatalf("Failed to create model file: %v", err)
@@ -449,7 +456,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to save IntentMoE model: %v", err)
 	}
-	writeMemProfile(12) // Memory profile after saving
 
 	// Test loading the model right after saving
 	log.Println("Testing model loading right after saving...")
@@ -471,4 +477,3 @@ func main() {
 	}
 
 }
-

@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"nlptagger/neural/nnu/intent"
-	. "nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
-	mainvocab "nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nnu/intent"
+	. "github.com/zendrulat/nlptagger/neural/nn"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
 )
 
 // IntentTrainingExample represents a single training example with a query and its intents.

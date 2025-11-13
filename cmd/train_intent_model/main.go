@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	moemodel "nlptagger/neural/moe/model"
-	. "nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
-	mainvocab "nlptagger/neural/nnu/vocab"
+	moemodel "github.com/zendrulat/nlptagger/neural/moe/model"
+	. "github.com/zendrulat/nlptagger/neural/nn"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
 )
 
 // IntentTrainingExample represents a single training example with a query and its intents.

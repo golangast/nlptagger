@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"nlptagger/neural/nn"
-	"nlptagger/neural/nnu/bert"
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/nnu/bert"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {

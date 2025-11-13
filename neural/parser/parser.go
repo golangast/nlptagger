@@ -112,14 +112,17 @@ func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semant
 		// If no rule applies, we simply move to the next token.
 	}
 
-	// Determine the primary target resource and its directory
+	log.Printf("Before final target assignment, output.TargetResource: %+v", output.TargetResource)
+
+	var target *semantic.Resource
 	if fileResource != nil {
-		output.TargetResource = fileResource
+		target = fileResource
 	} else if folderResource != nil {
-		output.TargetResource = folderResource
+		target = folderResource
 	} else if webserverResource != nil {
-		output.TargetResource = webserverResource
+		target = webserverResource
 	}
+	output.TargetResource = target
 
 	log.Printf("SemanticOutput TargetResource Type before returning: %s", output.TargetResource.Type)
 	return output, nil

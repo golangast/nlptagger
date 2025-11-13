@@ -20,6 +20,7 @@ func NewExecutor() *Executor {
 	re.RegisterDefaultWriteFileRules()
 	re.RegisterDefaultStartRules()
 	re.RegisterDefaultDeleteRules()
+	re.RegisterDefaultMoveRules()
 
 	return &Executor{
 		ruleEngine: re,

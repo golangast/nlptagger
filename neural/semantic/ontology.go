@@ -25,6 +25,7 @@ type Resource struct {
 	Children   []Resource             `json:"children,omitempty"`
 	DependsOn  []string               `json:"depends_on,omitempty"`
 	Directory  string                 `json:"directory,omitempty"` // Add this line
+	Destination string              `json:"destination,omitempty"`
 }
 
 // Context provides additional information about the request environment.

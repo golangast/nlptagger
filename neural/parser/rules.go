@@ -117,6 +117,33 @@ func (pre *ParsingRuleEngine) RegisterDefaultParsingRules() {
 		},
 	})
 
+	// Rule for "move" command
+	pre.RegisterRule(ParsingRule{
+		Name:    "MoveCommand",
+		Pattern: []string{"COMMAND", "NAME", "PREPOSITION", "NAME"}, // "move", "a/b.txt", "to", "c/d.txt"
+		Action: func(tokens, posTags, nerTags []string, i int, output *semantic.SemanticOutput,
+			fileResource **semantic.Resource, folderResource **semantic.Resource,
+			webserverResource **semantic.Resource, lastFolderResource **semantic.Resource,
+			lastProcessedResource **semantic.Resource, expectingDependencyTarget *bool,
+			expectingDependencySource *bool, dependencyType *string) (bool, int, error) {
+			if strings.ToLower(tokens[i]) == "move" || strings.ToLower(tokens[i]) == "mv" {
+				sourcePath := tokens[i+1]
+				destinationPath := tokens[i+3]
+
+				*fileResource = &semantic.Resource{
+					Type:        "Filesystem::File",
+					Name:        sourcePath,
+					Destination: destinationPath,
+				}
+				output.TargetResource = *fileResource
+				output.Operation = "MOVE"
+				log.Printf("MoveCommand rule applied. Source: %s, Destination: %s", sourcePath, destinationPath)
+				return true, 4, nil // Consumed "move", "source", "to", "destination"
+			}
+			return false, 0, nil
+		},
+	})
+
 	// Rule for "create folder <name>"
 	pre.RegisterRule(ParsingRule{
 		Name:    "CreateFolder",

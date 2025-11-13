@@ -1,0 +1,42 @@
+[
+  {
+    "input_text": "delete file named old_data.txt",
+    "parent_intent": "file_operations",
+    "child_intent": "delete_file"
+  },
+  {
+    "input_text": "create a new file called report.docx",
+    "parent_intent": "file_operations",
+    "child_intent": "create_file"
+  },
+  {
+    "input_text": "list all files in current directory",
+    "parent_intent": "file_operations",
+    "child_intent": "list_files"
+  },
+  {
+    "input_text": "show me the contents of config.json",
+    "parent_intent": "file_operations",
+    "child_intent": "read_file"
+  },
+  {
+    "input_text": "in a new folder jack, create a go webserver jill",
+    "parent_intent": "file_operations",
+    "child_intent": "create_folder_and_file"
+  },
+  {
+    "input_text": "create folder jim and add a file jill.go",
+    "parent_intent": "file_operations",
+    "child_intent": "create_folder_and_file"
+  },
+  {
+    "input_text": "make a directory called my_new_folder",
+    "parent_intent": "file_operations",
+    "child_intent": "create_folder"
+  },
+  {
+    "input_text": "create a folder named assets",
+    "parent_intent": "file_operations",
+    "child_intent": "create_folder"
+  }
+]

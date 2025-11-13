@@ -10,9 +10,9 @@ import (
 	"os"
 	"sort"
 
-	"nlptagger/neural/nn/semanticrole"
-	"nlptagger/neural/nn/semanticrole/bilstm_model"
-	"nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/nn/semanticrole"
+	"github.com/zendrulat/nlptagger/neural/nn/semanticrole/bilstm_model"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
 )
 
 func LoadRoleData(filePath string) ([]semanticrole.SentenceRoleData, error) {
@@ -97,8 +97,8 @@ func Train_bilstm() {
 				token := taggedSentence.Tokens[i] // Access token only after checking index
 				embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
 				if !ok {
-					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
-					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
+					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]]))
+					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]])
 				}
 
 				embeddings[i] = embedding
@@ -262,8 +262,8 @@ func trainModel(model *bilstm_model.BiLSTMModel, trainingData []semanticrole.Sen
 				}
 				embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
 				if !ok { // UNK token
-					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
-					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
+					embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]]))
+					copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]])
 				}
 				embeddings[i] = embedding
 
@@ -314,8 +314,8 @@ func predictRoles(model *bilstm_model.BiLSTMModel, data []semanticrole.SentenceR
 		for j, token := range taggedSentence.Tokens {
 			embedding, ok := word2vecModel.WordVectors[word2vecModel.Vocabulary[token.Token]]
 			if !ok {
-				embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]]))
-				copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vecModel.UNKToken]])
+				embedding = make([]float64, len(word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]]))
+				copy(embedding, word2vecModel.WordVectors[word2vecModel.Vocabulary[word2vec.UNKToken]])
 			}
 			embeddings[j] = embedding
 		}

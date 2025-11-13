@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"nlptagger/neural/nnu"
-	"nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/nnu"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
 )
 
 // common English stop words

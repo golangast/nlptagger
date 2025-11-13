@@ -9,11 +9,11 @@ import (
 	"math/rand"
 	"time"
 
-	"nlptagger/neural/nn"
-	"nlptagger/neural/nnu/seq2seq"
-	"nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/nnu/seq2seq"
+	"github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 // CommandData represents the structure of each entry in software_commands.json

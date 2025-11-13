@@ -6,10 +6,10 @@ import (
 	"log"
 	"os"
 
-	"nlptagger/neural/nn"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
-	"nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/nnu/vocab"
 )
 
 // SerializableSeq2Seq is a struct for saving and loading the model.

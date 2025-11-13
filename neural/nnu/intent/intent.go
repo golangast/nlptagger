@@ -4,8 +4,8 @@ import (
 	"encoding/gob"
 	"os"
 
-	. "nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/nn"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 // NewSimpleIntentClassifier creates a new SimpleIntentClassifier model.

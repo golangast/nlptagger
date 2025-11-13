@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"nlptagger/tagger"
+	"github.com/zendrulat/nlptagger/tagger"
 )
 
 // Entity represents a recognized entity with its type and value.

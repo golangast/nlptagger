@@ -223,7 +223,7 @@ func (e *Embedding) Forward(inputIDs *Tensor) (*Tensor, error) {
 		outputOffset := i * e.DimModel
 		copy(outputData[outputOffset:outputOffset+e.DimModel], e.Weight.Data[weightsOffset:weightsOffset+e.DimModel])
 	}
-	outputTensor := NewTensor(outputShape, outputData, true)
+	outputTensor := NewTensor(outputShape, outputData, e.Weight.RequiresGrad)
 	if outputTensor.RequiresGrad {
 		outputTensor.Creator = e
 	}
