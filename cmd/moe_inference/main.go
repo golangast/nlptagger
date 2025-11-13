@@ -24,6 +24,7 @@ var (
 )
 
 func main() {
+	fmt.Fprintf(os.Stderr, "DEBUG: Entering moe_inference main function.\n")
 	rand.Seed(1) // Seed the random number generator for deterministic behavior
 	flag.Parse()
 
@@ -172,9 +173,9 @@ func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabula
 	fmt.Println(predictedSentence)
 	fmt.Println("---------------------------------")
 
-	fmt.Printf("Current Conversation Context: Intent = %s, Entities = %%+v\n", conversationContext.CurrentIntent, conversationContext.CurrentEntities)
+	fmt.Printf("Current Conversation Context: Intent = %s, Entities = %+v\n", conversationContext.CurrentIntent, conversationContext.CurrentEntities)
 
-	performActionFromSemanticOutput(predictedIntent, predictedEntities, q)
+	performActionFromSemanticOutput(predictedIntent, predictedEntities, q, predictedSentence)
 }
 
 
@@ -210,8 +211,9 @@ func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
 
 
 // performActionFromSemanticOutput interprets the predicted intent and entities to perform actions.
-func performActionFromSemanticOutput(intent string, entities []context.Entity, originalQuery string) {
+func performActionFromSemanticOutput(intent string, entities []context.Entity, originalQuery string, predictedSentence string) {
 	switch intent {
+	case "Create": // Handle "Create" as an alias for CREATE_FILESYSTEM_OBJECTS
 	case "CREATE_FILESYSTEM_OBJECTS":
 		var fileName, folderName string
 		for _, entity := range entities {

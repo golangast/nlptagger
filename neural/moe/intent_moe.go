@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"os"
-	"sort"
 
 	"github.com/zendrulat/nlptagger/neural/nn"
 	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
-	"github.com/zendrulat/nlptagger/neural/tensor"
+	t "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {
@@ -29,9 +27,14 @@ type IntentMoE struct {
 // NewIntentMoE creates a new IntentMoE model.
 func NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVocabSize, sentenceVocabSize, maxAttentionHeads int, word2vecModel *word2vec.SimpleWord2Vec) (*IntentMoE, error) {
 	if word2vecModel != nil {
-		vocabSize = word2vecModel.VocabSize
 		embeddingDim = word2vecModel.VectorSize
+		// Ensure embeddingDim is divisible by maxAttentionHeads
+		if embeddingDim%maxAttentionHeads != 0 {
+			embeddingDim = (embeddingDim/maxAttentionHeads + 1) * maxAttentionHeads
+			log.Printf("Adjusted embeddingDim to %d to be divisible by maxAttentionHeads (%d)", embeddingDim, maxAttentionHeads)
+		}
 	}
+	log.Printf("NewIntentMoE: Initializing Embedding layer with vocabSize: %d, embeddingDim: %d", vocabSize, embeddingDim)
 	embedding := nn.NewEmbedding(vocabSize, embeddingDim)
 	if word2vecModel != nil {
 		embedding.LoadPretrainedWeights(word2vecModel.WordVectors)
@@ -65,7 +68,7 @@ func NewIntentMoE(vocabSize, embeddingDim, numExperts, parentVocabSize, childVoc
 }
 
 // Inference performs the forward pass of the IntentMoE model for inference.
-func (m *IntentMoE) Inference(inputs ...*tensor.Tensor) (*tensor.Tensor, error) {
+func (m *IntentMoE) Inference(inputs ...*t.Tensor) (*t.Tensor, error) {
 	if len(inputs) != 1 {
 		return nil, fmt.Errorf("IntentMoE.Inference expects 1 input (query token IDs), got %d", len(inputs))
 	}
@@ -87,7 +90,7 @@ func (m *IntentMoE) Inference(inputs ...*tensor.Tensor) (*tensor.Tensor, error) 
 }
 
 // Forward performs the forward pass of the IntentMoE model.
-func (m *IntentMoE) Forward(inputs ...*tensor.Tensor) ([]*tensor.Tensor, *tensor.Tensor, error) {
+func (m *IntentMoE) Forward(inputs ...*t.Tensor) ([]*t.Tensor, *t.Tensor, error) {
 	if len(inputs) != 2 {
 		return nil, nil, fmt.Errorf("IntentMoE.Forward expects 2 inputs (query token IDs, target token IDs), got %d", len(inputs))
 	}
@@ -116,14 +119,14 @@ func (m *IntentMoE) Forward(inputs ...*tensor.Tensor) ([]*tensor.Tensor, *tensor
 }
 
 // Backward performs the backward pass for the IntentMoE model.
-func (m *IntentMoE) Backward(grads ...*tensor.Tensor) error {
+func (m *IntentMoE) Backward(grads ...*t.Tensor) error {
 	sentenceGrads := grads
 
 	// Backward pass for the decoder
 	if err := m.Decoder.Backward(sentenceGrads); err != nil {
 		return fmt.Errorf("decoder backward failed: %w", err)
 	}
-	contextVectorGrad := m.Decoder.InitialHiddenState.Grad
+	contextVectorGrad := m.Decoder.ContextVector.Grad
 
 	// Backward pass for the encoder
 	if err := m.Encoder.Backward(contextVectorGrad); err != nil {
@@ -140,76 +143,43 @@ func (m *IntentMoE) Backward(grads ...*tensor.Tensor) error {
 }
 
 // Parameters returns all learnable parameters of the IntentMoE model.
-func (m *IntentMoE) Parameters() []*tensor.Tensor {
-	params := []*tensor.Tensor{}
+func (m *IntentMoE) Parameters() []*t.Tensor {
+	params := []*t.Tensor{}
 	params = append(params, m.Embedding.Parameters()...)
 	params = append(params, m.Encoder.Parameters()...)
 	params = append(params, m.Decoder.Parameters()...)
 	return params
 }
 
-type probIndex struct {
-	prob  float64
-	index int
-}
 
-func sampleTopK(probabilities []float64, k int) int {
-	// Create a slice of probIndex to store probabilities and their original indices
-	probIndices := make([]probIndex, len(probabilities))
-	for i, p := range probabilities {
-		probIndices[i] = probIndex{prob: p, index: i}
-	}
-
-	// Sort the probabilities in descending order
-	sort.Slice(probIndices, func(i, j int) bool {
-		return probIndices[i].prob > probIndices[j].prob
-	})
-
-	// Take the top k probabilities
-	topK := probIndices[:k]
-
-	// Normalize the top k probabilities
-	var sumProb float64
-	for _, pi := range topK {
-		sumProb += pi.prob
-	}
-	for i := range topK {
-		topK[i].prob /= sumProb
-	}
-
-	// Sample from the normalized top k probabilities
-	r := rand.Float64()
-	var cumulativeProb float64
-	for _, pi := range topK {
-		cumulativeProb += pi.prob
-		if r < cumulativeProb {
-			return pi.index
+func (m *IntentMoE) GreedySearchDecode(contextVector *t.Tensor, maxLen, sosToken, eosToken int) ([]int, error) {
+	fmt.Fprintf(os.Stderr, "GreedySearchDecode: Function entered. maxLen: %d, sosToken: %d, eosToken: %d\n", maxLen, sosToken, eosToken)
+	if contextVector.Shape[0] > 1 {
+		var err error
+		contextVector, err = contextVector.Slice(0, 0, 1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to slice context vector for single-item decoding: %w", err)
 		}
 	}
-
-	// Fallback to the most likely token
-	return topK[0].index
-}
-
-func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sosToken, eosToken int) ([]int, error) {
 	var decodedIDs []int
-	decoderInputIDs := tensor.NewTensor([]int{1, 1}, []float64{float64(sosToken)}, false)
+	decoderInputIDs := t.NewTensor([]int{1, 1}, []float64{float64(sosToken)}, false)
 
-	// Take the first element of the batch
-	contextVector, err := contextVector.Slice(0, 0, 1)
+	// Average the contextVector along the sequence length dimension to get a single vector
+	// for initializing the decoder's hidden state.
+	initialHidden, err := contextVector.Mean(1) // Average along the sequence length dimension
 	if err != nil {
-		return nil, fmt.Errorf("failed to slice context vector: %w", err)
+		return nil, fmt.Errorf("failed to average context vector for initial hidden state: %w", err)
+	}
+	// Reshape to [batchSize, embeddingDim]
+	initialHidden, err = initialHidden.Reshape([]int{contextVector.Shape[0], contextVector.Shape[2]})
+	if err != nil {
+		return nil, fmt.Errorf("failed to reshape initial hidden state: %w", err)
 	}
 
 	batchSize := contextVector.Shape[0]
 	hiddenSize := m.Decoder.LSTM.HiddenSize
 
-	// Take the mean of the context vector as the initial hidden state
-	initialHidden, err := contextVector.Mean(1)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get mean of context vector for initial hidden state: %w", err)
-	}
-
+	// If the hiddenSize of LSTM is different from embeddingDim, we need to adjust initialHidden
 	if initialHidden.Shape[1] != hiddenSize {
 		if initialHidden.Shape[1] > hiddenSize {
 			initialHidden, err = initialHidden.Slice(1, 0, hiddenSize)
@@ -217,8 +187,8 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 				return nil, fmt.Errorf("failed to slice initial hidden state: %w", err)
 			}
 		} else if initialHidden.Shape[1] < hiddenSize {
-			padding := tensor.NewTensor([]int{batchSize, hiddenSize - initialHidden.Shape[1]}, make([]float64, batchSize*(hiddenSize-initialHidden.Shape[1])), false)
-			initialHidden, err = tensor.Concat([]*tensor.Tensor{initialHidden, padding}, 1)
+			padding := t.NewTensor([]int{batchSize, hiddenSize - initialHidden.Shape[1]}, make([]float64, batchSize*(hiddenSize-initialHidden.Shape[1])), false)
+			initialHidden, err = t.Concat([]*t.Tensor{initialHidden, padding}, 1)
 			if err != nil {
 				return nil, fmt.Errorf("failed to pad initial hidden state: %w", err)
 			}
@@ -226,37 +196,41 @@ func (m *IntentMoE) GreedySearchDecode(contextVector *tensor.Tensor, maxLen, sos
 	}
 
 	hiddenState := initialHidden
-	cellState := tensor.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false)
+	cellState := t.NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false)
 
 	for i := 0; i < maxLen; i++ {
-		outputLogits, newHidden, newCell, err := m.Decoder.DecodeStep(decoderInputIDs, hiddenState, cellState, contextVector)
+		outputProbabilities, newHidden, newCell, err := m.Decoder.DecodeStep(decoderInputIDs, hiddenState, cellState, contextVector)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "GreedySearchDecode: Decoder step failed at iteration %d: %v\n", i, err)
 			return nil, fmt.Errorf("decoder step failed: %w", err)
 		}
 
 		hiddenState = newHidden
 		cellState = newCell
 
-		// Apply softmax to get probabilities
-		probabilities, err := outputLogits.Softmax(1)
-		if err != nil {
-			return nil, fmt.Errorf("softmax failed: %w", err)
+		// Get the predicted ID (greedy approach)
+		if i == 0 {
+			// Prevent EOS token from being the first token
+			if len(outputProbabilities.Data) > eosToken {
+				outputProbabilities.Data[eosToken] = -1e9
+			}
 		}
+		predictedIDTensor, err := outputProbabilities.Argmax(1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get argmax of output probabilities: %w", err)
+		}
+		predictedID := int(predictedIDTensor.Data[0])
 
-		// Sample from the top-k probabilities
-		predictedID := sampleTopK(probabilities.Data, 5)
+		fmt.Fprintf(os.Stderr, "GreedySearchDecode: Iteration %d, Predicted ID: %d, EOS Token: %d\n", i, predictedID, eosToken)
 
-		log.Printf("GreedySearchDecode: Iteration %d, predictedID: %d, eosToken: %d", i, predictedID, eosToken)
-		log.Printf("GreedySearchDecode: outputLogits: %v", outputLogits.Data)
 		if predictedID == eosToken {
-			log.Printf("GreedySearchDecode: EOS token encountered, breaking.")
 			break
 		}
 		decodedIDs = append(decodedIDs, predictedID)
 
 		decoderInputIDs.Data[0] = float64(predictedID)
 	}
-
+	fmt.Fprintf(os.Stderr, "GreedySearchDecode: Function exited. Decoded IDs: %v\n", decodedIDs)
 	return decodedIDs, nil
 }
 
