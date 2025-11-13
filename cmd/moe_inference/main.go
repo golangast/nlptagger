@@ -2,13 +2,14 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"strings"
+
+	"encoding/json"
 
 	"github.com/zendrulat/nlptagger/neural/moe"
 	"github.com/zendrulat/nlptagger/neural/nnu/context" // Import the new context package
@@ -63,8 +64,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to set up semantic output vocabulary: %v", err)
 	}
+	log.Println("Semantic Output Vocabulary contents:")
 	for word, id := range semanticOutputVocabulary.WordToToken {
-		log.Printf("Vocab: %s -> %d", word, id)
+		log.Printf("  %s -> %d", word, id)
 	}
 
 	// Create tokenizer
@@ -164,88 +166,282 @@ func processQuery(q string, model *moe.IntentMoE, vocabulary *mainvocab.Vocabula
 	// The model's predicted sentence will be used directly, without hardcoded overrides.
 
 	// Parse the semantic output to extract intent and entities
-	predictedIntent, predictedEntities := parseSemanticOutput(predictedSentence)
+	semanticOutput, err := parseSemanticOutput(predictedSentence, q)
+	if err != nil {
+		log.Fatalf("Failed to parse semantic output even with heuristics: %v", err)
+	}
 
 	// Update the conversation context
-	conversationContext.AddTurn(predictedIntent, predictedEntities, q)
+	conversationContext.AddTurn(semanticOutput.Operation, extractEntities(semanticOutput), q)
 
 	fmt.Println("--- Predicted Semantic Output ---")
-	fmt.Println(predictedSentence)
+	jsonOutput, err := json.MarshalIndent(semanticOutput, "", "  ")
+	if err != nil {
+		log.Printf("Error marshalling semantic output to JSON: %v", err)
+		fmt.Println(predictedSentence) // Fallback to raw if marshalling fails
+	} else {
+		fmt.Println(string(jsonOutput))
+	}
 	fmt.Println("---------------------------------")
 
 	fmt.Printf("Current Conversation Context: Intent = %s, Entities = %+v\n", conversationContext.CurrentIntent, conversationContext.CurrentEntities)
 
-	performActionFromSemanticOutput(predictedIntent, predictedEntities, q, predictedSentence)
+	performActionFromSemanticOutput(semanticOutput, q, predictedSentence)
 }
 
 
 
-func parseSemanticOutput(semanticOutput string) (string, []context.Entity) {
-	intent := ""
-	entities := []context.Entity{}
+func extractEntities(so context.SemanticOutput) []context.Entity {
+	var entities []context.Entity
+	if so.TargetResource.Type != "" {
+		entities = append(entities, context.Entity{Type: "target_resource_type", Value: so.TargetResource.Type})
+	}
+	if so.TargetResource.Name != "" {
+		entities = append(entities, context.Entity{Type: "target_resource_name", Value: so.TargetResource.Name})
+	}
+	if so.TargetResource.Directory != "" {
+		entities = append(entities, context.Entity{Type: "target_resource_directory", Value: so.TargetResource.Directory})
+	}
+	if so.TargetResource.Destination != "" {
+		entities = append(entities, context.Entity{Type: "target_resource_destination", Value: so.TargetResource.Destination})
+	}
+	for key, value := range so.TargetResource.Properties {
+		entities = append(entities, context.Entity{Type: key, Value: fmt.Sprintf("%v", value)})
+	}
+	for _, child := range so.TargetResource.Children {
+		if child.Type != "" {
+			entities = append(entities, context.Entity{Type: "child_type", Value: child.Type})
+		}
+		if child.Name != "" {
+			entities = append(entities, context.Entity{Type: "child_name", Value: child.Name})
+		}
+		for key, value := range child.Properties {
+			entities = append(entities, context.Entity{Type: "child_" + key, Value: fmt.Sprintf("%v", value)})
+		}
+	}
+	return entities
+}
 
+func parseSemanticOutput(semanticOutput string, originalQuery string) (context.SemanticOutput, error) {
+	var so context.SemanticOutput
 	// Remove <s> and </s> tokens if present
 	cleanedOutput := strings.ReplaceAll(semanticOutput, "<s> ", "")
 	cleanedOutput = strings.ReplaceAll(cleanedOutput, " </s>", "")
 	cleanedOutput = strings.TrimSpace(cleanedOutput)
 
-	parts := strings.Split(cleanedOutput, ",")
-	for _, part := range parts {
-		kv := strings.SplitN(part, ":", 2)
-		if len(kv) == 2 {
-			key := strings.TrimSpace(kv[0])
-			value := strings.TrimSpace(kv[1])
+	err := json.Unmarshal([]byte(cleanedOutput), &so)
+	if err != nil {
+		log.Printf("Failed to parse semantic output: %v. Attempting to use heuristics.", err)
+		// Heuristic-based approach when semantic output is invalid
+		so = context.SemanticOutput{} // Initialize an empty semantic output
+		log.Printf("DEBUG: Original query (originalQuery) in heuristic: '%s'", originalQuery)
 
-			if key == "intent" {
-				intent = value
-			} else {
-				entities = append(entities, context.Entity{Type: key, Value: value})
-			}
-		} else {
-			log.Printf("Warning: Semantic output part '%s' could not be parsed into key:value pair.", part)
+		var fileName, folderName, content string
+		var pathFromHeuristic string
+
+		// Determine intent based on keywords
+		if strings.Contains(originalQuery, "create folder") || strings.Contains(originalQuery, "add file") || strings.Contains(originalQuery, "in folder") || strings.Contains(originalQuery, "make a new directory") || strings.Contains(originalQuery, "create a directory") {
+			so.Operation = "CREATE_FILESYSTEM_OBJECTS"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
+		} else if strings.Contains(originalQuery, "update file") || strings.Contains(originalQuery, "write to file") || strings.Contains(originalQuery, "in file") || strings.Contains(originalQuery, "change the content") || strings.Contains(originalQuery, "append") || (strings.Contains(originalQuery, "add") && strings.Contains(originalQuery, "code")) {
+			so.Operation = "UPDATE_FILE_CONTENT"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
+		} else if strings.Contains(originalQuery, "delete") || strings.Contains(originalQuery, "remove") || strings.Contains(originalQuery, "get rid of") || strings.Contains(originalQuery, "erase") {
+			so.Operation = "Delete"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
+		} else if strings.Contains(originalQuery, "move") || strings.Contains(originalQuery, "relocate") || strings.Contains(originalQuery, "shift") || strings.Contains(originalQuery, "transfer") {
+			so.Operation = "Move"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
+		} else if strings.Contains(originalQuery, "launch") || strings.Contains(originalQuery, "execute") || strings.Contains(originalQuery, "start") {
+			so.Operation = "Run"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
+		} else if strings.Contains(originalQuery, "list") || strings.Contains(originalQuery, "show") || strings.Contains(originalQuery, "display") {
+			so.Operation = "Read"
+			log.Printf("DEBUG: Heuristic set Operation to: %s", so.Operation)
 		}
+
+		// Extract file and folder names using heuristics
+		// Look for "named X" or "called X" for folder name
+		if strings.Contains(originalQuery, "folder named") {
+			folderName = extractAfterKeyword(originalQuery, "folder named")
+		} else if strings.Contains(originalQuery, "directory called") {
+			folderName = extractAfterKeyword(originalQuery, "directory called")
+		} else if strings.Contains(originalQuery, "folder") {
+			// Generic "folder X"
+			folderName = extractAfterKeyword(originalQuery, "folder")
+		}
+
+		// Look for "file named X" or "file called X" for file name
+		if strings.Contains(originalQuery, "file named") {
+			fileName = extractAfterKeyword(originalQuery, "file named")
+		} else if strings.Contains(originalQuery, "file called") {
+			fileName = extractAfterKeyword(originalQuery, "file called")
+		} else if strings.Contains(originalQuery, "file") {
+			// Generic "file X"
+			fileName = extractAfterKeyword(originalQuery, "file")
+		}
+
+		// New heuristic for "in <path>"
+		if strings.Contains(originalQuery, "in ") {
+			afterIn := extractAfterKeyword(originalQuery, "in")
+			if afterIn != "" {
+				// Check if it's a path with a slash
+				if strings.Contains(afterIn, "/") {
+					parts := strings.Split(afterIn, "/")
+					if len(parts) > 1 {
+						folderName = parts[0]
+						fileName = parts[1]
+						pathFromHeuristic = folderName // Set path from heuristic
+					}
+				} else {
+					// If no slash, assume it's a file name or folder name
+					// Prioritize file name if "file" is also in the query
+					if strings.Contains(originalQuery, "file") {
+						fileName = afterIn
+					} else if strings.Contains(originalQuery, "folder") || strings.Contains(originalQuery, "directory") {
+						folderName = afterIn
+						pathFromHeuristic = folderName // Set path from heuristic
+					}
+				}
+			}
+		}
+
+		log.Printf("DEBUG: Extracted fileName: '%s', folderName: '%s'", fileName, folderName)
+
+		// Refine folderName and fileName if they contain "and add a file" or similar
+		if strings.Contains(folderName, "and add a file") {
+			folderName = strings.Split(folderName, "and add a file")[0]
+			folderName = strings.TrimSpace(folderName)
+		}
+		if strings.Contains(folderName, "and create a file") {
+			folderName = strings.Split(folderName, "and create a file")[0]
+			folderName = strings.TrimSpace(folderName)
+		}
+
+		// Extract content if "add X in Y" pattern
+		if strings.HasPrefix(originalQuery, "add ") && strings.Contains(originalQuery, " in ") {
+			startIndex := strings.Index(originalQuery, "add ") + len("add ")
+			endIndex := strings.Index(originalQuery, " in ")
+			if startIndex < endIndex {
+				content = originalQuery[startIndex:endIndex]
+				content = strings.TrimSpace(content)
+			}
+		}
+
+		// Populate semanticOutput.TargetResource based on extracted info
+		if fileName != "" {
+			so.TargetResource.Type = "Filesystem::File"
+			so.TargetResource.Name = fileName
+			so.TargetResource.Properties = make(map[string]interface{})
+			if pathFromHeuristic != "" {
+				so.TargetResource.Properties["path"] = pathFromHeuristic
+			} else {
+				so.TargetResource.Properties["path"] = "./" // Default path
+			}
+			if content != "" {
+				so.TargetResource.Properties["content"] = content
+			}
+		}
+		if folderName != "" {
+			if so.TargetResource.Type == "" { // If not already set by file
+				so.TargetResource.Type = "Filesystem::Folder"
+			}
+			if so.TargetResource.Name == "" { // If not already set by file
+				so.TargetResource.Name = folderName
+			}
+			if so.TargetResource.Properties == nil {
+				so.TargetResource.Properties = make(map[string]interface{})
+			}
+			if pathFromHeuristic != "" {
+				so.TargetResource.Properties["path"] = pathFromHeuristic
+			} else if _, ok := so.TargetResource.Properties["path"]; !ok {
+				so.TargetResource.Properties["path"] = "./" // Default path
+			}
+
+			// If both file and folder are present, make the file a child of the folder
+			if fileName != "" && so.Operation == "CREATE_FILESYSTEM_OBJECTS" {
+				fileChild := context.TargetResource{
+					Type: "Filesystem::File",
+					Name: fileName,
+					Properties: map[string]interface{}{
+						"path": folderName,
+					},
+				}
+				so.TargetResource.Children = []context.TargetResource{fileChild}
+			}
+		}
+
+		// Default operation if not set but file/folder info is present
+		if so.Operation == "" && (fileName != "" || folderName != "") {
+			so.Operation = "UPDATE_FILE_CONTENT"
+			log.Printf("DEBUG: Heuristic set Operation to: %s (default for file/folder with no explicit operation)", so.Operation)
+		} else if so.Operation == "" {
+			log.Printf("Could not determine intent from query using heuristics for query: '%s'", originalQuery)
+			so = context.SemanticOutput{} // Will trigger 'no intent' warning
+		}
+
+		log.Printf("DEBUG: Final semanticOutput from heuristic: %+v", so)
+		return so, nil // Return the heuristically determined semanticOutput
+	}
+	return so, nil
+}
+func extractAfterKeyword(text, keyword string) string {
+	idx := strings.Index(text, keyword)
+	if idx == -1 {
+		return ""
+	}
+	extracted := text[idx+len(keyword):]
+	extracted = strings.TrimSpace(extracted)
+
+	// Remove surrounding quotes if present
+	if strings.HasPrefix(extracted, "'") && strings.HasSuffix(extracted, "'") {
+		extracted = strings.Trim(extracted, "'")
+	} else if strings.HasPrefix(extracted, "\"") && strings.HasSuffix(extracted, "\"") {
+		extracted = strings.Trim(extracted, "\"")
 	}
 
-	return intent, entities
+	// Take only the first "word" or quoted phrase
+	if strings.Contains(extracted, " ") && !strings.HasPrefix(extracted, "\"") && !strings.HasPrefix(extracted, "'") {
+		extracted = strings.Split(extracted, " ")[0]
+	}
+	return extracted
 }
 
-
 // performActionFromSemanticOutput interprets the predicted intent and entities to perform actions.
-func performActionFromSemanticOutput(intent string, entities []context.Entity, originalQuery string, predictedSentence string) {
+func performActionFromSemanticOutput(semanticOutput context.SemanticOutput, originalQuery string, predictedSentence string) {
+	intent := semanticOutput.Operation
+	entities := extractEntities(semanticOutput)
+
 	switch intent {
 	case "Create": // Handle "Create" as an alias for CREATE_FILESYSTEM_OBJECTS
 	case "CREATE_FILESYSTEM_OBJECTS":
 		var fileName, folderName string
+		// Prioritize entities from semanticOutput if available
 		for _, entity := range entities {
 			if entity.Type == "file_name" {
 				fileName = entity.Value
 			} else if entity.Type == "folder_name" {
 				folderName = entity.Value
+			} else if entity.Type == "target_resource_name" && semanticOutput.TargetResource.Type == "Filesystem::Folder" {
+				folderName = entity.Value
+			} else if entity.Type == "target_resource_name" && semanticOutput.TargetResource.Type == "Filesystem::File" {
+				fileName = entity.Value
+			} else if entity.Type == "child_path" { // Add this condition
+				folderName = entity.Value
 			}
 		}
 
-		// If fileName or folderName are still empty, try to extract them from the original query using heuristics
-		if fileName == "" || folderName == "" {
-			log.Println("Applying heuristic for file system object creation due to missing entities.")
-			// Extract folder name
-			folderIndex := strings.Index(originalQuery, "create folder")
-			if folderIndex != -1 {
-				remaining := originalQuery[folderIndex+len("create folder"):]
-				andIndex := strings.Index(remaining, " and add a file")
-				if andIndex != -1 {
-					folderName = strings.TrimSpace(remaining[:andIndex])
-				} else {
-					// If "and add a file" is not present, assume folder name is till the end
-					folderName = strings.TrimSpace(remaining)
+		// If entities are still missing, use the heuristic from the original query
+		if fileName == "" && semanticOutput.TargetResource.Children != nil && len(semanticOutput.TargetResource.Children) > 0 {
+			for _, child := range semanticOutput.TargetResource.Children {
+				if child.Type == "Filesystem::File" {
+					fileName = child.Name
+					break
 				}
 			}
-
-			// Extract file name
-			fileIndex := strings.Index(originalQuery, "add a file")
-			if fileIndex != -1 {
-				remaining := originalQuery[fileIndex+len("add a file"):]
-				fileName = strings.TrimSpace(remaining)
-			}
+		}
+		if folderName == "" && semanticOutput.TargetResource.Type == "Filesystem::Folder" {
+			folderName = semanticOutput.TargetResource.Name
 		}
 
 		if fileName != "" && folderName != "" {
@@ -269,24 +465,59 @@ func performActionFromSemanticOutput(intent string, entities []context.Entity, o
 		}
 
 	case "UPDATE_FILE_CONTENT":
-		var fileName, directory, content, contentType string
+		var fileName, content, contentType string
+		var filePath string
 		for _, entity := range entities {
 			if entity.Type == "file_name" {
 				fileName = entity.Value
-			} else if entity.Type == "directory" {
-				directory = entity.Value
-			} else if entity.Type == "content" {
-				content = entity.Value
+			} else if entity.Type == "content_type" {
+				contentType = entity.Value
+			} else if entity.Type == "target_resource_name" && semanticOutput.TargetResource.Type == "Filesystem::File" {
+				fileName = entity.Value
+			} else if entity.Type == "target_resource_directory" {
+				// This is now handled by semanticOutput.TargetResource.Properties["path"]
 			} else if entity.Type == "content_type" {
 				contentType = entity.Value
 			}
 		}
+		// Extract content from semanticOutput.TargetResource.Properties
+		if contentVal, ok := semanticOutput.TargetResource.Properties["content"]; ok {
+			if contentStr, isString := contentVal.(string); isString {
+				content = contentStr
+			}
+		}
+
+		// Fallback to original query heuristics if semanticOutput didn't provide enough info
+		if fileName == "" {
+			if strings.Contains(originalQuery, "update") {
+				fileName = extractAfterKeyword(originalQuery, "update")
+			} else if strings.Contains(originalQuery, "change the content of") {
+				fileName = extractAfterKeyword(originalQuery, "change the content of")
+			} else if strings.Contains(originalQuery, "append") {
+				fileName = extractAfterKeyword(originalQuery, "append")
+			}
+		}
+		// Extract content from semanticOutput.TargetResource.Properties
+		if contentVal, ok := semanticOutput.TargetResource.Properties["content"]; ok {
+			if contentStr, isString := contentVal.(string); isString {
+				content = contentStr
+			}
+		}
+		if contentType == "" {
+			if strings.Contains(originalQuery, "as") {
+				contentType = extractAfterKeyword(originalQuery, "as")
+			}
+		}
 
 		if fileName != "" {
-			if directory == "" {
-				directory = "."
+			// Determine the directory from semanticOutput.TargetResource.Properties["path"]
+			dir := "."
+			if pathVal, ok := semanticOutput.TargetResource.Properties["path"]; ok {
+				if pathStr, isString := pathVal.(string); isString {
+					dir = pathStr
+				}
 			}
-			filePath := fmt.Sprintf("%s/%s", directory, fileName)
+			filePath = fmt.Sprintf("%s/%s", dir, fileName)
 			var fileContent []byte
 
 			if contentType == "webserver_go" {
@@ -309,13 +540,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }`
 				fileContent = []byte(webserverCode)
 			} else if content != "" {
-				// If content is provided and not a specific content_type, assume it's base64 encoded
-				decodedContent, err := base64.StdEncoding.DecodeString(content)
-				if err != nil {
-					log.Printf("Error decoding base64 content for file %s: %v", filePath, err)
-					return
-				}
-				fileContent = decodedContent
+				// If content is provided and not a specific content_type, assume it's plain text
+				fileContent = []byte(content)
 			} else {
 				log.Printf("UPDATE_FILE_CONTENT intent received for %s, but no content or content_type specified.", filePath)
 				return
@@ -328,7 +554,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("Updated file: %s", filePath)
 		} else {
-			log.Printf("UPDATE_FILE_CONTENT intent received, but file_name or directory is missing.")
+			log.Printf("UPDATE_FILE_CONTENT intent received, but file_name is missing.")
 		}
 
 	default:
