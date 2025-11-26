@@ -14,18 +14,18 @@ import (
 	"sort"
 	"strings"
 
-	"nlptagger/neural/nn/dr"
-	"nlptagger/neural/nn/ner"
-	"nlptagger/neural/nn/phrase"
-	"nlptagger/neural/nn/pos"
-	"nlptagger/neural/nnu"
-	"nlptagger/neural/nnu/calc"
-	"nlptagger/neural/nnu/contextvector"
-	"nlptagger/neural/nnu/gobs"
-	"nlptagger/neural/nnu/predict"
-	"nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/nnu/word2vec"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/neural/nn/dr"
+	"github.com/zendrulat/nlptagger/neural/nn/ner"
+	"github.com/zendrulat/nlptagger/neural/nn/phrase"
+	"github.com/zendrulat/nlptagger/neural/nn/pos"
+	"github.com/zendrulat/nlptagger/neural/nnu"
+	"github.com/zendrulat/nlptagger/neural/nnu/calc"
+	"github.com/zendrulat/nlptagger/neural/nnu/contextvector"
+	"github.com/zendrulat/nlptagger/neural/nnu/gobs"
+	"github.com/zendrulat/nlptagger/neural/nnu/predict"
+	"github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 type TrainingDataJSON struct {
@@ -285,7 +285,7 @@ func JsonModelTrain(sw2v *word2vec.SimpleWord2Vec, md *nnu.SimpleNN) (ContextRel
 		context := contextvector.GetContextVector(sentence, md, sw2v) // Check usage in updated context
 		md.Outputs = sw2v.ForwardPass(strings.Fields(sentence))
 		loss := sw2v.CalculateLoss(md.Outputs, context)
-		sw2v.Backpropagate(md.Outputs, context)
+		sw2v.Backpropagate(md.Outputs, context, sw2v.LearningRate)
 		// Print sentence and its corresponding generated context embedding
 		fmt.Printf("Iteration %d: Sentence: %s: Loss: %f\n", sw2v.Epochs, sentence, loss)
 
@@ -317,8 +317,8 @@ func JsonModelTrain(sw2v *word2vec.SimpleWord2Vec, md *nnu.SimpleNN) (ContextRel
 	}
 
 	// Add the UNK token to the vocabulary if it doesn't exist
-	if _, ok := sw2v.Vocabulary[sw2v.UNKToken]; !ok {
-		sw2v.Vocabulary[sw2v.UNKToken] = len(sw2v.Vocabulary)
+	if _, ok := sw2v.Vocabulary[word2vec.UNKToken]; !ok {
+		sw2v.Vocabulary[word2vec.UNKToken] = len(sw2v.Vocabulary)
 		sw2v.WordVectors[len(sw2v.Vocabulary)-1] = make([]float64, sw2v.VectorSize)
 		// Initialize the UNK token vector (e.g., with random values)
 		for i := 0; i < sw2v.VectorSize; i++ {

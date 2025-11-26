@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"os"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {
@@ -209,59 +209,99 @@ func (c *LSTMCell) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 
 // Backward performs the backward pass for the LSTMCell.
 func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
-	// Gradients for outputs
-	gradOt := NewTensor(c.ot.Shape, make([]float64, len(c.ot.Data)), false)
-	gradCtTanh := NewTensor(c.ct.Shape, make([]float64, len(c.ct.Data)), false)
-	for i := range gradHt.Data {
-		ct_tanh_val, _ := c.ct.Tanh()
-		gradOt.Data[i] = gradHt.Data[i] * ct_tanh_val.Data[i]
-		gradCtTanh.Data[i] = gradHt.Data[i] * c.ot.Data[i]
+	// gradHt is dL/dht, gradCt is dL/dct from next timestep
+
+	// 1. dL/dot and dL/d(tanh(ct))
+	// ht = ot * tanh(ct)
+	ct_tanh, err := c.ct.Tanh()
+	if err != nil {
+		return err
+	}
+	gradOt, err := gradHt.Mul(ct_tanh)
+	if err != nil {
+		return err
+	}
+	grad_ct_tanh, err := gradHt.Mul(c.ot)
+	if err != nil {
+		return err
 	}
 
-	// Gradient for ct
-	gradCt_from_ht := NewTensor(c.ct.Shape, make([]float64, len(c.ct.Data)), false)
-	for i := range gradCtTanh.Data {
-		ct_tanh_val, _ := c.ct.Tanh()
-		gradCt_from_ht.Data[i] = gradCtTanh.Data[i] * (1 - math.Pow(ct_tanh_val.Data[i], 2))
+	// 2. dL/dct (total)
+	// tanh'(x) = 1 - tanh(x)^2
+	grad_ct_from_ht, err := grad_ct_tanh.OneMinusSquareTanh(c.ct)
+	if err != nil {
+		return err
 	}
-	gradCt.Add(gradCt_from_ht)
-
-	// Gradients for gates
-	gradFt := NewTensor(c.ft.Shape, make([]float64, len(c.ft.Data)), false)
-	gradIt := NewTensor(c.it.Shape, make([]float64, len(c.it.Data)), false)
-	gradCct := NewTensor(c.cct.Shape, make([]float64, len(c.cct.Data)), false)
-	for i := range gradCt.Data {
-		gradFt.Data[i] = gradCt.Data[i] * c.PrevCell.Data[i]
-		gradIt.Data[i] = gradCt.Data[i] * c.cct.Data[i]
-		gradCct.Data[i] = gradCt.Data[i] * c.it.Data[i]
+	gradCt, err = gradCt.Add(grad_ct_from_ht)
+	if err != nil {
+		return err
 	}
 
-	// Backprop through activations
-	gradOt_linear := NewTensor(gradOt.Shape, make([]float64, len(gradOt.Data)), false)
-	for i := range gradOt.Data {
-		gradOt_linear.Data[i] = gradOt.Data[i] * c.ot.Data[i] * (1 - c.ot.Data[i])
+	// 3. dL/d(prev_c), dL/dft, dL/dit, dL/dcct
+	// ct = ft * prev_c + it * cct
+	gradPrevCell, err := gradCt.Mul(c.ft)
+	if err != nil {
+		return err
 	}
-	gradFt_linear := NewTensor(gradFt.Shape, make([]float64, len(gradFt.Data)), false)
-	for i := range gradFt.Data {
-		gradFt_linear.Data[i] = gradFt.Data[i] * c.ft.Data[i] * (1 - c.ft.Data[i])
+	gradFt, err := gradCt.Mul(c.PrevCell)
+	if err != nil {
+		return err
 	}
-	gradIt_linear := NewTensor(gradIt.Shape, make([]float64, len(gradIt.Data)), false)
-	for i := range gradIt.Data {
-		gradIt_linear.Data[i] = gradIt.Data[i] * c.it.Data[i] * (1 - c.it.Data[i])
+	gradIt, err := gradCt.Mul(c.cct)
+	if err != nil {
+		return err
 	}
-	gradCct_linear := NewTensor(gradCct.Shape, make([]float64, len(gradCct.Data)), false)
-	for i := range gradCct.Data {
-		gradCct_linear.Data[i] = gradCct.Data[i] * (1 - math.Pow(c.cct.Data[i], 2))
+	gradCct, err := gradCt.Mul(c.it)
+	if err != nil {
+		return err
 	}
 
-	// Gradients for weights and biases
-	combined, _ := Concat([]*Tensor{c.InputTensor, c.PrevHidden}, 1)
-	combinedT, _ := combined.Transpose(0, 1)
+	// 4. Backprop through activations for gates
+	// sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+	gradOt_linear, err := gradOt.SigmoidBackward(c.ot)
+	if err != nil {
+		return err
+	}
+	gradFt_linear, err := gradFt.SigmoidBackward(c.ft)
+	if err != nil {
+		return err
+	}
+	gradIt_linear, err := gradIt.SigmoidBackward(c.it)
+	if err != nil {
+		return err
+	}
+	// tanh'(x) = 1 - tanh(x)^2
+	gradCct_linear, err := gradCct.OneMinusSquareTanh(c.cct)
+	if err != nil {
+		return err
+	}
 
-	gradWf, _ := combinedT.MatMul(gradFt_linear)
-	gradWi, _ := combinedT.MatMul(gradIt_linear)
-	gradWc, _ := combinedT.MatMul(gradCct_linear)
-	gradWo, _ := combinedT.MatMul(gradOt_linear)
+	// 5. Gradients for weights and biases
+	combined, err := Concat([]*Tensor{c.InputTensor, c.PrevHidden}, 1)
+	if err != nil {
+		return err
+	}
+	combinedT, err := combined.Transpose(0, 1)
+	if err != nil {
+		return err
+	}
+
+	gradWf, err := combinedT.MatMul(gradFt_linear)
+	if err != nil {
+		return err
+	}
+	gradWi, err := combinedT.MatMul(gradIt_linear)
+	if err != nil {
+		return err
+	}
+	gradWc, err := combinedT.MatMul(gradCct_linear)
+	if err != nil {
+		return err
+	}
+	gradWo, err := combinedT.MatMul(gradOt_linear)
+	if err != nil {
+		return err
+	}
 
 	gradBf, err := gradFt_linear.Sum(0)
 	if err != nil {
@@ -280,17 +320,41 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 		return err
 	}
 
-	// Accumulate gradients
-	c.Wf.Grad.Add(gradWf)
-	c.Wi.Grad.Add(gradWi)
-	c.Wc.Grad.Add(gradWc)
-	c.Wo.Grad.Add(gradWo)
-	c.Bf.Grad.Add(gradBf)
-	c.Bi.Grad.Add(gradBi)
-	c.Bc.Grad.Add(gradBc)
-	c.Bo.Grad.Add(gradBo)
+	// 6. Accumulate gradients for weights and biases
+	if c.Wf.Grad == nil { c.Wf.Grad = NewTensor(c.Wf.Shape, nil, false) }
+	c.Wf.Grad, err = c.Wf.Grad.Add(gradWf)
+	if err != nil { return err }
 
-	// Gradients for inputs
+	if c.Wi.Grad == nil { c.Wi.Grad = NewTensor(c.Wi.Shape, nil, false) }
+	c.Wi.Grad, err = c.Wi.Grad.Add(gradWi)
+	if err != nil { return err }
+
+	if c.Wc.Grad == nil { c.Wc.Grad = NewTensor(c.Wc.Shape, nil, false) }
+	c.Wc.Grad, err = c.Wc.Grad.Add(gradWc)
+	if err != nil { return err }
+
+	if c.Wo.Grad == nil { c.Wo.Grad = NewTensor(c.Wo.Shape, nil, false) }
+	c.Wo.Grad, err = c.Wo.Grad.Add(gradWo)
+	if err != nil { return err }
+
+	if c.Bf.Grad == nil { c.Bf.Grad = NewTensor(c.Bf.Shape, nil, false) }
+	c.Bf.Grad, err = c.Bf.Grad.Add(gradBf)
+	if err != nil { return err }
+
+	if c.Bi.Grad == nil { c.Bi.Grad = NewTensor(c.Bi.Shape, nil, false) }
+	c.Bi.Grad, err = c.Bi.Grad.Add(gradBi)
+	if err != nil { return err }
+
+	if c.Bc.Grad == nil { c.Bc.Grad = NewTensor(c.Bc.Shape, nil, false) }
+	c.Bc.Grad, err = c.Bc.Grad.Add(gradBc)
+	if err != nil { return err }
+
+	if c.Bo.Grad == nil { c.Bo.Grad = NewTensor(c.Bo.Shape, nil, false) }
+	c.Bo.Grad, err = c.Bo.Grad.Add(gradBo)
+	if err != nil { return err }
+
+
+	// 7. Gradients for combined input
 	transposedWf, err := c.Wf.Transpose(0, 1)
 	if err != nil {
 		return err
@@ -299,7 +363,6 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	if err != nil {
 		return err
 	}
-
 	transposedWi, err := c.Wi.Transpose(0, 1)
 	if err != nil {
 		return err
@@ -308,7 +371,6 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	if err != nil {
 		return err
 	}
-
 	transposedWc, err := c.Wc.Transpose(0, 1)
 	if err != nil {
 		return err
@@ -317,7 +379,6 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 	if err != nil {
 		return err
 	}
-
 	transposedWo, err := c.Wo.Transpose(0, 1)
 	if err != nil {
 		return err
@@ -327,40 +388,55 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 		return err
 	}
 
-	gradCombined, _ := gradCombined_f.Add(gradCombined_i)
-	gradCombined, _ = gradCombined.Add(gradCombined_c)
-	gradCombined, _ = gradCombined.Add(gradCombined_o)
+	gradCombined, err := gradCombined_f.Add(gradCombined_i)
+	if err != nil {
+		return err
+	}
+	gradCombined, err = gradCombined.Add(gradCombined_c)
+	if err != nil {
+		return err
+	}
+	gradCombined, err = gradCombined.Add(gradCombined_o)
+	if err != nil {
+		return err
+	}
 
-	// Split gradCombined into gradInput and gradPrevHidden
-	gradInput, _ := gradCombined.Slice(1, 0, c.InputSize)
-	gradPrevHidden, _ := gradCombined.Slice(1, c.InputSize, c.InputSize+c.HiddenSize)
+	// 8. Split gradCombined into gradInput and gradPrevHidden
+	gradInput, err := gradCombined.Slice(1, 0, c.InputSize)
+	if err != nil {
+		return err
+	}
+	gradPrevHidden, err := gradCombined.Slice(1, c.InputSize, c.InputSize+c.HiddenSize)
+	if err != nil {
+		return err
+	}
 
-	// Gradient for prevCell
-	gradPrevCell, _ := gradCt.Mul(c.ft)
-
-	// Accumulate gradients for inputs
+	// 9. Accumulate gradients for inputs
 	if c.InputTensor.RequiresGrad {
 		if c.InputTensor.Grad == nil {
 			c.InputTensor.Grad = NewTensor(c.InputTensor.Shape, make([]float64, len(c.InputTensor.Data)), false)
 		}
-		for i := range c.InputTensor.Grad.Data {
-			c.InputTensor.Grad.Data[i] += gradInput.Data[i]
+		c.InputTensor.Grad, err = c.InputTensor.Grad.Add(gradInput)
+		if err != nil {
+			return err
 		}
 	}
 	if c.PrevHidden.RequiresGrad {
 		if c.PrevHidden.Grad == nil {
 			c.PrevHidden.Grad = NewTensor(c.PrevHidden.Shape, make([]float64, len(c.PrevHidden.Data)), false)
 		}
-		for i := range c.PrevHidden.Grad.Data {
-			c.PrevHidden.Grad.Data[i] += gradPrevHidden.Data[i]
+		c.PrevHidden.Grad, err = c.PrevHidden.Grad.Add(gradPrevHidden)
+		if err != nil {
+			return err
 		}
 	}
 	if c.PrevCell.RequiresGrad {
 		if c.PrevCell.Grad == nil {
 			c.PrevCell.Grad = NewTensor(c.PrevCell.Shape, make([]float64, len(c.PrevCell.Data)), false)
 		}
-		for i := range c.PrevCell.Grad.Data {
-			c.PrevCell.Grad.Data[i] += gradPrevCell.Data[i]
+		c.PrevCell.Grad, err = c.PrevCell.Grad.Add(gradPrevCell)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -443,17 +519,34 @@ func (l *LSTM) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 	return currentHidden, currentCell, nil // Return the final hidden and cell states
 }
 
-// Backward performs the backward pass for the LSTM.
-func (l *LSTM) Backward(gradHt, gradCt *Tensor) error {
+// Backward performs the backward pass for the entire LSTM layer.
+func (l *LSTM) Backward(gradNextHidden, gradNextCell *Tensor) error {
+	gradH := gradNextHidden
+	gradC := gradNextCell
+	var err error
+
 	for i := l.NumLayers - 1; i >= 0; i-- {
-		err := l.Cells[i][0].Backward(gradHt, gradCt)
+		cell := l.Cells[i][0] // Assuming one cell per layer
+
+		// The backward pass for the cell computes gradients for its inputs.
+		err = cell.Backward(gradH, gradC)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to backpropagate through LSTM cell in layer %d: %w", i, err)
 		}
-		// Gradients for the previous layer's hidden and cell states
-		// are now in the Grad fields of the input tensors of the current layer's cell.
-		gradHt = l.Cells[i][0].PrevHidden.Grad
-		gradCt = l.Cells[i][0].PrevCell.Grad
+
+		// The input to this layer (for i>0) was the hidden state of the previous layer.
+		// The gradient for the output of the previous layer is the sum of the gradients
+		// for the 'input' and 'prevHidden' of this layer's cell.
+		if i > 0 {
+			// cell.InputTensor.Grad is grad for layerOutput
+			// cell.PrevHidden.Grad is grad for currentHidden
+			// cell.PrevCell.Grad is grad for currentCell
+			gradH, err = cell.InputTensor.Grad.Add(cell.PrevHidden.Grad)
+			if err != nil {
+				return err
+			}
+			gradC = cell.PrevCell.Grad
+		}
 	}
 	return nil
 }

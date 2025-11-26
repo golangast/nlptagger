@@ -7,7 +7,7 @@ import (
 	"math"
 	"math/rand"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {

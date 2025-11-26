@@ -300,6 +300,6 @@
       "folder_name": "jack",
       "server_name": "jill"
     },
-    "description": "Creates a folder named jack and a Go webserver named jill inside it."
+    "description": "Creates a folder named jack and a Go webserver named jill inside the folder."
   }
 ]

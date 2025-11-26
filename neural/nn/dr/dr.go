@@ -5,9 +5,9 @@ package dr
 import (
 	"fmt"
 
-	"nlptagger/neural/nn/ner"
-	"nlptagger/neural/nnu"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/neural/nn/ner"
+	"github.com/zendrulat/nlptagger/neural/nnu"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 type SimpleNNDR struct {

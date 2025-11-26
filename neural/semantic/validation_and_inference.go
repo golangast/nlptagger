@@ -7,10 +7,10 @@ func ValidateAndInferProperties(output *SemanticOutput) error {
 	}
 
 	// First, infer properties
-	InferProperties(&output.TargetResource)
+	InferProperties(output.TargetResource)
 
 	// Then, validate the resource with inferred properties
-	if err := ValidateResource(&output.TargetResource, output.Context); err != nil {
+	if err := ValidateResource(output.TargetResource, output.Context); err != nil {
 		return err
 	}
 

@@ -1,7 +1,7 @@
 package moe
 
 import (
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 // Expert is an interface for an expert network in a Mixture of Experts model.

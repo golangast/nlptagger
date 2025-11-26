@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"nlptagger/neural/nnu/seq2seq"
-	"nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/nnu/seq2seq"
+	"github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 func main() {

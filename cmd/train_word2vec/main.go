@@ -4,11 +4,11 @@ import (
 	"flag"
 	"log"
 
-	"nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
 )
 
 var (
-	dimModel = flag.Int("dim", 25, "Dimension of the model")
+	dimModel = flag.Int("dim", 64, "Dimension of the model")
 )
 
 func main() {

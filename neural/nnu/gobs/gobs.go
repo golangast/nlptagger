@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"nlptagger/neural/nnu"
+	"github.com/zendrulat/nlptagger/neural/nnu"
 )
 
 func SaveModelToGOB(model *nnu.SimpleNN, filePath string) error {

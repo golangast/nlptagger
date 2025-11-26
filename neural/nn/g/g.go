@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nlptagger/tagger"
+	"github.com/zendrulat/nlptagger/tagger"
 )
 
 type ANN struct {

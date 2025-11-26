@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	mainvocab "nlptagger/neural/nnu/vocab"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
 )
 
 // SetupVocabulary attempts to load a vocabulary from vocabPath, and if it fails,

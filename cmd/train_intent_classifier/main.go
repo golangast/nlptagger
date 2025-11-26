@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	moemodel "nlptagger/neural/moe/model"
-	"nlptagger/neural/nn"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	moemodel "github.com/zendrulat/nlptagger/neural/moe/model"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 // TrainingExample represents a single training example with input text and parent/child intents.

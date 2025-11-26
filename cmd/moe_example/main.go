@@ -7,8 +7,8 @@ import (
 	"time"
 
 	
-	. "nlptagger/neural/moe"
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/moe"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 

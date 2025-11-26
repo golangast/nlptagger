@@ -2,23 +2,28 @@ package parser
 
 import (
 	"fmt"
-	"strings"
+	"log"
 
-	"nlptagger/neural/semantic"
-	"nlptagger/neural/tokenizer"
-	"nlptagger/neural/workflow"
-	"nlptagger/tagger/nertagger"
-	"nlptagger/tagger/postagger"
+	"github.com/zendrulat/nlptagger/neural/semantic"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/workflow"
+	"github.com/zendrulat/nlptagger/tagger/nertagger"
+	"github.com/zendrulat/nlptagger/tagger/postagger"
 )
 
 // Parser struct holds the necessary components for parsing.
 type Parser struct {
 	// Add necessary components like tokenizer, POS tagger, NER, etc.
+	ruleEngine *ParsingRuleEngine
 }
 
 // NewParser creates a new Parser.
 func NewParser() *Parser {
-	return &Parser{}
+	re := NewParsingRuleEngine()
+	re.RegisterDefaultParsingRules()
+	return &Parser{
+		ruleEngine: re,
+	}
 }
 
 // Parse takes a natural language query and returns a structured workflow.
@@ -31,6 +36,10 @@ func (p *Parser) Parse(query string) (*workflow.Workflow, error) { // Changed re
 
 	// 3. Perform Named Entity Recognition (NER).
 	nerTags := p.nerTag(tokens, posTags)
+
+	log.Printf("Tokens: %v", tokens)
+	log.Printf("POS Tags: %v", posTags)
+	log.Printf("NER Tags: %v", nerTags)
 
 	// 4. Map tokens, POS tags, and NER tags to semantic output.
 	semanticOutput, err := p.mapToSemanticOutput(tokens, posTags, nerTags)
@@ -66,228 +75,55 @@ func (p *Parser) nerTag(tokens []string, posTags []string) []string {
 
 func (p *Parser) mapToSemanticOutput(tokens, posTags, nerTags []string) (*semantic.SemanticOutput, error) {
 	output := &semantic.SemanticOutput{}
-
-	// For demonstration, set a default UserRole. In a real app, this would come from auth.
 	output.Context.UserRole = "" // Default to guest for policy testing
 
 	var folderResource *semantic.Resource
 	var webserverResource *semantic.Resource
 	var fileResource *semantic.Resource
+	var lastFolderResource *semantic.Resource
 
-	lastObjectType := ""
+	// lastObjectType is no longer needed as rules will directly set resource types
+	// var lastObjectType string
+	var lastCreatedResourceName string
+	log.Print(lastCreatedResourceName)
+	var lastProcessedResource *semantic.Resource // Track the actual resource object
 
-	for i, token := range tokens {
-		nerTag := nerTags[i]
+	expectingDependencyTarget := false
+	expectingDependencySource := false
+	dependencyType := "" // "THEN", "AFTER", "BEFORE"
 
-		switch nerTag {
-		case "COMMAND":
-			if strings.ToLower(token) == "add" {
-				output.Operation = "CREATE"
-			} else {
-				output.Operation = strings.ToUpper(token)
-			}
-		case "OBJECT_TYPE":
-			lastObjectType = token
-			switch token {
-			case "webserver":
-				webserverResource = &semantic.Resource{Type: "Deployment::GoWebserver", Properties: map[string]interface{}{"port": 8080, "runtime_image": "golang:latest"}}
-			case "folder":
-				folderResource = &semantic.Resource{Type: "Filesystem::Folder", Properties: map[string]interface{}{"permissions": 0755}}
-			case "file":
-				fileResource = &semantic.Resource{Type: "Filesystem::File"}
-			}
-		case "NAME":
-			if lastObjectType == "folder" && folderResource != nil {
-				folderResource.Name = token
-			} else if lastObjectType == "webserver" && webserverResource != nil {
-				webserverResource.Name = token
-			} else if lastObjectType == "file" && fileResource != nil {
-				fileResource.Name = token
-			}
-		case "FILE_CONTENT_TYPE":
-			if fileResource != nil {
-				fileResource.Content = `package main
+	// Helper to get resource name from token and type - this is now in rules.go
+	// getResourceName := func(idx int, objType string) string { ... }
 
-import (
-	"fmt"
-	"net/http"
-)
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from handler!")
-}
-
-func main() {
-	http.HandleFunc("/", handler)
-	http.ListenAndServe(":8080", nil)
-}`
-			}
+	for i := 0; i < len(tokens); i++ {
+		applied, tokensConsumed, err := p.ruleEngine.ApplyRules(tokens, posTags, nerTags, i, output,
+			&fileResource, &folderResource, &webserverResource, &lastFolderResource,
+			&lastProcessedResource, &expectingDependencyTarget, &expectingDependencySource, &dependencyType)
+		if err != nil {
+			return nil, err
 		}
+		if applied {
+			i += tokensConsumed - 1 // Adjust index by tokens consumed by the rule
+			continue
+		}
+
+		// The remaining heuristic-based logic will be gradually moved into rules.
+		// For now, it's removed from here as the rule engine is the primary mechanism.
+		// If no rule applies, we simply move to the next token.
 	}
 
-	// Heuristic to find folder name if NER failed
-	if folderResource != nil && folderResource.Name == "" {
-		for i, token := range tokens {
-			if token == "folder" {
-				// Heuristic 1: folder called <name> or folder named <name>
-				if i+2 < len(tokens) && (tokens[i+1] == "called" || tokens[i+1] == "named") {
-					folderResource.Name = tokens[i+2]
-					break
-				}
-				// Heuristic 2: <name> folder
-				if i > 0 {
-					prevToken := tokens[i-1]
-					// Avoid grabbing keywords
-					if prevToken != "a" && prevToken != "the" && prevToken != "create" {
-						folderResource.Name = prevToken
-						break
-					}
-				}
-				// Heuristic 3: folder <name>
-				if i+1 < len(tokens) {
-					nextToken := tokens[i+1]
-					if nextToken != "with" && nextToken != "and" && nextToken != "called" && nextToken != "named" && nextToken != "in" {
-						folderResource.Name = nextToken
-						break
-					}
-				}
-				// Heuristic 4: folder in <name>
-				if i+1 < len(tokens) && tokens[i+1] == "in" {
-					if i+2 < len(tokens) {
-						folderResource.Name = tokens[i+2]
-						break
-					}
-				}
-			}
-		}
-	}
+	log.Printf("Before final target assignment, output.TargetResource: %+v", output.TargetResource)
 
-	// Heuristic to find webserver name if NER failed
-	if webserverResource != nil && webserverResource.Name == "" {
-		for i, token := range tokens {
-			if token == "webserver" {
-				// Heuristic 1: webserver called <name> or webserver named <name>
-				if i+2 < len(tokens) && (tokens[i+1] == "called" || tokens[i+1] == "named") {
-					webserverResource.Name = tokens[i+2]
-					break
-				}
-				// Heuristic 2: webserver <name>
-				if i+1 < len(tokens) {
-					nextToken := tokens[i+1]
-					if nextToken != "with" && nextToken != "and" {
-						webserverResource.Name = nextToken
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Heuristic for file name if NER failed
-	if fileResource != nil && fileResource.Name == "" {
-		for i, token := range tokens {
-			if token == "file" {
-				// Heuristic 1: file called <name> or file named <name>
-				if i+2 < len(tokens) && (tokens[i+1] == "called" || tokens[i+1] == "named") {
-					fileResource.Name = tokens[i+2]
-					break
-				}
-				// Heuristic 2: <name> file
-				if i > 0 {
-					prevToken := tokens[i-1]
-					// Avoid grabbing keywords
-					if prevToken != "a" && prevToken != "the" && prevToken != "create" && prevToken != "go" {
-						fileResource.Name = prevToken
-						break
-					}
-				}
-				// Heuristic 3: file <name>
-				if i+1 < len(tokens) {
-					nextToken := tokens[i+1]
-					if nextToken != "with" && nextToken != "and" && nextToken != "called" && nextToken != "named" && nextToken != "in" {
-						fileResource.Name = nextToken
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Handle "go file" case
-	if fileResource != nil && fileResource.Name != "" {
-		isGoFile := false
-		for i, token := range tokens {
-			if token == "go" && i+1 < len(tokens) && tokens[i+1] == "file" {
-				isGoFile = true
-				break
-			}
-		}
-
-		if isGoFile && !strings.HasSuffix(fileResource.Name, ".go") {
-			fileResource.Name += ".go"
-		}
-	}
-
-	// Heuristic for parent folder
-	var parentFolder *semantic.Resource
-	for i, token := range tokens {
-		if token == "in" {
-			// Check for "in the folder <name>"
-			if i+3 < len(tokens) && tokens[i+1] == "the" && tokens[i+2] == "folder" {
-				parentName := tokens[i+3]
-				if parentName != "with" && parentName != "and" {
-					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
-					break
-				}
-			} else if i+2 < len(tokens) && tokens[i+1] == "folder" { // Check for "in folder <name>"
-				parentName := tokens[i+2]
-				if parentName != "with" && parentName != "and" {
-					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
-					break
-				}
-			} else if i+1 < len(tokens) { // Check for "in <name>" (less specific, but might be needed)
-				parentName := tokens[i+1]
-				if parentName != "with" && parentName != "and" && parentName != "folder" && parentName != "the" { // Added "the" to exclusion
-					parentFolder = &semantic.Resource{Type: "Filesystem::Folder", Name: parentName, Properties: map[string]interface{}{"permissions": 0755}}
-					break
-				}
-			}
-		}
-	}
-
-	// Establish parent-child relationship
-	if parentFolder != nil {
-		if folderResource != nil && folderResource.Name != "" {
-			if webserverResource != nil {
-				folderResource.Children = append(folderResource.Children, *webserverResource)
-			}
-			if fileResource != nil {
-				folderResource.Children = append(folderResource.Children, *fileResource)
-			}
-			parentFolder.Children = append(parentFolder.Children, *folderResource)
-			output.TargetResource = *parentFolder
-		} else {
-			output.TargetResource = *parentFolder
-			if webserverResource != nil {
-				output.TargetResource.Children = append(output.TargetResource.Children, *webserverResource)
-			}
-			if fileResource != nil {
-				output.TargetResource.Children = append(output.TargetResource.Children, *fileResource)
-			}
-		}
-	} else if folderResource != nil && folderResource.Name != "" {
-		output.TargetResource = *folderResource
-		if webserverResource != nil {
-			output.TargetResource.Children = append(output.TargetResource.Children, *webserverResource)
-		}
-		if fileResource != nil {
-			output.TargetResource.Children = append(output.TargetResource.Children, *fileResource)
-		}
+	var target *semantic.Resource
+	if fileResource != nil {
+		target = fileResource
+	} else if folderResource != nil {
+		target = folderResource
 	} else if webserverResource != nil {
-		output.TargetResource = *webserverResource
-	} else if fileResource != nil {
-		output.TargetResource = *fileResource
+		target = webserverResource
 	}
+	output.TargetResource = target
 
+	log.Printf("SemanticOutput TargetResource Type before returning: %s", output.TargetResource.Type)
 	return output, nil
 }

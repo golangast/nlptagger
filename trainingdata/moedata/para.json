@@ -109,7 +109,7 @@
         "parent_intent": "version_control",
         "child_intent": "clone"
     },
-    .{
+    {
         "input_text": "merge the feature branch",
         "parent_intent": "version_control",
         "child_intent": "merge"

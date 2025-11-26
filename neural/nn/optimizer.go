@@ -3,7 +3,7 @@ package nn
 import (
 	"math"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 // Optimizer interface defines the contract for optimizers.

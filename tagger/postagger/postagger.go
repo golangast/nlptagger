@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"nlptagger/tagger/stem"
-	"nlptagger/tagger/tag"
+	"github.com/zendrulat/nlptagger/tagger/stem"
+	"github.com/zendrulat/nlptagger/tagger/tag"
 )
 
 var posTags = map[string]string{
@@ -49,7 +49,7 @@ var posTags = map[string]string{
 	`\b(?:[Aa]fter|[Aa]s|[Bb]ecause|[Bb]efore|[Ii]f|[Ss]ince|[Uu]ntil|[Ww]hile|[Aa]lthough|[Tt]hough)\b`:             "IN", // Subordinating conjunction
 	`\b(?:to|from|in|on|at|by|with|about|against|between|into|through|during|before|after|above|below|under|over)\b`: "IN", // Preposition
 	`\b(?:[Oo]h|[Aa]h|[Ww]ow|[Uu]h|[Hh]uh|[Yy]eah|[Nn]o|[Pp]lease|[Tt]hanks)\b`:                                      "UH", // Interjection
-	`[,.;:!?]`: ".",     // Punctuation
+	`\b\w+\.\w+\b`: ".",
 	`[\(\)]`:   "-LRB-", // Left/Right Round Bracket
 	`[\{\}]`:   "-LCB-", // Left/Right Curly Bracket
 	`[\[\]]`:   "-LSB-", // Left/Right Square Bracket

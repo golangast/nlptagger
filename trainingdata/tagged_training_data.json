@@ -1,0 +1,266 @@
+[
+  {
+    "query": "in a new folder jack, create a go webserver jill",
+    "intent": "Create",
+    "tokens": [
+      "in",
+      "a",
+      "new",
+      "folder",
+      "jack",
+      ",",
+      "create",
+      "a",
+      "go",
+      "webserver",
+      "jill"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "create a folder jic in folder jack",
+    "intent": "Create",
+    "tokens": [
+      "create",
+      "a",
+      "folder",
+      "jic",
+      "in",
+      "folder",
+      "jack"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "B-resource_name",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "create a folder named foo",
+    "intent": "Create",
+    "tokens": [
+      "create",
+      "a",
+      "folder",
+      "named",
+      "foo"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name"
+    ]
+  },
+  {
+    "query": "create a directory called my_new_folder",
+    "intent": "Create",
+    "tokens": [
+      "create",
+      "a",
+      "directory",
+      "called",
+      "my_new_folder"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name"
+    ]
+  },
+  {
+    "query": "make a new directory named another_dir",
+    "intent": "Create",
+    "tokens": [
+      "make",
+      "a",
+      "new",
+      "directory",
+      "named",
+      "another_dir"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name"
+    ]
+  },
+  {
+    "query": "in the folder my_app, create a directory called assets",
+    "intent": "Create",
+    "tokens": [
+      "in",
+      "the",
+      "folder",
+      "my_app",
+      ",",
+      "create",
+      "a",
+      "directory",
+      "called",
+      "assets"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name"
+    ]
+  },
+  {
+    "query": "create a file named 'test.txt'",
+    "intent": "Create",
+    "tokens": [
+      "create",
+      "a",
+      "file",
+      "named",
+      "'test.txt'"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "delete the file 'test.txt'",
+    "intent": "Delete",
+    "tokens": [
+      "delete",
+      "the",
+      "file",
+      "'test.txt'"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "list all files in the current directory",
+    "intent": "Read",
+    "tokens": [
+      "list",
+      "all",
+      "files",
+      "in",
+      "the",
+      "current",
+      "directory"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "create folder jim and add webserver jill in it",
+    "intent": "Create",
+    "tokens": [
+      "create",
+      "folder",
+      "jim",
+      "and",
+      "add",
+      "webserver",
+      "jill",
+      "in",
+      "it"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "B-resource_name",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "add folder handler in jim with file handler.go",
+    "intent": "Create",
+    "tokens": [
+      "add",
+      "folder",
+      "handler",
+      "in",
+      "jim",
+      "with",
+      "file",
+      "handler.go"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name",
+      "O",
+      "O",
+      "O"
+    ]
+  },
+  {
+    "query": "add a webserver to the folder jim",
+    "intent": "Create",
+    "tokens": [
+      "add",
+      "a",
+      "webserver",
+      "to",
+      "the",
+      "folder",
+      "jim"
+    ],
+    "tags": [
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "O",
+      "B-resource_name"
+    ]
+  }
+]
