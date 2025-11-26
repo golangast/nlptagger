@@ -1,0 +1,12 @@
+# command-line-arguments
+cmd/train_moe/main.go:398:2: declared and not used: encoder
+cmd/train_moe/main.go:398:80: too many arguments in call to moe.NewMoELayer
+	have (int, int, int, int, func(inputDim int, hiddenDim int) moe.Expert)
+	want (int, int, int, func(int) (moe.Expert, error))
+cmd/train_moe/main.go:399:10: too many return values
+	have (*moe.FeedForwardExpert, error)
+	want (moe.Expert)
+cmd/train_moe/main.go:399:45: not enough arguments in call to moe.NewFeedForwardExpert
+	have (int, int)
+	want (int, int, int)
+cmd/train_moe/main.go:413:22: undefined: moeLayer

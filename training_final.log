@@ -1,0 +1,121 @@
+nohup: ignoring input
+2025/11/23 01:26:51 main.go:444: Query Vocabulary (after load/create): Size=40665
+2025/11/23 01:26:51 main.go:445: Semantic Output Vocabulary (after load/create): Size=40
+2025/11/23 01:26:51 main.go:452: Loaded 448 training examples.
+2025/11/23 01:26:51 main.go:462: Query Vocabulary Size: 40665
+2025/11/23 01:26:51 main.go:463: Semantic Output Vocabulary Size: 40
+2025/11/23 01:26:51 main.go:464: Embedding Dimension: 64
+2025/11/23 01:26:51 main.go:465: Word2Vec Model Vocab Size: 40665
+2025/11/23 01:26:51 main.go:466: Word2Vec Model Vector Size: 25
+2025/11/23 01:26:51 main.go:467: Number of Experts: 1
+2025/11/23 01:26:51 main.go:474: Creating a new IntentMoE model.
+2025/11/23 01:26:51 main.go:115: Epoch 1/5 (Scheduled Sampling: 0.0%)
+2025/11/23 01:27:53 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 2: Predicted ID 17 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 3: Predicted ID 10 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 4: Predicted ID 1 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 5: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 6: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 7: Predicted ID 32 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 8: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 9: Predicted ID 17 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 10: Predicted ID 10 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 11: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 12: Predicted ID 1 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 13: Predicted ID 8 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 14: Predicted ID 32 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 15: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 16: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 17: Predicted ID 32 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 18: Predicted ID 17 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 19: Predicted ID 36 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 20: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 21: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 22: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 23: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 24: Predicted ID 32 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 25: Predicted ID 17 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 26: Predicted ID 36 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 27: Predicted ID 10 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 28: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 29: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 30: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 intent_moe.go:349: Step 31: Predicted ID 0 (EOS: 34)
+2025/11/23 01:27:53 main.go:284: Guessed semantic output: GoWebserver user_role ./ type UNK <pad> <pad> user_role <pad> ./ type <pad> UNK,user_role <pad> <pad> user_role ./ test.txt <pad> <pad> <pad> <pad> user_role ./ test.txt type <pad> <pad> <pad> <pad>
+2025/11/23 01:27:53 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"test","properties":{"path":"./"}},"context":{"user_role":"admin"}}
+2025/11/23 01:28:51 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:28:51 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:28:51 intent_moe.go:349: Step 2: Predicted ID 34 (EOS: 34)
+2025/11/23 01:28:51 main.go:284: Guessed semantic output: GoWebserver user_role
+2025/11/23 01:28:51 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"logs","properties":{"path":"/home/user"}},"context":{"user_role":"admin"}}
+2025/11/23 01:29:48 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:29:48 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:29:48 intent_moe.go:349: Step 2: Predicted ID 34 (EOS: 34)
+2025/11/23 01:29:48 main.go:284: Guessed semantic output: GoWebserver user_role
+2025/11/23 01:29:48 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"media","properties":{"path":"./config"}},"context":{"user_role":"admin"}}
+2025/11/23 01:30:47 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:30:47 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:30:47 intent_moe.go:349: Step 2: Predicted ID 34 (EOS: 34)
+2025/11/23 01:30:47 main.go:284: Guessed semantic output: GoWebserver user_role
+2025/11/23 01:30:47 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"shared","properties":{"path":"./data"}},"context":{"user_role":"admin"}}
+2025/11/23 01:31:45 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 1: Predicted ID 16 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 2: Predicted ID 32 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 3: Predicted ID 17 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 4: Predicted ID 36 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 5: Predicted ID 0 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 6: Predicted ID 32 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 7: Predicted ID 17 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 8: Predicted ID 16 (EOS: 34)
+2025/11/23 01:31:45 intent_moe.go:349: Step 9: Predicted ID 34 (EOS: 34)
+2025/11/23 01:31:45 main.go:284: Guessed semantic output: GoWebserver path user_role ./ test.txt <pad> user_role ./ path
+2025/11/23 01:31:45 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::Folder","name":"cache","properties":{"path":"./backend"}},"context":{"user_role":"admin"}}
+2025/11/23 01:32:43 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:32:43 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:32:43 intent_moe.go:349: Step 2: Predicted ID 0 (EOS: 34)
+2025/11/23 01:32:43 intent_moe.go:349: Step 3: Predicted ID 32 (EOS: 34)
+2025/11/23 01:32:43 intent_moe.go:349: Step 4: Predicted ID 34 (EOS: 34)
+2025/11/23 01:32:43 main.go:284: Guessed semantic output: GoWebserver user_role <pad> user_role
+2025/11/23 01:32:43 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::File","name":"Makefile","properties":{"path":"./src"}},"context":{"user_role":"admin"}}
+2025/11/23 01:33:39 intent_moe.go:349: Step 0: Predicted ID 22 (EOS: 34)
+2025/11/23 01:33:39 intent_moe.go:349: Step 1: Predicted ID 32 (EOS: 34)
+2025/11/23 01:33:39 intent_moe.go:349: Step 2: Predicted ID 34 (EOS: 34)
+2025/11/23 01:33:39 main.go:284: Guessed semantic output: GoWebserver user_role
+2025/11/23 01:33:39 main.go:287: Target semantic output: {"operation":"Create","target_resource":{"type":"Filesystem::File","name":"types.go","properties":{"path":"./src"}},"context":{"user_role":"admin"}}
+2025/11/23 01:33:39 main.go:154: Epoch 1, Average Loss: 69.235074
+2025/11/23 01:33:39 main.go:115: Epoch 2/5 (Scheduled Sampling: 10.0%)
+2025/11/23 01:33:49 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=27 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:33:55 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:34:12 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=22 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:34:40 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=15 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:34:48 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=28 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:34:59 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=27 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:20 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=19 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:20 main.go:115: Epoch 3/5 (Scheduled Sampling: 20.0%)
+2025/11/23 01:35:28 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:34 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:40 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:51 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=26 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:35:57 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:06 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=28 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:23 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=22 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:23 main.go:115: Epoch 4/5 (Scheduled Sampling: 30.0%)
+2025/11/23 01:36:35 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=26 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:41 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:48 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:36:55 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:02 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:10 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:16 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:16 main.go:115: Epoch 5/5 (Scheduled Sampling: 40.0%)
+2025/11/23 01:37:26 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=27 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:32 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:41 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=28 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:49 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=28 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:37:57 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=29 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:38:08 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=26 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:38:14 main.go:135: Error training batch: IntentMoE model backward pass failed: decoder backward failed: decoder embedding backward at t=30 failed: Embedding backward called before forward or with mismatched input/gradient shapes
+2025/11/23 01:38:14 main.go:540: Detaching model from computation graph...
+2025/11/23 01:38:14 main.go:606: Model detached from computation graph.
+Saving IntentMoE model to gob_models/moe_classification_model.gob

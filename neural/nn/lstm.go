@@ -2,8 +2,9 @@ package nn
 
 import (
 	"fmt"
-	"math"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 
 	. "nlptagger/neural/tensor"
@@ -12,6 +13,35 @@ import (
 func init() {
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+// applyDropout applies dropout to a tensor during training.
+// During training, randomly sets dropoutRate fraction of values to 0 and scales remaining by 1/(1-dropoutRate).
+// During inference (training=false), returns the tensor unchanged.
+func applyDropout(tensor *Tensor, dropoutRate float64, training bool) *Tensor {
+	if !training || dropoutRate == 0.0 {
+		return tensor
+	}
+
+	// Create dropout mask
+	mask := NewTensor(tensor.Shape, make([]float64, len(tensor.Data)), false)
+	scale := 1.0 / (1.0 - dropoutRate)
+
+	for i := range mask.Data {
+		if rand.Float64() < dropoutRate {
+			mask.Data[i] = 0.0
+		} else {
+			mask.Data[i] = scale
+		}
+	}
+
+	// Apply mask
+	output := NewTensor(tensor.Shape, make([]float64, len(tensor.Data)), tensor.RequiresGrad)
+	for i := range output.Data {
+		output.Data[i] = tensor.Data[i] * mask.Data[i]
+	}
+
+	return output
 }
 
 // LSTMCell represents a single LSTM cell.
@@ -25,11 +55,11 @@ type LSTMCell struct {
 	Bf, Bi, Bc, Bo *Tensor
 
 	// Stored for backward pass
-	InputTensor *Tensor
-	PrevHidden  *Tensor
-	PrevCell    *Tensor
+	InputTensor    *Tensor
+	PrevHidden     *Tensor
+	PrevCell       *Tensor
 	ft, it, ct, ot *Tensor
-	cct         *Tensor
+	cct            *Tensor
 }
 
 // NewLSTMCell creates a new LSTMCell.
@@ -339,10 +369,12 @@ func (c *LSTMCell) Backward(gradHt, gradCt *Tensor) error {
 
 // LSTM represents a multi-layer LSTM.
 type LSTM struct {
-	InputSize  int
-	HiddenSize int
-	NumLayers  int
-	Cells      [][]*LSTMCell
+	InputSize   int
+	HiddenSize  int
+	NumLayers   int
+	Cells       [][]*LSTMCell
+	DropoutRate float64 // Dropout rate between layers (0.0 = no dropout)
+	Training    bool    // Whether model is in training mode (dropout active)
 }
 
 // NewLSTM creates a new LSTM.
@@ -387,13 +419,17 @@ func (l *LSTM) Forward(inputs ...*Tensor) (*Tensor, *Tensor, error) {
 	input, initialHidden, initialCell := inputs[0], inputs[1], inputs[2] // Renamed for clarity
 
 	var currentHidden, currentCell *Tensor = initialHidden, initialCell // Initialize with initial states
-	var layerOutput *Tensor = input                                    // Input to the first layer
+	var layerOutput *Tensor = input                                     // Input to the first layer
 
 	for i := 0; i < l.NumLayers; i++ {
 		// For the first layer, layerInput is the original input.
 		// For subsequent layers, layerInput is the output (ht) of the previous layer.
 		if i > 0 {
 			layerOutput = currentHidden
+			// Apply dropout between layers (not on the last layer output)
+			if i < l.NumLayers {
+				layerOutput = applyDropout(layerOutput, l.DropoutRate, l.Training)
+			}
 		}
 
 		ht, ct, err := l.Cells[i][0].Forward(layerOutput, currentHidden, currentCell)

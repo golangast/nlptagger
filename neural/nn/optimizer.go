@@ -14,15 +14,15 @@ type Optimizer interface {
 
 // Adam represents the Adam optimizer.
 type Adam struct {
-	parameters []*Tensor
+	parameters   []*Tensor
 	learningRate float64
-	beta1      float64
-	beta2      float64
-	epsilon    float64
-	t          int
-	m          map[*Tensor]*Tensor // 1st moment vector
-	v          map[*Tensor]*Tensor // 2nd moment vector
-	clipValue  float64
+	beta1        float64
+	beta2        float64
+	epsilon      float64
+	t            int
+	m            map[*Tensor]*Tensor // 1st moment vector
+	v            map[*Tensor]*Tensor // 2nd moment vector
+	clipValue    float64
 }
 
 // NewOptimizer creates a new Adam optimizer.
@@ -94,4 +94,9 @@ func (o *Adam) ZeroGrad() {
 	for _, p := range o.parameters {
 		p.ZeroGrad()
 	}
+}
+
+// SetLearningRate updates the learning rate of the optimizer
+func (o *Adam) SetLearningRate(lr float64) {
+	o.learningRate = lr
 }

@@ -3,6 +3,7 @@ package moe
 import (
 	"encoding/gob"
 	"fmt"
+	"math/rand"
 	"nlptagger/neural/nn"
 	. "nlptagger/neural/tensor"
 )
@@ -15,62 +16,79 @@ func init() {
 type RNNDecoder struct {
 	// LSTM layer for recurrent processing
 	LSTM *nn.LSTM
+	// Layer normalization after LSTM
+	LayerNorm *nn.LayerNorm
 	// Linear layer to project LSTM output to vocabulary size
 	OutputLayer *nn.Linear
 	// Output vocabulary size
 	OutputVocabSize int
 	// Embedding layer for the decoder input
-	Embedding *nn.Embedding
+	Embedding         *nn.Embedding
 	MaxAttentionHeads int
-	Attention *nn.MultiHeadCrossAttention
+	Attention         *nn.MultiHeadCrossAttention
 	// Initial hidden and cell states for the LSTM
 	InitialHiddenState *Tensor
-	InitialCellState *Tensor
+	InitialCellState   *Tensor
+
+	// Intermediate states for BPTT (not serialized)
+	hiddenStates     []*Tensor // Hidden state at each timestep
+	cellStates       []*Tensor // Cell state at each timestep
+	embeddedInputs   []*Tensor // Embedded inputs at each timestep
+	attentionOutputs []*Tensor // Attention outputs at each timestep
+	combinedInputs   []*Tensor // Combined inputs to LSTM at each timestep
+	decoderInputs    []*Tensor // Decoder inputs at each timestep
 }
 
 // NewRNNDecoder creates a new RNNDecoder.
 // inputDim is the dimension of the context vector from the encoder.
 // outputVocabSize is the size of the target vocabulary.
-func NewRNNDecoder(inputDim, outputVocabSize, embeddingDim, maxAttentionHeads int) (*RNNDecoder, error) {
-	// For simplicity, let's assume hiddenDim is the same as inputDim for now.
-	hiddenDim := inputDim
-
+// hiddenSize is the hidden dimension of the LSTM.
+// numLayers is the number of LSTM layers.
+// dropoutRate is the dropout rate between LSTM layers.
+func NewRNNDecoder(inputDim, outputVocabSize, hiddenSize, maxAttentionHeads, numLayers int, dropoutRate float64) (*RNNDecoder, error) {
 	// LSTM input dimension will be embeddingDim + attentionOutputDim
-	// Assuming attentionOutputDim is also embeddingDim for simplicity in this setup
-	lstmInputDim := embeddingDim + embeddingDim // embeddedInput + attentionOutput
+	// Assuming attentionOutputDim is also inputDim for simplicity in this setup
+	lstmInputDim := inputDim + inputDim // embeddedInput + attentionOutput
 
-	// numLayers for LSTM is 1 for a single-layer LSTM
-	lstm, err := nn.NewLSTM(lstmInputDim, hiddenDim, 1)
+	// Create multi-layer LSTM with dropout
+	lstm, err := nn.NewLSTM(lstmInputDim, hiddenSize, numLayers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create LSTM for decoder: %w", err)
 	}
+	lstm.DropoutRate = dropoutRate
+	lstm.Training = true // Will be set to false during inference
 
-	outputLayer, err := nn.NewLinear(hiddenDim, outputVocabSize)
+	// Create layer normalization
+	layerNorm := nn.NewLayerNorm(hiddenSize)
+
+	outputLayer, err := nn.NewLinear(hiddenSize, outputVocabSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create output linear layer for decoder: %w", err)
 	}
 
-	embedding := nn.NewEmbedding(outputVocabSize, embeddingDim)
+	embedding := nn.NewEmbedding(outputVocabSize, inputDim)
 
-	attention, err := nn.NewMultiHeadCrossAttention(embeddingDim, maxAttentionHeads, maxAttentionHeads)
+	attention, err := nn.NewMultiHeadCrossAttention(inputDim, maxAttentionHeads, maxAttentionHeads)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create multi-head attention for decoder: %w", err)
 	}
 
 	return &RNNDecoder{
-		LSTM:              lstm,
-		OutputLayer:       outputLayer,
-		OutputVocabSize: outputVocabSize,
-		Embedding:       embedding,
-		MaxAttentionHeads: maxAttentionHeads,
-		Attention: attention,
-	},
-	nil
+			LSTM:              lstm,
+			LayerNorm:         layerNorm,
+			OutputLayer:       outputLayer,
+			OutputVocabSize:   outputVocabSize,
+			Embedding:         embedding,
+			MaxAttentionHeads: maxAttentionHeads,
+			Attention:         attention,
+		},
+		nil
 }
 
 // Forward performs the forward pass of the RNNDecoder.
 // It takes the context vector from the encoder and the target sequence (for teacher forcing) and generates a sequence of tokens.
-func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, error) {
+// scheduledSamplingProb: probability of using model's own prediction instead of ground truth (0.0 = pure teacher forcing, 1.0 = pure sampling)
+func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor, scheduledSamplingProb float64) ([]*Tensor, error) {
 	batchSize := targetSequence.Shape[0]
 	maxSequenceLength := targetSequence.Shape[1]
 	hiddenSize := d.LSTM.HiddenSize
@@ -110,21 +128,43 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 	// Create a tensor to hold the decoder outputs
 	var outputs []*Tensor
 
-	// Start with a start-of-sequence token (e.g., token ID 0)
-	decoderInput := NewTensor([]int{batchSize, 1}, make([]float64, batchSize), false)
+	// Initialize intermediate state storage for BPTT
+	d.hiddenStates = make([]*Tensor, 0, maxSequenceLength-1)
+	d.cellStates = make([]*Tensor, 0, maxSequenceLength-1)
+	d.embeddedInputs = make([]*Tensor, 0, maxSequenceLength-1)
+	d.attentionOutputs = make([]*Tensor, 0, maxSequenceLength-1)
+	d.combinedInputs = make([]*Tensor, 0, maxSequenceLength-1)
+	d.decoderInputs = make([]*Tensor, 0, maxSequenceLength-1)
 
-	for t := 0; t < maxSequenceLength; t++ {
+	// Start with the first token of the target sequence (teacher forcing)
+	// We assume targetSequence starts with SOS.
+	decoderInput, err := targetSequence.Slice(1, 0, 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to slice initial decoder input: %w", err)
+	}
+
+	// Loop up to maxSequenceLength - 1 because we predict the next token
+	for t := 0; t < maxSequenceLength-1; t++ {
+		// Scheduled sampling: decide between ground truth and model prediction for NEXT iteration
+		// This decision is made at the END of the current iteration
+		// For now, just use the current decoderInput
+
+		// Store decoder input for this timestep (BEFORE any modifications)
+		d.decoderInputs = append(d.decoderInputs, decoderInput)
+
 		// Embed the decoder input
 		embeddedInput, err := d.Embedding.Forward(decoderInput)
 		if err != nil {
 			return nil, fmt.Errorf("decoder embedding failed: %w", err)
 		}
+		d.embeddedInputs = append(d.embeddedInputs, embeddedInput)
 
 		// Apply attention
 		attentionOutput, err := d.Attention.Forward(embeddedInput, contextVector, contextVector)
 		if err != nil {
 			return nil, fmt.Errorf("decoder attention failed: %w", err)
 		}
+		d.attentionOutputs = append(d.attentionOutputs, attentionOutput)
 
 		// Concatenate embedded input and attention output
 		combinedInput, err := Concat([]*Tensor{embeddedInput, attentionOutput}, 1)
@@ -137,6 +177,7 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to reshape combined input for LSTM: %w", err)
 		}
+		d.combinedInputs = append(d.combinedInputs, reshapedCombinedInput)
 
 		// Pass through LSTM
 		hiddenState, cellState, err = d.LSTM.Forward(reshapedCombinedInput, hiddenState, cellState)
@@ -144,100 +185,152 @@ func (d *RNNDecoder) Forward(contextVector, targetSequence *Tensor) ([]*Tensor, 
 			return nil, fmt.Errorf("decoder LSTM forward failed: %w", err)
 		}
 
+		// Store hidden and cell states for this timestep
+		d.hiddenStates = append(d.hiddenStates, hiddenState)
+		d.cellStates = append(d.cellStates, cellState)
+
+		// Apply layer normalization (if available - for backward compatibility)
+		var normalizedHidden *Tensor
+		if d.LayerNorm != nil {
+			var err error
+			normalizedHidden, err = d.LayerNorm.Forward(hiddenState)
+			if err != nil {
+				return nil, fmt.Errorf("decoder layer norm forward failed: %w", err)
+			}
+		} else {
+			// For backward compatibility with models saved before LayerNorm
+			normalizedHidden = hiddenState
+		}
+
 		// Hidden state to output logits
-		outputLogits, err := d.OutputLayer.Forward(hiddenState)
+		outputLogits, err := d.OutputLayer.Forward(normalizedHidden)
 		if err != nil {
 			return nil, fmt.Errorf("decoder output layer forward failed: %w", err)
 		}
 
 		outputs = append(outputs, outputLogits)
 
-		// Use the target token as the next input (teacher forcing)
-		slicedTensor, err := targetSequence.Slice(1, t, t+1)
-		if err != nil {
-			return nil, fmt.Errorf("error slicing target sequence: %w", err)
+		// Prepare input for NEXT timestep (scheduled sampling decision)
+		if t < maxSequenceLength-2 { // Don't need next input for last timestep
+			useModelPrediction := rand.Float64() < scheduledSamplingProb
+
+			if useModelPrediction {
+				// Use model's own prediction (scheduled sampling)
+				argmax, err := outputLogits.Argmax(1)
+				if err != nil {
+					return nil, fmt.Errorf("argmax failed during scheduled sampling: %w", err)
+				}
+				// Use the predicted token IDs as the next input
+				decoderInput, err = argmax.Reshape([]int{batchSize, 1})
+				if err != nil {
+					return nil, fmt.Errorf("failed to reshape argmax: %w", err)
+				}
+			} else {
+				// Use ground truth (teacher forcing)
+				slicedTensor, err := targetSequence.Slice(1, t+1, t+2)
+				if err != nil {
+					return nil, fmt.Errorf("error slicing target sequence: %w", err)
+				}
+				decoderInput = slicedTensor
+			}
 		}
-		decoderInput = slicedTensor
 	}
 
-	d.InitialHiddenState = initialHidden // Store the initial hidden state for backward pass
-	d.InitialCellState = cellState // Store the final cell state
+	d.InitialHiddenState = initialHidden
+	d.InitialCellState = cellState
+
 	return outputs, nil
 }
 
-// Backward performs the backward pass of the RNNDecoder.
+// Backward performs the backward pass of the RNNDecoder with proper BPTT.
 func (d *RNNDecoder) Backward(grads []*Tensor) error {
-	var lstmHiddenGrad *Tensor
-	var lstmCellGrad *Tensor
-
-	// Initialize hidden and cell gradients for the LSTM
-	// These will accumulate gradients from all timesteps
-	lstmHiddenGrad = NewTensor(d.LSTM.Cells[0][0].PrevHidden.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevHidden.Data)), true)
-	lstmCellGrad = NewTensor(d.LSTM.Cells[0][0].PrevCell.Shape, make([]float64, len(d.LSTM.Cells[0][0].PrevCell.Data)), true)
-
-	for t := len(grads) - 1; t >= 0; t-- {
-		outputGrad := grads[t]
-
-		// Backpropagate through the output layer
-		err := d.OutputLayer.Backward(outputGrad)
-		if err != nil {
-			return fmt.Errorf("decoder output layer backward failed: %w", err)
-		}
-
-		// Accumulate gradients for the LSTM hidden state
-		if lstmHiddenGrad == nil {
-			lstmHiddenGrad = d.OutputLayer.Input().Grad
-		} else {
-			lstmHiddenGrad.Add(d.OutputLayer.Input().Grad)
-		}
-
-		// Backpropagate through the LSTM
-		err = d.LSTM.Backward(lstmHiddenGrad, lstmCellGrad)
-		if err != nil {
-			return fmt.Errorf("decoder LSTM backward failed: %w", err)
-		}
-
-		// Get gradients from the LSTMCell
-		inputGrad := d.LSTM.Cells[0][0].InputTensor.Grad
-		prevHiddenGrad := d.LSTM.Cells[0][0].PrevHidden.Grad
-		prevCellGrad := d.LSTM.Cells[0][0].PrevCell.Grad
-
-		// Split the gradient for the concatenated input (embeddedInput and attentionOutput)
-		splitGrads, err := Split(inputGrad, 1, []int{d.Embedding.DimModel, d.Attention.DimModel})
-		if err != nil {
-			return fmt.Errorf("decoder split failed: %w", err)
-		}
-		embeddedGrad := splitGrads[0]
-		attentionOutputGrad := splitGrads[1]
-
-		// Reshape attentionOutputGrad to 3D before passing to MultiHeadCrossAttention.Backward
-		batchSize := attentionOutputGrad.Shape[0]
-		reshapedAttentionOutputGrad, err := attentionOutputGrad.Reshape([]int{batchSize, 1, d.Attention.DimModel})
-		if err != nil {
-			return fmt.Errorf("failed to reshape attention output gradient for attention backward: %w", err)
-		}
-
-		// Backpropagate through the attention layer
-		err = d.Attention.Backward(reshapedAttentionOutputGrad)
-		if err != nil {
-			return fmt.Errorf("decoder attention backward failed: %w", err)
-		}
-
-		// Backpropagate through the embedding layer
-		err = d.Embedding.Backward(embeddedGrad)
-		if err != nil {
-			return fmt.Errorf("decoder embedding backward failed: %w", err)
-		}
-
-		// Update the hidden and cell gradients for the next timestep
-		lstmHiddenGrad = prevHiddenGrad
-		lstmCellGrad = prevCellGrad
+	if len(grads) != len(d.hiddenStates) {
+		return fmt.Errorf("gradient length (%d) doesn't match number of timesteps (%d)", len(grads), len(d.hiddenStates))
 	}
 
-	// The final hidden gradient is the gradient for the context vector
-	// This needs to be handled carefully as the context vector was used to initialize the LSTM hidden state.
-	// For now, we'll just set the gradient of the initial hidden state.
-	d.InitialHiddenState.Grad = lstmHiddenGrad
+	numTimesteps := len(grads)
+	batchSize := grads[0].Shape[0]
+	hiddenSize := d.LSTM.HiddenSize
+
+	// Initialize gradients for hidden and cell states (will accumulate from future timesteps)
+	nextHiddenGrad := NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false)
+	nextCellGrad := NewTensor([]int{batchSize, hiddenSize}, make([]float64, batchSize*hiddenSize), false)
+
+	// Backpropagate through time (from last timestep to first)
+	for t := numTimesteps - 1; t >= 0; t-- {
+		// 1. Backprop through output layer
+		err := d.OutputLayer.Backward(grads[t])
+		if err != nil {
+			return fmt.Errorf("decoder output layer backward at t=%d failed: %w", t, err)
+		}
+
+		// Get gradient w.r.t. hidden state from output layer
+		hiddenGrad := d.OutputLayer.Input().Grad
+
+		// Add gradient from future timestep
+		hiddenGrad.Add(nextHiddenGrad)
+
+		// 2. Backprop through LSTM
+		// We need to set up the LSTM cell state to match this timestep
+		// The LSTM.Backward expects the current cell's state to be set
+		if t > 0 {
+			d.LSTM.Cells[0][0].PrevHidden = d.hiddenStates[t-1]
+			d.LSTM.Cells[0][0].PrevCell = d.cellStates[t-1]
+		} else {
+			d.LSTM.Cells[0][0].PrevHidden = d.InitialHiddenState
+			d.LSTM.Cells[0][0].PrevCell = d.InitialCellState
+		}
+		d.LSTM.Cells[0][0].InputTensor = d.combinedInputs[t]
+
+		err = d.LSTM.Backward(hiddenGrad, nextCellGrad)
+		if err != nil {
+			return fmt.Errorf("decoder LSTM backward at t=%d failed: %w", t, err)
+		}
+
+		// Get gradients for next iteration
+		inputGrad := d.LSTM.Cells[0][0].InputTensor.Grad
+		if t > 0 {
+			nextHiddenGrad = d.LSTM.Cells[0][0].PrevHidden.Grad
+			nextCellGrad = d.LSTM.Cells[0][0].PrevCell.Grad
+		}
+
+		// 3. Backprop through reshape (gradient flows straight through)
+		// inputGrad is already the right shape [batchSize, 2*embeddingDim]
+
+		// 4. Backprop through concat - split the gradient
+		embeddingDim := d.Embedding.DimModel
+		splitGrads, err := Split(inputGrad, 1, []int{embeddingDim, embeddingDim})
+		if err != nil {
+			return fmt.Errorf("decoder split at t=%d failed: %w", t, err)
+		}
+		embeddedGrad := splitGrads[0]
+		attentionGrad := splitGrads[1]
+
+		// 5. Backprop through attention
+		// Reshape attention gradient to 3D
+		reshapedAttentionGrad, err := attentionGrad.Reshape([]int{batchSize, 1, embeddingDim})
+		if err != nil {
+			return fmt.Errorf("failed to reshape attention gradient at t=%d: %w", t, err)
+		}
+
+		err = d.Attention.Backward(reshapedAttentionGrad)
+		if err != nil {
+			return fmt.Errorf("decoder attention backward at t=%d failed: %w", t, err)
+		}
+
+		// 6. Backprop through embedding
+		// Manually set the input for this timestep because Embedding only remembers the last one
+		d.Embedding.SetInput(d.decoderInputs[t])
+		err = d.Embedding.Backward(embeddedGrad)
+		if err != nil {
+			return fmt.Errorf("decoder embedding backward at t=%d failed: %w", t, err)
+		}
+	}
+
+	// Store gradient for initial hidden state (gradient w.r.t. context vector)
+	if d.InitialHiddenState != nil {
+		d.InitialHiddenState.Grad = nextHiddenGrad
+	}
 
 	return nil
 }
@@ -291,6 +384,9 @@ func (d *RNNDecoder) Parameters() []*Tensor {
 	params := []*Tensor{}
 	params = append(params, d.Embedding.Parameters()...)
 	params = append(params, d.LSTM.Parameters()...)
+	if d.LayerNorm != nil {
+		params = append(params, d.LayerNorm.Parameters()...)
+	}
 	params = append(params, d.OutputLayer.Parameters()...)
 	params = append(params, d.Attention.Parameters()...)
 	return params

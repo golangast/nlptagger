@@ -39,8 +39,10 @@ func Softmax(tensor *Tensor) *Tensor {
 	return output
 }
 
-// CrossEntropyLoss calculates the cross-entropy loss.
-func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Tensor) {
+// CrossEntropyLoss calculates the cross-entropy loss with optional label smoothing.
+// labelSmoothing: value between 0.0 and 1.0. When > 0, distributes probability mass
+// from the target class to all classes to prevent overconfidence.
+func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int, labelSmoothing float64) (float64, *Tensor) {
 	// Reshape logits to 2D if it's 3D (batch_size * seq_len, vocab_size)
 	originalShape := logits.Shape
 	var reshapedLogits *Tensor
@@ -70,6 +72,10 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 
 	grad := NewTensor(reshapedLogits.Shape, make([]float64, len(reshapedLogits.Data)), false)
 
+	// Calculate smoothed target distribution
+	smoothValue := labelSmoothing / float64(numClasses)
+	targetConfidence := 1.0 - labelSmoothing + smoothValue
+
 	for i := 0; i < reshapedLogits.Shape[0]; i++ {
 		targetID := targetIDs[i]
 		if targetID == padID {
@@ -77,15 +83,29 @@ func CrossEntropyLoss(logits *Tensor, targetIDs []int, padID int) (float64, *Ten
 		}
 		activeTokens++
 
-		// Add epsilon to the probability to avoid log(0)
-		loss -= math.Log(probs.Data[i*numClasses+targetID] + epsilon)
-
+		// Calculate loss with label smoothing
+		// Loss = -sum(smoothed_target * log(pred))
+		smoothedLoss := 0.0
 		for j := 0; j < numClasses; j++ {
+			var targetProb float64
 			if j == targetID {
-				grad.Data[i*numClasses+j] = probs.Data[i*numClasses+j] - 1
+				targetProb = targetConfidence
 			} else {
-				grad.Data[i*numClasses+j] = probs.Data[i*numClasses+j]
+				targetProb = smoothValue
 			}
+			smoothedLoss -= targetProb * math.Log(probs.Data[i*numClasses+j]+epsilon)
+		}
+		loss += smoothedLoss
+
+		// Calculate gradient with label smoothing
+		for j := 0; j < numClasses; j++ {
+			var targetProb float64
+			if j == targetID {
+				targetProb = targetConfidence
+			} else {
+				targetProb = smoothValue
+			}
+			grad.Data[i*numClasses+j] = probs.Data[i*numClasses+j] - targetProb
 		}
 	}
 

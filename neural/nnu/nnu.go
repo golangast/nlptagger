@@ -137,7 +137,17 @@ func MaxIndex(values []float64) int {
 //   - inputs: A slice of float64 representing the input data to the network.
 func (nn *SimpleNN) Backpropagate(totalloss, learningRate float64) {
 	nn.LearningRate = learningRate
-	fmt.Printf("Backpropagate - Learning Rate: %f, Total Loss: %f\n", nn.LearningRate, totalloss)
+
+	// Calculate actual loss (MSE)
+	actualLoss := 0.0
+	for i := 0; i < nn.OutputSize; i++ {
+		diff := nn.Targets[i] - nn.Outputs[i]
+		actualLoss += diff * diff
+	}
+	actualLoss /= float64(nn.OutputSize)
+
+	fmt.Printf("Backpropagate - Learning Rate: %f, Actual Loss: %f\n", nn.LearningRate, actualLoss)
+
 	if nn.WeightsIH == nil || len(nn.WeightsIH) == 0 {
 		log.Println("Backpropagate - WeightsIH are nil or empty.")
 	}
@@ -384,12 +394,19 @@ func (nn *SimpleNN) ForwardPass(inputs []float64) []float64 {
 func (nn *SimpleNN) calculateHiddenLayerOutputs() []float64 {
 	hiddenOutputs := make([]float64, nn.HiddenSize)
 
+	var inputs []float64
+	if len(nn.MaskedInputs) > 0 {
+		inputs = nn.MaskedInputs
+	} else {
+		inputs = nn.Inputs
+	}
+
+	if len(inputs) == 0 {
+		return []float64{}
+	}
+
 	var sum float64
 	for i := 0; i < nn.HiddenSize; i++ {
-		if len(nn.MaskedInputs) == 0 {
-			return []float64{}
-		}
-
 		if nn.WeightsIH == nil || len(nn.WeightsIH) == 0 {
 			return []float64{}
 		}
@@ -400,17 +417,12 @@ func (nn *SimpleNN) calculateHiddenLayerOutputs() []float64 {
 			sum = 0.0
 		}
 
-		for j := 0; j < len(nn.MaskedInputs); j++ {
+		for j := 0; j < len(inputs); j++ {
 			// check for out of bounds
 			if i >= len(nn.WeightsIH) || i < 0 || j >= len(nn.WeightsIH[i]) || j < 0 {
-				fmt.Printf("Warning: Index i or j out of range for nn.WeightsIH. i=%d, j=%d, len(nn.WeightsIH)=%d, len(nn.WeightsIH[i])=%d, i < 0=%t, j < 0=%t. Skipping.\n", i, j, len(nn.WeightsIH), len(nn.WeightsIH[i]), i < 0, j < 0)
 				continue // Skip this iteration
 			}
-			if j >= len(nn.MaskedInputs) {
-				fmt.Println("Warning: j is out of range for nn.MaskedInputs.")
-				continue
-			}
-			sum += nn.WeightsIH[i][j] * nn.MaskedInputs[j]
+			sum += nn.WeightsIH[i][j] * inputs[j]
 		}
 		hiddenOutputs[i] = nn.Sigmoid(sum)
 

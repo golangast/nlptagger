@@ -12,10 +12,13 @@ func main() {
 	trainMoE := flag.Bool("train-moe", false, "Train the MoE model")
 	trainIntentClassifier := flag.Bool("train-intent-classifier", false, "Train the intent classification model")
 	moeInferenceQuery := flag.String("moe_inference", "", "Run MoE inference with the given query")
+	runLLMFlag := flag.Bool("llm", false, "Run in interactive LLM mode")
 
 	flag.Parse()
 
-	if *trainWord2Vec {
+	if *runLLMFlag {
+		runLLM()
+	} else if *trainWord2Vec {
 		runModule("cmd/train_word2vec")
 	} else if *trainMoE {
 		runModule("cmd/train_moe")
@@ -24,7 +27,7 @@ func main() {
 	} else if *moeInferenceQuery != "" {
 		runMoeInference(*moeInferenceQuery)
 	} else {
-		log.Println("No action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, or -moe_inference <query>.")
+		log.Println("No action specified. Use -train-word2vec, -train-moe, -train-intent-classifier, -moe_inference <query>, or -llm.")
 	}
 }
 

@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"nlptagger/neural/nnu/intent"
 	. "nlptagger/neural/nn"
+	"nlptagger/neural/nnu/intent"
+	mainvocab "nlptagger/neural/nnu/vocab"
 	. "nlptagger/neural/tensor"
 	"nlptagger/neural/tokenizer"
-	mainvocab "nlptagger/neural/nnu/vocab"
 )
 
 // IntentTrainingExample represents a single training example with a query and its intents.
@@ -102,7 +102,7 @@ func main() {
 	// Create model
 	model, err := intent.NewSimpleIntentClassifier(
 		queryVocab.Size(),
-		64, // embeddingDim
+		64,  // embeddingDim
 		128, // hiddenDim
 		parentIntentVocab.Size(),
 		childIntentVocab.Size(),
@@ -197,8 +197,8 @@ func trainIntentModelBatch(model *intent.SimpleIntentClassifier, optimizer Optim
 		return 0, fmt.Errorf("model forward pass failed: %w", err)
 	}
 
-	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDs, -1)
-	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDs, -1)
+	parentLoss, parentGrad := CrossEntropyLoss(parentLogits, parentIntentIDs, -1, 0.0)
+	childLoss, childGrad := CrossEntropyLoss(childLogits, childIntentIDs, -1, 0.0)
 
 	totalLoss := parentLoss + childLoss
 

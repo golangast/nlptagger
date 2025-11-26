@@ -1,20 +1,25 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
+	"strings" // Added for string manipulation
 
-	"nlptagger/neural/moe"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	"nlptagger/neural/nn/ner"
+	"nlptagger/neural/semantic"
 )
 
 var (
-	query        = flag.String("query", "", "Query for MoE inference")
-	maxSeqLength = flag.Int("maxlen", 32, "Maximum sequence length")
+	query             = flag.String("query", "", "Query for MoE inference")
+	maxSeqLength      = flag.Int("maxlen", 32, "Maximum sequence length")
+	temperature       = flag.Float64("temperature", 0.8, "Sampling temperature (0.0 = deterministic, 1.0 = normal, >1.0 = more random)")
+	samplingMethod    = flag.String("sampling-method", "temperature", "Sampling method: greedy, temperature, top-k, top-p")
+	topK              = flag.Int("top-k", 0, "Top-k sampling: only sample from top K tokens (0 = disabled)")
+	topP              = flag.Float64("top-p", 0.0, "Top-p (nucleus) sampling: sample from tokens with cumulative probability <= p (0.0 = disabled)")
+	repetitionPenalty = flag.Float64("repetition-penalty", 1.0, "Repetition penalty (1.0 = no penalty, > 1.0 = penalize repetition)")
 )
 
 func main() {
@@ -25,87 +30,115 @@ func main() {
 		log.Fatal("Please provide a query using the -query flag.")
 	}
 
-	// Define paths
-	const vocabPath = "gob_models/query_vocabulary.gob"
-	const moeModelPath = "gob_models/moe_classification_model.gob"
-	const semanticOutputVocabPath = "gob_models/semantic_output_vocabulary.gob"
+	log.Printf("Running template-based inference for query: \"%s\"", *query)
 
-	// Load vocabularies
-	vocabulary, err := mainvocab.LoadVocabulary(vocabPath)
+	// === TEMPLATE-BASED APPROACH ===
+	// We don't need the model, vocabularies, or tokenizers anymore
+	// Template-based approach uses:
+	// 1. Intent classification (keyword-based)
+	// 2. Entity extraction (NER)
+	// 3. Template filling (deterministic)
+
+	log.Println("Using template-based JSON generation")
+
+	// Step 1: Classify intent from query
+	classifier := semantic.NewIntentClassifier()
+	intent := classifier.Classify(*query)
+	log.Printf("Classified intent: %s", intent)
+
+	// Step 2: Extract entities using NER
+	ruleNER, err := ner.NewRuleBasedNER(*query, "")
 	if err != nil {
-		log.Fatalf("Failed to set up input vocabulary: %v", err)
+		log.Fatalf("Failed to create NER: %v", err)
 	}
 
-	semanticOutputVocabulary, err := mainvocab.LoadVocabulary(semanticOutputVocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up semantic output vocabulary: %v", err)
-	}
+	entityMap := ruleNER.GetEntityMap()
+	extractor := semantic.NewEntityExtractor()
+	entities := extractor.ExtractFromQuery(*query, entityMap)
 
-	// Create tokenizer
-	tok, err := tokenizer.NewTokenizer(vocabulary)
-	if err != nil {
-		log.Fatalf("Failed to create tokenizer: %v", err)
-	}
+	log.Printf("Extracted entities: %v", entities)
 
-	semanticOutputTokenizer, err := tokenizer.NewTokenizer(semanticOutputVocabulary)
-	if err != nil {
-		log.Fatalf("Failed to create semantic output tokenizer: %v", err)
-	}
-
-	// Load the trained MoEClassificationModel model
-	model, err := moe.LoadIntentMoEModelFromGOB(moeModelPath)
-	if err != nil {
-		log.Fatalf("Failed to load MoE model: %v", err)
-	}
-
-	log.Printf("Running MoE inference for query: \"%s\"", *query)
-
-	// Encode the query
-	tokenIDs, err := tok.Encode(*query)
-	if err != nil {
-		log.Fatalf("Failed to encode query: %v", err)
-	}
-
-	// Pad or truncate the sequence to a fixed length
-	if len(tokenIDs) > *maxSeqLength {
-		tokenIDs = tokenIDs[:*maxSeqLength] // Truncate from the end
-	} else {
-		for len(tokenIDs) < *maxSeqLength {
-			tokenIDs = append(tokenIDs, vocabulary.PaddingTokenID) // Appends padding
+	// Check if query contains template keywords
+	words := strings.Fields(*query)
+	templateRegistry := semantic.NewTemplateRegistry()
+	hasTemplate := false
+	for _, word := range words {
+		lowerWord := strings.ToLower(word)
+		for _, tmpl := range templateRegistry.ListTemplates() {
+			if lowerWord == strings.ToLower(tmpl) {
+				hasTemplate = true
+				break
+			}
+		}
+		if hasTemplate {
+			break
 		}
 	}
-	inputData := make([]float64, len(tokenIDs))
-	for i, id := range tokenIDs {
-		inputData[i] = float64(id)
-	}
-	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
 
-	// Create a dummy target tensor for inference, as the Forward method expects two inputs.
-	dummyTargetTokenIDs := make([]float64, *maxSeqLength)
-	for i := 0; i < *maxSeqLength; i++ {
-		dummyTargetTokenIDs[i] = float64(vocabulary.PaddingTokenID)
-	}
-	dummyTargetTensor := tensor.NewTensor([]int{1, *maxSeqLength}, dummyTargetTokenIDs, false)
+	var semanticOutput semantic.SemanticOutput
+	var structuredCmd *semantic.StructuredCommand
+	var hierarchicalCmd *semantic.HierarchicalCommand
 
-	// Forward pass to get the context vector
-	_, contextVector, err := model.Forward(inputTensor, dummyTargetTensor)
+	if hasTemplate {
+		// Use hierarchical parser for template-based scaffolding
+		hierarchicalParser := semantic.NewHierarchicalParser()
+		hierarchicalCmd = hierarchicalParser.Parse(*query, words, entityMap)
+		semanticOutput = semantic.FillFromHierarchicalCommand(hierarchicalCmd)
+	} else {
+		// Use standard parser for simple commands
+		parser := semantic.NewCommandParser()
+		structuredCmd = parser.Parse(*query, words, entityMap)
+
+		// Step 3: Fill template with entities
+		filler := semantic.NewTemplateFiller()
+		var err error
+		semanticOutput, err = filler.Fill(intent, entities)
+		if err != nil {
+			log.Fatalf("Failed to fill template: %v", err)
+		}
+	}
+
+	// Step 4: Marshal to JSON
+	jsonBytes, err := json.MarshalIndent(semanticOutput, "", "  ")
 	if err != nil {
-		log.Fatalf("MoE model forward pass failed: %v", err)
+		log.Fatalf("Failed to marshal JSON: %v", err)
 	}
 
-	// Greedy search decode to get the predicted token IDs
-	predictedIDs, err := model.GreedySearchDecode(contextVector, *maxSeqLength, semanticOutputVocabulary.GetTokenID("<s>"), semanticOutputVocabulary.GetTokenID("</s>"))
-	if err != nil {
-		log.Fatalf("Greedy search decode failed: %v", err)
+	// Display command pattern
+	if hasTemplate && hierarchicalCmd != nil {
+		fmt.Println("\n=== Hierarchical Command Tree ===")
+		fmt.Println(hierarchicalCmd.String())
+		fmt.Println("==================================")
+	} else if structuredCmd != nil {
+		fmt.Println("\n=== Structured Command Pattern ===")
+		fmt.Printf("Action:        %s\n", structuredCmd.Action)
+		fmt.Printf("Object Type:   %s\n", structuredCmd.ObjectType)
+		fmt.Printf("Name:          %s\n", structuredCmd.Name)
+		if structuredCmd.Keyword != "" {
+			fmt.Printf("Keyword:       %s\n", structuredCmd.Keyword)
+		}
+		if structuredCmd.ArgumentType != "" {
+			fmt.Printf("Argument Type: %s\n", structuredCmd.ArgumentType)
+		}
+		if structuredCmd.ArgumentName != "" {
+			fmt.Printf("Argument Name: %s\n", structuredCmd.ArgumentName)
+		}
+		fmt.Printf("\nPattern: %s\n", structuredCmd.String())
+		fmt.Println("===================================")
 	}
 
-	// Decode the predicted IDs to a sentence
-	predictedSentence, err := semanticOutputTokenizer.Decode(predictedIDs)
-	if err != nil {
-		log.Fatalf("Failed to decode predicted IDs: %v", err)
-	}
+	fmt.Println("\n=== Generated Semantic Output ===")
+	fmt.Println(string(jsonBytes))
+	fmt.Println("=================================")
 
-	fmt.Println("--- Predicted Semantic Output ---")
-	fmt.Println(predictedSentence)
-	fmt.Println("---------------------------------")
+	// --- Named Entity Recognition (Rule-Based) ---
+	fmt.Println("\n--- Named Entity Recognition (Rule-Based) ---")
+
+	// Display entities (reuse words from earlier)
+	for i, word := range words {
+
+		entityType := entityMap[i]
+		fmt.Printf("Word: %s, Type: %s\n", word, entityType)
+	}
+	fmt.Println("--------------------------------------------")
 }

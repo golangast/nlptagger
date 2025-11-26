@@ -21,8 +21,8 @@ type Embedding struct {
 	Weight       *Tensor // Embedding weights
 
 	// Stored values from forward pass for backward calculation
-	inputTokenIDs []int // Store input token IDs
-	inputShape    []int // Store input shape
+	inputTokenIDs []int   // Store input token IDs
+	inputShape    []int   // Store input shape
 	inputTensor   *Tensor // Store the input tensor for backward pass
 }
 
@@ -71,6 +71,19 @@ func (e *Embedding) LoadPretrainedWeights(weights map[int][]float64) {
 // Parameters returns all learnable parameters of the layer.
 func (e *Embedding) Parameters() []*Tensor {
 	return []*Tensor{e.Weight}
+}
+
+// SetInput sets the input tensor for the backward pass.
+// This is useful when the embedding layer is reused in a loop (e.g. RNN).
+func (e *Embedding) SetInput(input *Tensor) {
+	e.inputShape = input.Shape
+	e.inputTensor = input
+	if e.inputTokenIDs == nil || len(e.inputTokenIDs) != len(input.Data) {
+		e.inputTokenIDs = make([]int, len(input.Data))
+	}
+	for i, v := range input.Data {
+		e.inputTokenIDs[i] = int(v)
+	}
 }
 
 // Backward performs the backward pass for the token embedding layer.

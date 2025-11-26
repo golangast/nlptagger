@@ -7,15 +7,15 @@ import (
 	"os"
 	"strings"
 
+	"nlptagger/neural/semantic"
 	"nlptagger/tagger"
 	"nlptagger/tagger/tag"
 )
 
-// IntentExample represents a single intent training example
-type IntentExample struct {
-	Query        string `json:"query"`
-	ParentIntent string `json:"parent_intent"`
-	ChildIntent  string `json:"child_intent"`
+// IntentTrainingExample represents a single training example compatible with train_moe
+type IntentTrainingExample struct {
+	Query          string                  `json:"query"`
+	SemanticOutput semantic.SemanticOutput `json:"semantic_output"`
 }
 
 // Function to determine intent based on linguistic tags
@@ -106,13 +106,11 @@ func main() {
 	inputFile, err := os.Open(inputFilePath)
 	if err != nil {
 		fmt.Printf("Error opening input file: %v\n", err)
-
-
 		return
 	}
 	defer inputFile.Close()
 
-	var generatedData []IntentExample
+	var generatedData []IntentTrainingExample
 	scanner := bufio.NewScanner(inputFile)
 
 	for scanner.Scan() {
@@ -131,18 +129,29 @@ func main() {
 					if r := recover(); r != nil {
 						fmt.Printf("Warning: Panic during tagging for query '%s': %v\n", query, r)
 						// Initialize taggedSentence with basic info to avoid nil pointer dereference
-					taggedSentence = tag.Tag{Sentence: query, Tokens: strings.Fields(query), PosTag: make([]string, len(strings.Fields(query))), NerTag: make([]string, len(strings.Fields(query)))}
+						taggedSentence = tag.Tag{Sentence: query, Tokens: strings.Fields(query), PosTag: make([]string, len(strings.Fields(query))), NerTag: make([]string, len(strings.Fields(query)))}
 					}
 				}()
-			taggedSentence = tagger.Tagging(query)
+				taggedSentence = tagger.Tagging(query)
 			}()
 
 			parentIntent, childIntent := determineIntent(taggedSentence)
 
-			generatedData = append(generatedData, IntentExample{
-				Query:        query,
-				ParentIntent: parentIntent,
-				ChildIntent:  childIntent,
+			// Map to SemanticOutput
+			semanticOutput := semantic.SemanticOutput{
+				Operation: childIntent,
+				TargetResource: semantic.Resource{
+					Type: parentIntent,
+					Name: "unknown", // Placeholder
+				},
+				Context: semantic.Context{
+					UserRole: "user",
+				},
+			}
+
+			generatedData = append(generatedData, IntentTrainingExample{
+				Query:          query,
+				SemanticOutput: semanticOutput,
 			})
 		}
 	}
@@ -155,7 +164,6 @@ func main() {
 	outputFile, err := os.Create(outputFilePath)
 	if err != nil {
 		fmt.Printf("Error creating output file: %v\n", err)
-
 		return
 	}
 	defer outputFile.Close()

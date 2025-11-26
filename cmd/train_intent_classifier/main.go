@@ -106,8 +106,8 @@ func main() {
 		parentIntentVocabulary.Size(),
 		childIntentVocabulary.Size(),
 		sentenceVocabulary.Size(),
-		4, // numExperts (increased from 2)
-		2, // k (increased from 1)
+		4,  // numExperts (increased from 2)
+		2,  // k (increased from 1)
 		32, // maxSeqLength (increased to match inference)
 	)
 	if err != nil {
@@ -193,8 +193,8 @@ func main() {
 			}
 
 			// Calculate loss
-			parentLoss, parentGrad := tensor.CrossEntropyLoss(parentLogits, batchParentTargetIDs, parentIntentVocabulary.PaddingTokenID)
-			childLoss, childGrad := tensor.CrossEntropyLoss(childLogits, batchChildTargetIDs, childIntentVocabulary.PaddingTokenID)
+			parentLoss, parentGrad := tensor.CrossEntropyLoss(parentLogits, batchParentTargetIDs, parentIntentVocabulary.PaddingTokenID, 0.0)
+			childLoss, childGrad := tensor.CrossEntropyLoss(childLogits, batchChildTargetIDs, childIntentVocabulary.PaddingTokenID, 0.0)
 
 			flatTargets := make([]int, 0, currentBatchSize*model.BertConfig.MaxPositionEmbeddings)
 			for _, t := range batchSentenceTargetIDs {
@@ -204,7 +204,7 @@ func main() {
 					flatTargets = append(flatTargets, sentenceVocabulary.PaddingTokenID)
 				}
 			}
-			sentenceLoss, sentenceGrad := tensor.CrossEntropyLoss(sentenceOutputs, flatTargets, sentenceVocabulary.PaddingTokenID)
+			sentenceLoss, sentenceGrad := tensor.CrossEntropyLoss(sentenceOutputs, flatTargets, sentenceVocabulary.PaddingTokenID, 0.0)
 
 			totalLoss := parentLoss + childLoss + sentenceLoss
 
