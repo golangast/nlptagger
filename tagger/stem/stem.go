@@ -20,30 +20,37 @@ func Stem(word string) string {
 	re := regexp.MustCompile(`ing$`)
 	if re.MatchString(word) && len(word) >= 3 {
 		if len(word) >= 4 && word[len(word)-4] == word[len(word)-3] {
-			word = word[:len(word)-3]
-		} else {
-			word = re.ReplaceAllString(word, "")
+			return word[:len(word)-3]
 		}
+		return re.ReplaceAllString(word, "")
 	}
 	// Rule 2: Remove "-ed" suffix
 	re = regexp.MustCompile(`ed$`)
-	word = re.ReplaceAllString(word, "")
+	if re.MatchString(word) {
+		return re.ReplaceAllString(word, "")
+	}
 	// Rule 3: Remove "-s" or "-es" suffix
 	re = regexp.MustCompile(`(s|es)$`)
-	word = re.ReplaceAllString(word, "")
-	// Rule 4: Replace "-y" with "-i" if preceded by a consonant
+	if re.MatchString(word) {
+		return re.ReplaceAllString(word, "")
+	}
+	// Rule 4: Remove "-ly" suffix
+	re = regexp.MustCompile(`ly$`)
+	if re.MatchString(word) {
+		return re.ReplaceAllString(word, "")
+	}
+	// Rule 5: Replace "-y" with "-i" if preceded by a consonant
 	re = regexp.MustCompile(`([^aeiou])y$`)
-	word = re.ReplaceAllString(word, "$1i")
+	if re.MatchString(word) {
+		return re.ReplaceAllString(word, "$1i")
+	}
 	// Statistical stemming (with fallback)
 	suffixes := getSuffixesByFrequency(word)
 	for _, suffixFreq := range suffixes {
 		suffix := suffixFreq.Suffix
 		stem := word[:len(word)-len(suffix)]
 		if _, ok := stemFrequencies[stem]; ok && suffixFreq.Frequency >= minimumSuffixFrequency {
-			word = stem
-			break
-		} else if len(stem) > 0 {
-			return ""
+			return stem
 		}
 	}
 	// Add more rules and exceptions as needed
@@ -73,14 +80,16 @@ var commonSuffixes = map[string]bool{
 	"ed":  true,
 	"es":  true,
 	"y":   true, // Add "y" to commonSuffixes
+	"ly":  true,
 }
 var stemFrequencies = map[string]int{
-	"run":   100,
-	"studi": 50,
-	"jump":  75,
-	"box":   60,
-	"see":   90,
-	"happi": 40,
+	"run":     100,
+	"studi":   50,
+	"jump":    75,
+	"box":     60,
+	"see":     90,
+	"happi":   40,
+	"happili": 40,
 }
 var suffixFrequencies = map[string]int{
 	"ing": 80,
@@ -88,5 +97,6 @@ var suffixFrequencies = map[string]int{
 	"ed":  60,
 	"es":  40,
 	"y":   50, // Add frequency for "y"
+	"ly":  70,
 }
 var minimumSuffixFrequency = 20 // Define a minimum frequency threshold for suffixes
