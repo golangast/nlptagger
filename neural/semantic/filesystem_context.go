@@ -37,7 +37,10 @@ func (fc *FilesystemContext) RecordCommand(output SemanticOutput) {
 }
 
 // recordCreation records a created resource and its children
-func (fc *FilesystemContext) recordCreation(resource Resource) {
+func (fc *FilesystemContext) recordCreation(resource *Resource) {
+	if resource == nil {
+		return
+	}
 	resourceType := strings.ToLower(resource.Type)
 
 	// Determine full path
@@ -59,7 +62,8 @@ func (fc *FilesystemContext) recordCreation(resource Resource) {
 		}
 
 		// Record children
-		for _, child := range resource.Children {
+		for i := range resource.Children {
+			child := &resource.Children[i]
 			childPath := filepath.Join(fullPath, child.Name)
 
 			if strings.Contains(strings.ToLower(child.Type), "folder") {

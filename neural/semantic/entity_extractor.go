@@ -3,7 +3,7 @@ package semantic
 import (
 	"strings"
 
-	"nlptagger/neural/nn/ner"
+	"github.com/zendrulat/nlptagger/neural/nn/ner"
 )
 
 // EntityExtractor extracts entities from NER results
@@ -39,6 +39,18 @@ func (ee *EntityExtractor) Extract(words []string, entityMap map[int]ner.EntityT
 		"of": true, "the": true, "a": true, "an": true,
 		"at": true, "by": true, "for": true, "from": true,
 		"on": true, "with": true, "in": true,
+	}
+
+	// Check if there is a database component in the query
+	hasDatabaseComponent := false
+	for i, word := range words {
+		if entityMap[i] == "COMPONENT_NAME" || entityMap[i] == "FEATURE_NAME" {
+			lower := strings.ToLower(word)
+			if lower == "database" || lower == "db" || lower == "sqlite" {
+				hasDatabaseComponent = true
+				break
+			}
+		}
 	}
 
 	for i, word := range words {
@@ -102,6 +114,11 @@ func (ee *EntityExtractor) Extract(words []string, entityMap map[int]ner.EntityT
 					// Fallback for single file
 					entities["file"] = word
 				}
+			}
+
+			// Check for database name
+			if hasDatabaseComponent || strings.HasSuffix(word, ".db") {
+				entities["database_name"] = word
 			}
 		case "FILE_TYPE":
 			entities["file_type"] = word

@@ -17,7 +17,7 @@ func TestGreedySearchDecode(t *testing.T) {
 	contextVector := tensor.NewTensor([]int{1, 32, 128}, make([]float64, 32*128), false)
 
 	// Call GreedySearchDecode
-	predictedIDs, err := model.GreedySearchDecode(contextVector, 32, 0, 1)
+	predictedIDs, err := model.GreedySearchDecode(contextVector, 32, 0, 1, 1.0)
 	if err != nil {
 		t.Fatalf("Greedy search decode failed: %v", err)
 	}

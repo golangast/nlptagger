@@ -26,7 +26,7 @@ func TestWriteGoServer(t *testing.T) {
 }
 
 func TestWriteHandlers(t *testing.T) {
-	err := writeHandlers()
+	err := writeHandlers("Ping")
 	if err != nil {
 		t.Fatalf("writeHandlers() error = %v", err)
 	}
@@ -50,11 +50,11 @@ func TestWriteHandlers(t *testing.T) {
 
 func TestRunTestsAndBuild(t *testing.T) {
 	// Test with "handler" goal
-	err := writeHandlers()
+	err := writeHandlers("Ping")
 	if err != nil {
 		t.Fatalf("writeHandlers() error = %v", err)
 	}
-	err = runTestsAndBuild("create handler")
+	err = runTestsAndBuild("create handler", "Ping")
 	if err != nil {
 		t.Fatalf("runTestsAndBuild() with handler goal failed: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestRunTestsAndBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeGoServer() error = %v", err)
 	}
-	err = runTestsAndBuild("create webserver")
+	err = runTestsAndBuild("create webserver", "")
 	if err != nil {
 		t.Fatalf("runTestsAndBuild() without handler goal failed: %v", err)
 	}

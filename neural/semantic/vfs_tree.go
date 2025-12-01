@@ -374,3 +374,39 @@ func (vfs *VFSTree) printNode(sb *strings.Builder, node *VFSNode, prefix string,
 		}
 	}
 }
+
+// Delete removes a node from the tree
+func (vfs *VFSTree) Delete(path string) error {
+	path = vfs.normalizePath(path)
+	node, exists := vfs.ResolvePath(path)
+	if !exists {
+		return fmt.Errorf("path not found: %s", path)
+	}
+
+	if node.Parent == nil {
+		return fmt.Errorf("cannot delete root node")
+	}
+
+	// Remove from parent's children
+	delete(node.Parent.Children, node.Name)
+
+	// Remove from path index
+	delete(vfs.PathIndex, path)
+
+	// Remove from role index
+	if node.Role != "" {
+		if roles, ok := vfs.RoleIndex[node.Role]; ok {
+			for i, n := range roles {
+				if n == node {
+					vfs.RoleIndex[node.Role] = append(roles[:i], roles[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+
+	// Remove from name index
+	vfs.removeFromNameIndex(node)
+
+	return nil
+}

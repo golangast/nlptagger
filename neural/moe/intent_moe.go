@@ -7,9 +7,9 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"nlptagger/neural/nn"
-	"nlptagger/neural/nnu/word2vec"
-	"nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/tensor"
 	"os"
 	"sort"
 )

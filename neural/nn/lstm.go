@@ -3,7 +3,6 @@ package nn
 import (
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"os"
 

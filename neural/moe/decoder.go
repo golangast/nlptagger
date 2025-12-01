@@ -4,8 +4,8 @@ import (
 	"encoding/gob"
 	"fmt"
 	"math/rand"
-	"nlptagger/neural/nn"
-	. "nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 func init() {

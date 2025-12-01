@@ -1,0 +1,15 @@
+[
+  {
+    "name": "create_template",
+    "description": "creates templates",
+    "keywords": [
+      "template"
+    ],
+    "patterns": [
+      "add template",
+      "add templates"
+    ],
+    "template": "package main\n\nimport (\n\t\"os\"\n\t\"text/template\"\n)\n\nfunc main() {\n\n\tt1 := template.New(\"t1\")\n\tt1, err := t1.Parse(\"Value is {{.}}\\n\")\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tt1 = template.Must(t1.Parse(\"Value: {{.}}\\n\"))\n\n\tt1.Execute(os.Stdout, \"some text\")\n\tt1.Execute(os.Stdout, 5)\n\tt1.Execute(os.Stdout, []string{\n\t\t\"Go\",\n\t\t\"Rust\",\n\t\t\"C++\",\n\t\t\"C#\",\n\t})\n\n\tCreate := func(name, t string) *template.Template {\n\t\treturn template.Must(template.New(name).Parse(t))\n\t}\n\n\tt2 := Create(\"t2\", \"Name: {{.Name}}\\n\")\n\n\tt2.Execute(os.Stdout, struct {\n\t\tName string\n\t}{\"Jane Doe\"})\n\n\tt2.Execute(os.Stdout, map[string]string{\n\t\t\"Name\": \"Mickey Mouse\",\n\t})\n\n\tt3 := Create(\"t3\",\n\t\t\"{{if . -}} yes {{else -}} no {{end}}\\n\")\n\tt3.Execute(os.Stdout, \"not empty\")\n\tt3.Execute(os.Stdout, \"\")\n\n\tt4 := Create(\"t4\",\n\t\t\"Range: {{range .}}{{.}} {{end}}\\n\")\n\tt4.Execute(os.Stdout,\n\t\t[]string{\n\t\t\t\"Go\",\n\t\t\t\"Rust\",\n\t\t\t\"C++\",\n\t\t\t\"C#\",\n\t\t})\n}\n",
+    "file_path": "templates/home.html"
+  }
+]

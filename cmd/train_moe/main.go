@@ -14,14 +14,13 @@ import (
 	"strings"
 	"syscall"
 
-	"nlptagger/neural/moe"
-	"nlptagger/neural/nn"
-	. "nlptagger/neural/nn"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/nnu/word2vec"
-	"nlptagger/neural/semantic"
-	. "nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
+	"github.com/zendrulat/nlptagger/neural/moe"
+	"github.com/zendrulat/nlptagger/neural/nn"
+	mainvocab "github.com/zendrulat/nlptagger/neural/nnu/vocab"
+	"github.com/zendrulat/nlptagger/neural/nnu/word2vec"
+	"github.com/zendrulat/nlptagger/neural/semantic"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
+	"github.com/zendrulat/nlptagger/neural/tokenizer"
 )
 
 // IntentTrainingExample represents a single training example with a query and its intents.
@@ -99,7 +98,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 		return errors.New("no training data provided")
 	}
 
-	optimizer := NewOptimizer(model.Parameters(), learningRate, 1.0) // Using a clip value of 1.0
+	optimizer := nn.NewOptimizer(model.Parameters(), learningRate, 1.0) // Using a clip value of 1.0
 
 	// Learning rate scheduling parameters
 	baseLR := learningRate
@@ -125,7 +124,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 
 			// Update learning rate with scheduling
 			currentLR := calculateLearningRate(currentStep, totalSteps, warmupSteps, baseLR, minLR)
-			if adamOpt, ok := optimizer.(*Adam); ok {
+			if adamOpt, ok := optimizer.(*nn.Adam); ok {
 				adamOpt.SetLearningRate(currentLR)
 			}
 			currentStep++
@@ -159,7 +158,7 @@ func TrainIntentMoEModel(model *moe.IntentMoE, data *IntentTrainingData, epochs 
 }
 
 // trainIntentMoEBatch performs a single training step on a batch of data.
-func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer Optimizer, batch IntentTrainingData, queryVocab, semanticOutputVocab *mainvocab.Vocabulary, queryTokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, maxSequenceLength int, epoch, totalEpochs int) (float64, error) {
+func trainIntentMoEBatch(intentMoEModel *moe.IntentMoE, optimizer nn.Optimizer, batch IntentTrainingData, queryVocab, semanticOutputVocab *mainvocab.Vocabulary, queryTokenizer, semanticOutputTokenizer *tokenizer.Tokenizer, maxSequenceLength int, epoch, totalEpochs int) (float64, error) {
 	optimizer.ZeroGrad()
 
 	batchSize := len(batch)

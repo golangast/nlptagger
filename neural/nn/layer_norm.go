@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	. "nlptagger/neural/tensor"
+	. "github.com/zendrulat/nlptagger/neural/tensor"
 )
 
 // LayerNorm represents a layer normalization module

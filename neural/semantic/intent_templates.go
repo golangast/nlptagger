@@ -1,6 +1,9 @@
 package semantic
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // IntentType represents the classification of user intent
 type IntentType string
@@ -150,7 +153,7 @@ func fillCreateFolder(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Create",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::Folder",
 			Name: folderName,
 			Properties: map[string]interface{}{
@@ -166,6 +169,9 @@ func fillCreateFolder(entities map[string]string) SemanticOutput {
 // fillCreateFile fills template for file creation
 func fillCreateFile(entities map[string]string) SemanticOutput {
 	fileName := entities["file"]
+	if fileName == "" {
+		fileName = entities["destination_file"] // Fallback
+	}
 	if fileName == "" {
 		// Use file_type to generate filename if available
 		fileType := entities["file_type"]
@@ -200,11 +206,29 @@ func fillCreateFile(entities map[string]string) SemanticOutput {
 	// Add code_type if present
 	if codeType, ok := entities["code_type"]; ok {
 		properties["code_type"] = codeType
+
+		// Generate content based on component
+		if component, ok := entities["component"]; ok {
+			if strings.Contains(strings.ToLower(component), "handler") {
+				properties["content"] = fmt.Sprintf(`package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+// %s handles HTTP requests
+func %s(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello from %s!")
+}
+`, strings.Title(strings.TrimSuffix(fileName, ".go")), strings.Title(strings.TrimSuffix(fileName, ".go")), fileName)
+			}
+		}
 	}
 
 	return SemanticOutput{
 		Operation: "Create",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type:       "Filesystem::File",
 			Name:       fileName,
 			Properties: properties,
@@ -266,7 +290,7 @@ func fillCreateFolderWithFile(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Create",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type:     "Filesystem::Folder",
 			Name:     folderName,
 			Children: children,
@@ -294,7 +318,7 @@ func fillDeleteFile(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Delete",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::File",
 			Name: fileName,
 			Properties: map[string]interface{}{
@@ -321,7 +345,7 @@ func fillDeleteFolder(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Delete",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::Folder",
 			Name: folderName,
 			Properties: map[string]interface{}{
@@ -348,7 +372,7 @@ func fillReadFile(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Read",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::File",
 			Name: fileName,
 			Properties: map[string]interface{}{
@@ -382,7 +406,7 @@ func fillRenameFile(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Rename",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::File",
 			Name: sourceFile,
 			Properties: map[string]interface{}{
@@ -412,7 +436,7 @@ func fillRenameFolder(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Rename",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::Folder",
 			Name: sourceFolder,
 			Properties: map[string]interface{}{
@@ -449,7 +473,7 @@ func fillAddFeature(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "AddFeature",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type:       "Code::Component",
 			Name:       componentName,
 			Properties: properties,
@@ -480,7 +504,7 @@ func fillMoveFile(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Move",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::File",
 			Name: sourceFile,
 			Properties: map[string]interface{}{
@@ -510,7 +534,7 @@ func fillMoveFolder(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Move",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type: "Filesystem::Folder",
 			Name: sourceFolder,
 			Properties: map[string]interface{}{
@@ -546,7 +570,7 @@ func fillModifyCode(entities map[string]string) SemanticOutput {
 
 	return SemanticOutput{
 		Operation: "Modify",
-		TargetResource: Resource{
+		TargetResource: &Resource{
 			Type:       "Code::Component",
 			Name:       componentName,
 			Properties: properties,
@@ -601,7 +625,7 @@ func FillFromStructuredCommand(cmd *StructuredCommand) SemanticOutput {
 	}
 
 	// Build target resource
-	output.TargetResource = Resource{
+	output.TargetResource = &Resource{
 		Type:       resourceType,
 		Name:       cmd.Name,
 		Properties: properties,
@@ -679,7 +703,7 @@ func FillFromHierarchicalCommand(cmd *HierarchicalCommand) SemanticOutput {
 	}
 
 	// Build target resource
-	output.TargetResource = Resource{
+	output.TargetResource = &Resource{
 		Type:       resourceType,
 		Name:       cmd.Name,
 		Properties: properties,

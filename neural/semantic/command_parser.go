@@ -3,7 +3,7 @@ package semantic
 import (
 	"strings"
 
-	"nlptagger/neural/nn/ner"
+	"github.com/zendrulat/nlptagger/neural/nn/ner"
 )
 
 // CommandParser parses queries into structured commands

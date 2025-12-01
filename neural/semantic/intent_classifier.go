@@ -30,6 +30,7 @@ func (ic *IntentClassifier) Classify(query string) IntentType {
 		"websocket", "graphql", "rest",
 		"rate-limiting", "throttle",
 		"metrics", "monitoring",
+		"database", "db", "sql", "sqlite",
 	})
 
 	hasComponentKeyword := containsAny(query, []string{
@@ -44,10 +45,16 @@ func (ic *IntentClassifier) Classify(query string) IntentType {
 	})
 
 	// If query has "add X to Y" pattern with feature and component keywords
-	if containsAny(query, []string{"add", "implement", "integrate", "enable"}) &&
+	if containsAny(query, []string{"add", "implement", "integrate", "enable", "connect", "use", "configure"}) &&
 		containsAny(query, []string{"to", "in", "into"}) &&
 		hasFeatureKeyword &&
 		hasComponentKeyword {
+		return IntentAddFeature
+	}
+
+	// Check for database creation
+	if containsAny(query, []string{"add", "create", "make", "new"}) &&
+		containsAny(query, []string{"database", "db", "sql", "sqlite"}) {
 		return IntentAddFeature
 	}
 
@@ -80,8 +87,8 @@ func (ic *IntentClassifier) Classify(query string) IntentType {
 
 	// Check for file creation
 	if containsAny(query, []string{"add", "create", "make", "new"}) &&
-		containsAny(query, []string{"file"}) &&
-		!hasFeatureKeyword && !hasComponentKeyword {
+		(containsAny(query, []string{"file"}) || hasFileReference(query)) &&
+		!hasFeatureKeyword {
 		return IntentCreateFile
 	}
 
