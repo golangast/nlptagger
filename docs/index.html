@@ -1,690 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Multi-Orchestrator: NLP-Powered Project Generator</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link
-		href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap"
-		rel="stylesheet">
-	<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Orchestrator with NLP Understanding</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
-<body class="dark-theme">
-
-	<div id="status-dialog" class="custom-dialog">
-		<div class="dialog-surface">
-			<h3 class="title-large">⚠️ Project Status: Beta</h3>
-			<div class="dialog-content body-medium">
-				<p>This project is currently in a **beta stage** and is under active development. The API and
-					functionality are subject to change.</p>
-				<p class="mt-10">We encourage contributions and feedback from the community.</p>
-			</div>
-			<div class="dialog-actions">
-				<button class="custom-button outlined" id="dialog-cancel">Close</button>
-				<button class="custom-button filled">View GitHub</button>
-			</div>
-		</div>
-	</div>
-
-	<div id="custom-snackbar" class="custom-snackbar" aria-live="polite">
-		<span class="snackbar-message body-small">Code Copied to Clipboard!</span>
-	</div>
-
-	<div class="app-container">
-
-		<aside class="app-sidebar">
-			<div class="sidebar-header">
-				<span class="logo-icon">🤖</span>
-				<h1 class="title-large">Multi<span class="tagger-title-part">Orchestrator</span></h1>
-			</div>
-
-			<nav class="sidebar-nav">
-				<a href="#features" class="nav-item active">
-					<span class="icon">✨</span>
-					<span class="label label-medium">Key Features</span>
-					<span class="badge small"></span>
-				</a>
-				<a href="#usage" class="nav-item">
-					<span class="icon">🛠️</span>
-					<span class="label label-medium">Usage & Commands</span>
-				</a>
-				<a href="#example" class="nav-item">
-					<span class="icon">�</span>
-					<span class="label label-medium">Example Output</span>
-				</a>
-			</nav>
-		</aside>
-
-		<div class="app-content-wrapper">
-
-			<header class="app-top-bar">
-				<div class="search-box">
-					<input type="text" placeholder="Search Documentation (Ctrl+K)" class="body-medium">
-					<button class="custom-icon-button" aria-label="Search">🔍</button>
-				</div>
-				<div class="header-actions">
-					<button class="custom-button text tooltip-target" id="show-dialog-btn">Project Status</button>
-					<div class="user-status title-small">Developer </div>
-				</div>
-			</header>
-
-			<main class="content-area">
-
-				<section id="features" data-animation-target>
-					<h2 class="display-small">✨ Key Features</h2>
-					<p class="section-intro body-large">**Multi-Orchestrator** is an intelligent project scaffolding
-						tool that understands natural language commands and generates production-ready code structures.
-					</p>
-					<div class="feature-grid">
-						<div class="custom-card elevated">
-							<h3 class="headline-small">🧠 NLP-Powered Understanding</h3>
-							<p class="body-medium">Uses **MoE-based intent classification** and **Named Entity
-								Recognition (NER)** to understand natural language commands like "create a webserver
-								with authentication handler" and automatically generate the appropriate project
-								structure.</p>
-						</div>
-						<div class="custom-card elevated">
-							<h3 class="headline-small">🎨 Custom Intent Creation</h3>
-							<p class="body-medium">Define your own **custom intents** with keywords, patterns, and code
-								templates. Reuse learned code patterns from the knowledge base to create personalized
-								commands that match your workflow.</p>
-						</div>
-						<div class="custom-card elevated">
-							<h3 class="headline-small">📚 Knowledge Base Learning</h3>
-							<p class="body-medium">The orchestrator learns from code you've written before. Store
-								templates in the **learning directory** and the system will suggest relevant code when
-								generating similar components.</p>
-						</div>
-						<div class="custom-card elevated">
-							<h3 class="headline-small">⏮️ Git-Based Version Control</h3>
-							<p class="body-medium">Every generation is automatically committed to Git. **Revert to any
-								previous state** by ID, commit hash, or command text. Full project history is preserved
-								even when deleting projects.</p>
-						</div>
-						<div class="custom-card elevated">
-							<h3 class="headline-small">🔄 Multi-Agent Architecture</h3>
-							<p class="body-medium">Parallel execution with specialized agents: **Coder** (generates Go
-								servers), **DevOps** (creates Dockerfiles), and **QA** (runs tests and builds). All
-								working together to deliver production-ready code.</p>
-						</div>
-						<div class="custom-card elevated">
-							<h3 class="headline-small">🎯 Semantic Code Generation</h3>
-							<p class="body-medium">Converts natural language into **structured semantic
-								representations** that drive intelligent code generation. Supports hierarchical project
-								structures, handlers, databases, and custom components.</p>
-						</div>
-					</div>
-				</section>
-
-				<div class="custom-divider"></div>
-
-				<section id="models" data-animation-target>
-					<h2 class="display-small">🧠 Model Catalog</h2>
-					<p class="section-intro body-large mt-20">Explore the different model types available for training
-						and inference.</p>
-
-					<div class="model-cards">
-						<div class="custom-card filled">
-							<h3 class="title-large">Mixture of Experts (MoE)</h3>
-							<p class="body-medium text-secondary">A novel approach for handling sequential data with
-								high sparsity and concurrency. Ideal for complex NLP tasks like intent classification
-								and sequence-to-sequence generation.</p>
-							<span class="card-status status-beta label-small">BETA</span>
-						</div>
-						<div class="custom-card outlined">
-							<h3 class="title-large">Word2Vec</h3>
-							<p class="body-medium text-secondary">Generates dense vector representations of words,
-								capturing semantic relationships. Essential for feature extraction and as a foundational
-								layer for other models.</p>
-							<span class="card-status status-stable label-small">STABLE</span>
-						</div>
-						<div class="custom-card outlined">
-							<h3 class="title-large">Intent Classification</h3>
-							<p class="body-medium text-secondary">A model designed to understand and categorize user
-								queries into predefined intents. It can discern both parent and child intents, allowing
-								for nuanced command interpretation.</p>
-							<span class="card-status status-stable label-small">STABLE</span>
-						</div>
-						<div class="custom-card outlined">
-							<h3 class="title-large">Transformer Encoder</h3>
-							<p class="body-medium text-secondary">A classic self-attention mechanism implementation for
-								baseline tasks, providing a strong foundation for sequence-based analysis.</p>
-							<span class="card-status status-stable label-small">STABLE</span>
-						</div>
-					</div>
-				</section>
-
-				<div class="custom-divider"></div>
-
-				<div class="custom-divider"></div>
-
-				<section id="usage" data-animation-target>
-					<h2 class="display-small">🛠️ Usage & CLI</h2>
-					<p class="section-intro body-large">Interact with the Multi-Orchestrator using natural language
-						commands. The system understands your intent and generates the appropriate code structure.</p>
-
-					<div class="tabs custom-segmented-button">
-						<button class="tab-button active label-large" data-tab="train-usage">1. Natural Language
-							Commands</button>
-						<button class="tab-button label-large" data-tab="inference-usage">2. Custom Intents &
-							Management</button>
-					</div>
-
-					<div id="tab-train-usage" class="tab-content active">
-						<h3 class="headline-small">Natural Language Project Generation</h3>
-						<p class="body-medium text-secondary">Simply describe what you want to build in natural
-							language:</p>
-						<table class="cmd-table">
-							<thead>
-								<tr>
-									<th class="label-medium">Command Example</th>
-									<th class="label-medium">What It Does</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr class="body-medium">
-									<td><code class="body-small">create a webserver with authentication handler</code>
-									</td>
-									<td>Generates a Go web server with an authentication handler, Dockerfile, and README
-									</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">create a database named users.db</code></td>
-									<td>Creates a Go server with SQLite database integration</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">add a payment handler</code></td>
-									<td>Adds a new payment handler to the existing project</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code
-											class="body-small">create a file named config.yaml in folder configs</code>
-									</td>
-									<td>Creates hierarchical file structures based on semantic understanding</td>
-								</tr>
-							</tbody>
-						</table>
-
-						<h3 class="headline-small mt-40">Version Control Commands</h3>
-						<table class="cmd-table">
-							<thead>
-								<tr>
-									<th class="label-medium">Command</th>
-									<th class="label-medium">Description</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr class="body-medium">
-									<td><code class="body-small">show history</code></td>
-									<td>Display all previous commands with IDs and commit hashes</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">revert &lt;id&gt;</code></td>
-									<td>Revert to a specific command by its ID (e.g., "revert 5")</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">revert &lt;hash&gt;</code></td>
-									<td>Revert to a specific Git commit hash</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">revert &lt;command&gt;</code></td>
-									<td>Revert to the last occurrence of a command (e.g., "revert authentication
-										handler")</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">delete project</code></td>
-									<td>Delete all project files while preserving Git history for future reverts</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<div id="tab-inference-usage" class="tab-content">
-						<h3 class="headline-small">Custom Intent Management</h3>
-						<p class="body-medium text-secondary">Create reusable custom intents with your own code
-							templates:</p>
-						<table class="cmd-table">
-							<thead>
-								<tr>
-									<th class="label-medium">Command</th>
-									<th class="label-medium">Description</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr class="body-medium">
-									<td><code class="body-small">create custom intent</code></td>
-									<td>Interactive wizard to create a new custom intent with keywords, patterns, and
-										code template</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">list intents</code></td>
-									<td>Show all defined custom intents with their keywords and output files</td>
-								</tr>
-								<tr class="body-medium">
-									<td><code class="body-small">remove intent &lt;name&gt;</code></td>
-									<td>Delete a custom intent by name</td>
-								</tr>
-							</tbody>
-						</table>
-
-						<h3 class="headline-small mt-40">Example: Creating a Custom Intent</h3>
-						<div class="code-block dark-theme-code">
-							<button class="copy-btn custom-button filled" aria-label="Copy code snippet">📋
-								Copy</button>
-							<pre id="go-code-example" class="body-small"><code>🤖 Multi-Orchestrator (with NLP Understanding)
-> create custom intent
-
-🎨 Create Custom Intent
-========================
-Intent name: create_jwt_middleware
-Description: Creates JWT authentication middleware
-Keywords: jwt,auth,middleware
-Patterns: add jwt,create jwt middleware
-Output file path: middleware/jwt.go
-Code template: (type your Go code with {{.VariableName}} placeholders)
-
-✅ Custom intent 'create_jwt_middleware' created successfully!
-
-# Now you can use it:
-> add jwt middleware to my project
-🎨 Matched custom intent: create_jwt_middleware
-✅ Custom intent executed successfully!</code></pre>
-						</div>
-					</div>
-
-					<section class="nlptagger-example-section">
-						<h2>Example: "create a file named jack in folder named jill"</h2>
-						<p class="example-description">This output demonstrates the nlptagger's process for converting a
-							natural language command into an executable shell command.</p>
-
-						<div class="nlptagger-table-container">
-							<table>
-								<thead>
-									<tr>
-										<th>Field</th>
-										<th>Output</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr>
-										<td class="field-label">Query</td>
-										<td class="field-value command-line">create a file named jack in folder named
-											jill</td>
-									</tr>
-									<tr>
-										<td class="field-label">Top Parent Intent Prediction</td>
-										<td class="field-value">webserver_creation <span class="confidence">(Confidence:
-												29.17%)</span></td>
-									</tr>
-									<tr>
-										<td class="field-label">Top Child Intent Prediction</td>
-										<td class="field-value">create <span class="confidence">(Confidence:
-												17.68%)</span></td>
-									</tr>
-									<tr>
-										<td class="field-label">Description</td>
-										<td class="field-value">The model's top prediction is an action related to
-											**webserver_creation**, specifically to **create**.</td>
-									</tr>
-									<tr>
-										<td class="field-label">POS Tagging Results</td>
-										<td class="field-value code-block">[VB DET IN NN NN NN VBN NN]</td>
-									</tr>
-									<tr>
-										<td class="field-label">NER Tagging Results</td>
-										<td class="field-value code-block">[COMMAND DETERMINE OBJECT_TYPE NAME_PREFIX
-											NAME PREPOSITION OBJECT_TYPE NAME_PREFIX NAME]</td>
-									</tr>
-									<tr class="generated-command-row">
-										<td class="field-label">Generated Command</td>
-										<td class="field-value generated-command">
-											<pre><code>mkdir -p jill && touch jill/jack</code></pre>
-										</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
-					</section>
-
-					<h3 class="headline-small mt-40">Integrating Tagger with MoE for Command Generation</h3>
-					<p class="mt-20 body-medium text-secondary">You can integrate the trained MoE model with the
-						<code>tagger</code> package to generate structured commands from natural language input. This
-						example demonstrates loading a pre-trained MoE model and using it to process a query.
-					</p>
-					<div class="code-block dark-theme-code">
-						<button class="copy-btn custom-button filled" aria-label="Copy code snippet">📋 Copy</button>
-						<pre id="go-tagger-moe-example" class="body-small"><code>package main
-
-import (
-	"encoding/json"
-	"flag"
-	"fmt"
-	"io"
-	"log"
-	"math" // Keep math for softmax
-	"math/rand"
-	"os"
-	"os/exec"
-	"sort"
-
-	"nlptagger/neural/moe"
-	mainvocab "nlptagger/neural/nnu/vocab"
-	"nlptagger/neural/tensor"
-	"nlptagger/neural/tokenizer"
-	"nlptagger/tagger/nertagger"
-	"nlptagger/tagger/postagger"
-	"nlptagger/tagger/tag"
-)
-
-// IntentTrainingExample represents a single training example for intent classification.
-type IntentTrainingExample struct {
-	Query        string `json:"query"`
-	ParentIntent string `json:"parent_intent"`
-	ChildIntent  string `json:"child_intent"`
-	Description  string `json:"description"`
-	Sentence     string `json:"sentence"`
-}
-
-// IntentTrainingData represents the structure of the intent training data JSON.
-type IntentTrainingData []IntentTrainingExample
-
-// LoadIntentTrainingData loads the intent training data from a JSON file.
-func LoadIntentTrainingData(filePath string) (*IntentTrainingData, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open training data file %s: %w", filePath, err)
-	}
-	defer file.Close()
-
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read training data file %s: %w", filePath, err)
-	}
-
-	var data IntentTrainingData
-	err = json.Unmarshal(bytes, &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal training data JSON from %s: %w", filePath, err)
-	}
-
-	return &data, nil
-}
-
-type Prediction struct {
-	TokenID    int
-	Word       string
-	Confidence float64
-}
-
-func getTopNPredictions(probabilities []float64, vocab []string, n int) []Prediction {
-	predictions := make([]Prediction, 0, len(probabilities))
-	for i, p := range probabilities {
-		if i < 2 { // Skip <pad> and UNK
-			continue
-		}
-		if i < len(vocab) {
-			word := vocab[i]
-			predictions = append(predictions, Prediction{
-				TokenID:    i,
-				Word:       word,
-				Confidence: p * 100.0,
-			})
-		}
-	}
-
-	// Sort predictions by confidence
-	sort.Slice(predictions, func(i, j int) bool {
-		return predictions[i].Confidence > predictions[j].Confidence
-	})
-
-	if len(predictions) < n {
-		return predictions
-	}
-	return predictions[:n]
-}
-
-var (
-	query        = flag.String("query", "", "Query for MoE inference")
-	maxSeqLength = flag.Int("maxlen", 32, "Maximum sequence length")
-)
-
-func main() {
-	rand.Seed(1) // Seed the random number generator for deterministic behavior
-	flag.Parse()
-
-	if *query == "" {
-		log.Fatal("Please provide a query using the -query flag.")
-	}
-
-	// Define paths
-	const vocabPath = "gob_models/query_vocabulary.gob"
-	const moeModelPath = "gob_models/moe_classification_model.gob"
-	const parentIntentVocabPath = "gob_models/parent_intent_vocabulary.gob"
-	const childIntentVocabPath = "gob_models/child_intent_vocabulary.gob"
-	const intentTrainingDataPath = "trainingdata/intent_data.json"
-
-	// Load vocabularies
-	vocabulary, err := mainvocab.LoadVocabulary(vocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up input vocabulary: %v", err)
-	}
-
-	// Setup parent intent vocabulary
-	parentIntentVocabulary, err := mainvocab.LoadVocabulary(parentIntentVocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up parent intent vocabulary: %v", err)
-	}
-
-	// Setup child intent vocabulary
-	childIntentVocabulary, err := mainvocab.LoadVocabulary(childIntentVocabPath)
-	if err != nil {
-		log.Fatalf("Failed to set up child intent vocabulary: %v", err)
-	}
-
-	// Create tokenizer
-	tok, err := tokenizer.NewTokenizer(vocabulary)
-	if err != nil {
-		log.Fatalf("Failed to create tokenizer: %w", err)
-	}
-
-	// Load the trained MoEClassificationModel model
-	model, err := moe.LoadIntentMoEModelFromGOB(moeModelPath)
-	if err != nil {
-		log.Fatalf("Failed to load MoE model: %v", err)
-	}
-
-	// Load intent training data
-	intentTrainingData, err := LoadIntentTrainingData(intentTrainingDataPath)
-	if err != nil {
-		log.Fatalf("Failed to load intent training data: %v", err)
-	}
-
-	log.Printf("--- DEBUG: Parent Intent Vocabulary (TokenToWord): %v ---", parentIntentVocabulary.TokenToWord)
-	log.Printf("--- DEBUG: Child Intent Vocabulary (TokenToWord): %v ---", childIntentVocabulary.TokenToWord)
-
-	log.Printf("Running MoE inference for query: \"%s\"", *query)
-
-	// Encode the query
-	tokenIDs, err := tok.Encode(*query)
-	if err != nil {
-		log.Fatalf("Failed to encode query: %v", err)
-	}
-
-	// Pad or truncate the sequence to a fixed length
-	if len(tokenIDs) > *maxSeqLength {
-		tokenIDs = tokenIDs[:*maxSeqLength] // Truncate from the end
-	} else {
-		for len(tokenIDs) < *maxSeqLength {
-			tokenIDs = append(tokenIDs, vocabulary.PaddingTokenID) // Appends padding
-		}
-	}
-	inputData := make([]float64, len(tokenIDs))
-	for i, id := range tokenIDs {
-		inputData[i] = float64(id)
-	}
-	inputTensor := tensor.NewTensor([]int{1, len(inputData)}, inputData, false) // RequiresGrad=false for inference
-
-	// Create a dummy target tensor for inference, as the Forward method expects two inputs.
-	// The actual content of this tensor won't be used for parent/child intent classification.
-	dummyTargetTokenIDs := make([]float64, *maxSeqLength)
-	for i := 0; i < *maxSeqLength; i++ {
-		dummyTargetTokenIDs[i] = float64(vocabulary.PaddingTokenID)
-	}
-	dummyTargetTensor := tensor.NewTensor([]int{1, *maxSeqLength}, dummyTargetTokenIDs, false)
-
-	// Forward pass
-	parentLogits, childLogits, _, _, err := model.Forward(inputTensor, dummyTargetTensor)
-	if err != nil {
-		log.Fatalf("MoE model forward pass failed: %v", err)
-	}
-
-	// Interpret parent intent output
-	parentProbabilities := softmax(parentLogits.Data)
-	topParentPredictions := getTopNPredictions(parentProbabilities, parentIntentVocabulary.TokenToWord, 3)
-
-	fmt.Println("--- Top 3 Parent Intent Predictions ---")
-	for _, p := range topParentPredictions {
-		importance := ""
-		if p.Confidence > 50.0 {
-			importance = " (Important)"
-		}
-		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
-	}
-	fmt.Println("------------------------------------")
-
-	// Interpret child intent output
-	childProbabilities := softmax(childLogits.Data)
-	topChildPredictions := getTopNPredictions(childProbabilities, childIntentVocabulary.TokenToWord, 3)
-
-	fmt.Println("--- Top 3 Child Intent Predictions ---")
-	for _, p := range topChildPredictions {
-		importance := ""
-		if p.Confidence > 50.0 {
-			importance = " (Important)"
-		}
-		fmt.Printf("  - Word: %-20s (Confidence: %.2f%%)%s\n", p.Word, p.Confidence, importance)
-	}
-	fmt.Println("-----------------------------------")
-
-	if len(topParentPredictions) > 0 && len(topChildPredictions) > 0 {
-		predictedParentWord := topParentPredictions[0].Word
-		predictedChildWord := topChildPredictions[0].Word
-		fmt.Printf("\nDescription: The model's top prediction is an action related to %s, specifically to %s.\n", predictedParentWord, predictedChildWord)
-
-		// Find and print the intent sentence
-		foundSentence := ""
-		for _, example := range *intentTrainingData {
-			if example.ParentIntent == predictedParentWord && example.ChildIntent == predictedChildWord {
-				foundSentence = example.Sentence
-				break
-			}
-		}
-
-		if foundSentence != "" {
-			fmt.Printf("Intent Sentence: %s\n", foundSentence)
-		} else {
-			fmt.Println("Intent Sentence: Not found in training data.")
-		}
-	}
-
-	// Perform POS tagging
-	posResult := postagger.Postagger(*query)
-	fmt.Println("\n--- POS Tagging Results ---")
-	fmt.Printf("Tokens: %v\n", posResult.Tokens)
-	fmt.Printf("POS Tags: %v\n", posResult.PosTag)
-
-	// Perform NER tagging
-	nerResult := nertagger.Nertagger(posResult)
-	fmt.Println("\n--- NER Tagging Results ---")
-	fmt.Printf("Tokens: %v\n", nerResult.Tokens)
-	fmt.Printf("NER Tags: %v\n", nerResult.NerTag)
-
-	// Generate and execute command based on NER/POS tags and intent predictions
-	fmt.Println("\n--- Generating Command ---")
-	command := generateCommand("file_system", topChildPredictions[0].Word, nerResult)
-	if command != "" {
-		fmt.Printf("Generated Command: %s\n", command)
-		// Execute the command
-		cmd := exec.Command("bash", "-c", command)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			log.Printf("Error executing command: %v", err)
-		}
-	} else {
-		fmt.Println("Could not generate a command.")
-	}
-}
-
-// softmax applies the softmax function to a slice of float64.
-func softmax(logits []float64) []float64 {
-	if len(logits) == 0 {
-		return []float64{}
-	}
-	maxLogit := logits[0]
-	for _, logit := range logits {
-		if logit > maxLogit {
-			maxLogit = logit
-		}
-	}
-	expSum := 0.0
-	for _, logit := range logits {
-		expSum += math.Exp(logit - maxLogit)
-	}
-
-	probabilities := make([]float64, len(logits))
-	for i, logit := range logits {
-		probabilities[i] = math.Exp(logit-maxLogit) / expSum
-	}
-	return probabilities
-}
-
-func generateCommand(parentIntent, childIntent string, nerResult tag.Tag) string {
-	switch parentIntent {
-	case "file_system":
-		switch childIntent {
-		case "create":
-			var fileName, folderName string
-			for i, tag := range nerResult.NerTag {
-				if tag == "OBJECT_TYPE" && nerResult.Tokens[i] == "file" {
-					if i+2 < len(nerResult.Tokens) && nerResult.NerTag[i+1] == "NAME_PREFIX" && nerResult.NerTag[i+2] == "NAME" {
-						fileName = nerResult.Tokens[i+2]
-					}
-				} else if tag == "OBJECT_TYPE" && nerResult.Tokens[i] == "folder" {
-					if i+2 < len(nerResult.Tokens) && nerResult.NerTag[i+1] == "NAME_PREFIX" && nerResult.NerTag[i+2] == "NAME" {
-						folderName = nerResult.Tokens[i+2]
-					}
-				}
-			}
-			if fileName != "" && folderName != "" {
-				return fmt.Sprintf("mkdir -p %s && touch %s/%s", folderName, folderName, fileName)
-			} else if fileName != "" {
-				return fmt.Sprintf("touch %s", fileName)
-			}
-		}
-		// Add other file_system child intents here (e.g., "delete", "read")
-	}
-	// Add other parent intents here
-
-	return ""
-}
-</code></pre>
-					</div>
-
-				</section>
-
-				<div class="custom-divider"></div>
-
-			</main>
-		</div>
-	</div>
-
-	<script src="script.js"></script>
+<body>
+    <header>
+        <h1>Multi-Orchestrator with NLP Understanding</h1>
+        <p>Your smart assistant for code generation.</p>
+    </header>
+
+    <main>
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>The Multi-Orchestrator has been enhanced with <strong>semantic understanding</strong> using a Mixture of Experts (MoE) model and Named Entity Recognition (NER) tagging. Instead of relying on simple keyword matching, it now understands what you're writing in natural language.</p>
+        </section>
+
+        <section id="comparison">
+            <h2>Before vs. After</h2>
+            <div class="comparison-container">
+                <div class="before">
+                    <h3>Before (Keyword-based)</h3>
+                    <p>The orchestrator would only recognize specific keywords:</p>
+                    <ul>
+                        <li>"create webserver"</li>
+                        <li>"create handler"</li>
+                        <li>"create database"</li>
+                    </ul>
+                </div>
+                <div class="after">
+                    <h3>After (Semantic Understanding)</h3>
+                    <p>Now you can write naturally, and the orchestrator will understand your intent:</p>
+                    <ul>
+                        <li>"I want to build a webserver with an authentication handler"</li>
+                        <li>"Make me a Go server that has JWT support"</li>
+                        <li>"Create an API with a database for storing user data"</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="how-it-works">
+            <h2>How It Works</h2>
+            <p>The enhanced orchestrator uses a multi-stage NLP pipeline:</p>
+            <ol>
+                <li><strong>Intent Classification</strong> - Determines what you want to do (create, modify, delete, etc.)</li>
+                <li><strong>Named Entity Recognition (NER)</strong> - Extracts key entities like handler names, database names, component names</li>
+                <li><strong>Semantic Parsing</strong> - Builds a structured representation of your command</li>
+                <li><strong>Template Filling</strong> - Generates the appropriate code based on the semantic understanding</li>
+            </ol>
+        </section>
+
+        <section id="features">
+            <h2>Features</h2>
+            <ul>
+                <li>✅ <strong>Natural Language Understanding</strong> - Write commands as you would speak them</li>
+                <li>✅ <strong>Intent Detection</strong> - Automatically determines what you want to do</li>
+                <li>✅ <strong>Entity Extraction</strong> - Intelligently extracts names, types, and parameters</li>
+                <li>✅ <strong>Fallback Support</strong> - Falls back to keyword matching if semantic parsing fails</li>
+                <li>✅ <strong>Semantic Output</strong> - Generates structured JSON representation of commands</li>
+                <li>✅ <strong>Git Integration</strong> - Tracks changes with automatic commits</li>
+                <li>✅ <strong>History & Revert</strong> - View command history and revert to previous states</li>
+            </ul>
+        </section>
+
+        <section id="usage">
+            <h2>Example Usage</h2>
+            <pre><code># Run the orchestrator
+./cmd/multi_orchestrator/multi_orchestrator
+
+# Try natural language commands:
+> create a webserver with authentication handler
+> build me a Go server with a users database
+> I need an API with JWT middleware</code></pre>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>Built with ❤️ by the Gemini Team</p>
+    </footer>
+
+    <script src="script.js"></script>
 </body>
-
 </html>

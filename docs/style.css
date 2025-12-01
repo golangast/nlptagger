@@ -1,375 +1,64 @@
-:root {
-    /* Custom High-Contrast Dark Palette */
-    --color-bg-primary: #111215;           /* Deep background */
-    --color-bg-secondary: #1A1C20;         /* Sidebar / Elevated Surface */
-    --color-bg-tertiary: #24272B;          /* Card / High Elevation */
-    --color-text-primary: #E3E2E6;         /* Main text */
-    --color-text-secondary: #8D929A;       /* Secondary text / Outline */
-    --color-accent: #00A7D9;               /* Electric Blue Accent */
-    --color-accent-dark: #003350;          /* Accent Container */
-    --color-error: #FF5A5A;                /* Red for badges/errors */
-    
-    /* Shapes (Geometric/Sharp) */
-    --shape-radius-small: 4px;
-    --shape-radius-medium: 6px;
-    --shape-radius-large: 8px;
-    --shape-radius-full: 9999px;
-
-    --transition-duration: 0.2s;
-    --sidebar-width: 260px;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background: #f4f4f4;
+    color: #333;
 }
 
-/* --- GLOBAL STYLES & TYPOGRAPHY --- */
-* { box-sizing: border-box; font-family: 'Inter', sans-serif; }
-html, body { margin: 0; padding: 0; height: 100%; } /* Ensure fixed layout works */
-body.dark-theme {
-    background: var(--color-bg-primary); 
-    color: var(--color-text-primary);
+header {
+    background: #333;
+    color: #fff;
+    padding: 1rem 0;
+    text-align: center;
 }
 
-/* Custom Typography Scale (Based on M3 names, custom sizes) */
-.display-small { font-size: 38px; font-weight: 800; }
-.headline-small { font-size: 24px; font-weight: 600; }
-.title-large { font-size: 20px; font-weight: 600; }
-.title-small { font-size: 16px; font-weight: 600; }
-.body-large { font-size: 16px; font-weight: 400; }
-.body-medium { font-size: 14px; font-weight: 400; }
-.body-small { font-size: 12px; font-weight: 400; }
-.label-medium { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; }
+header h1 {
+    margin: 0;
+}
 
-/* --- MAIN LAYOUT (Side Panel + Content) --- */
-.app-container {
+main {
+    padding: 1rem;
+    margin: 0 auto;
+    max-width: 800px;
+}
+
+section {
+    background: #fff;
+    margin: 1rem 0;
+    padding: 1rem;
+    border-radius: 5px;
+}
+
+h2 {
+    border-bottom: 2px solid #333;
+    padding-bottom: 0.5rem;
+}
+
+.comparison-container {
     display: flex;
-    height: 100vh;
-}
-.app-content-wrapper {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto; /* Scrollable main content */
-    margin-left: var(--sidebar-width);
-}
-.content-area {
-    padding: 40px 60px;
-}
-
-/* --- SIDE PANEL --- */
-.app-sidebar {
-    width: var(--sidebar-width);
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    background-color: var(--color-bg-secondary);
-    border-right: 1px solid var(--color-bg-tertiary);
-    padding: 24px 0;
-}
-.sidebar-header {
-    display: flex;
-    align-items: center;
-    padding: 0 20px 20px;
-}
-.sidebar-header .logo-icon { font-size: 1.5em; margin-right: 10px; color: var(--color-accent); }
-.tagger-title-part { color: var(--color-accent); }
-
-.sidebar-nav {
-    display: flex;
-    flex-direction: column;
-}
-.sidebar-divider { height: 1px; background-color: var(--color-bg-tertiary); margin: 20px 0; }
-
-/* Sidebar Nav Item */
-.app-sidebar .nav-item {
-    display: flex;
-    align-items: center;
-    padding: 10px 20px;
-    margin: 2px 10px;
-    color: var(--color-text-secondary);
-    text-decoration: none;
-    border-radius: var(--shape-radius-medium);
-    transition: background-color var(--transition-duration), color var(--transition-duration);
-    position: relative;
-}
-.app-sidebar .nav-item .icon { margin-right: 10px; font-size: 1.1em; }
-
-.app-sidebar .nav-item:hover {
-    background-color: var(--color-bg-tertiary);
-    color: var(--color-text-primary);
-}
-.app-sidebar .nav-item.active {
-    background-color: var(--color-accent-dark);
-    color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px var(--color-accent); /* Accent border */
-}
-.app-sidebar .nav-item.active .label {
-    font-weight: 700;
-}
-.settings-item {
-    margin-top: 20px;
-}
-
-
-/* --- TOP APP BAR --- */
-.app-top-bar {
-    position: sticky;
-    top: 0;
-    height: 64px;
-    background-color: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-bg-tertiary);
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: 0 40px;
-    z-index: 100;
-}
-.search-box {
-    display: flex;
-    align-items: center;
-    width: 400px;
-    background-color: var(--color-bg-primary);
-    border-radius: var(--shape-radius-medium);
-    border: 1px solid var(--color-bg-tertiary);
-}
-.search-box input {
-    flex-grow: 1;
-    height: 40px;
-    background: transparent;
-    border: none;
-    color: var(--color-text-primary);
-    padding: 0 15px;
-}
-.search-box input::placeholder { color: var(--color-text-secondary); }
-.search-box button { background: none; border: none; padding: 0 10px; cursor: pointer; color: var(--color-text-secondary); }
-.user-status {
-    color: var(--color-accent);
 }
 
-/* --- BUTTONS (Custom Style - Sharp Corners) --- */
-.custom-button {
-    height: 40px;
-    padding: 0 20px;
-    border-radius: var(--shape-radius-small);
-    text-transform: none;
-    font-weight: 600;
-    transition: background-color var(--transition-duration), box-shadow var(--transition-duration);
-}
-.custom-button.filled {
-    background-color: var(--color-accent);
-    color: var(--color-bg-primary);
-    border: 1px solid var(--color-accent);
-}
-.custom-button.outlined {
-    background-color: transparent;
-    color: var(--color-accent);
-    border: 1px solid var(--color-accent);
-}
-.custom-button.text {
-    background-color: transparent;
-    color: var(--color-text-primary);
-    border: none;
-}
-.custom-button:hover:not(.text) {
-    opacity: 0.9;
-    box-shadow: 0 0 8px rgba(0, 167, 217, 0.3);
+.before, .after {
+    width: 48%;
 }
 
-/* --- CARDS (Custom Style - High Contrast/Solid Backgrounds) --- */
-.custom-card {
-    padding: 24px;
-    border-radius: var(--shape-radius-medium);
-    transition: box-shadow var(--transition-duration);
+pre {
+    background: #eee;
+    padding: 1rem;
+    border-radius: 5px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
-.custom-card.elevated {
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-bg-tertiary);
-}
-.custom-card.filled {
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-bg-tertiary);
-}
-.custom-card.outlined {
-    background: transparent;
-    border: 1px solid var(--color-text-secondary);
+code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
 }
 
-/* --- SEGMENTED BUTTONS/TABS (Custom Style - Underlined look) --- */
-.custom-segmented-button {
-    display: flex;
-    border-bottom: 2px solid var(--color-bg-tertiary);
-    margin-bottom: 20px;
-}
-.custom-segmented-button .tab-button {
-    height: 40px;
-    padding: 0 15px;
-    background-color: transparent;
-    border: none;
-    color: var(--color-text-secondary);
-    transition: color var(--transition-duration);
-}
-.custom-segmented-button .tab-button.active {
-    color: var(--color-accent);
-    border-bottom: 2px solid var(--color-accent);
-    margin-bottom: -2px; /* Pull active line down */
-    font-weight: 700;
-}
-
-/* --- CHECKBOX & RADIO (Custom Geometric Style) --- */
-.custom-checkbox-container input:checked ~ .checkmark,
-.custom-radio-container input:checked ~ .radio-dot {
-    border-color: var(--color-accent);
-}
-.custom-radio-container input:checked ~ .radio-dot::after {
-    background: var(--color-accent);
-}
-
-/* --- DIVIDER --- */
-.custom-divider {
-    height: 1px;
-    background-color: var(--color-bg-tertiary);
-    margin: 40px 0;
-}
-
-/* Code Block */
-.code-block {
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-bg-tertiary);
-    border-radius: var(--shape-radius-medium);
-    position: relative;
-    padding: 15px;
-    overflow-x: auto;
-}
-.code-block code { font-family: 'Roboto Mono', monospace; color: #79CCFF; }
-
-/* Container for the example section */
-.nlptagger-example-section {
-    max-width: 900px;
-    margin: 20px auto;
-    padding: 20px;
-    background-color: #f9f9f9; /* Light background for the section */
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.nlptagger-example-section h2 {
-    color: #333;
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
-}
-
-.example-description {
-    color: #555;
-    margin-bottom: 30px;
-    font-style: italic;
-}
-
-/* Table styling */
-.nlptagger-table-container {
-    overflow-x: auto; /* Ensures table is scrollable on small screens */
-}
-
-.nlptagger-table-container table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0;
-    font-size: 14px;
-    background-color: #fff; /* White background for the table */
-}
-
-.nlptagger-table-container th, 
-.nlptagger-table-container td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-.nlptagger-table-container th {
-    background-color: #007bff; /* Primary blue color for header */
-    color: white;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Style for field labels (the first column) */
-.field-label {
-    width: 30%; /* Allocates a reasonable width for the label */
-    font-weight: 600;
-    color: #333;
-    background-color: #f5f5f5;
-}
-
-/* Style for the confidence text */
-.confidence {
-    color: #6c757d; /* Muted gray for less important details */
-    font-style: italic;
-    font-size: 0.9em;
-}
-
-/* Style for the generated command row to make it stand out */
-.generated-command-row {
-    background-color: #e6f0ff; /* Light blue background */
-    border-top: 2px solid #0056b3;
-    font-weight: bold;
-}
-
-/* Code block styling (e.g., for tags and the generated command) */
-.code-block, 
-.generated-command pre {
-    font-family: 'Consolas', 'Monaco', monospace;
-    background-color: #282c34; /* Dark background for code/terminal look */
-    color: #61afef; /* Light blue/cyan for code text */
-    padding: 5px 10px;
-    border-radius: 4px;
-    display: inline-block;
-    white-space: pre-wrap; /* Allows long strings to wrap */
-}
-
-.generated-command pre {
-    margin: 0;
-    padding: 10px;
-    font-size: 1.1em;
-    width: 100%; /* Full width within the cell */
-}
-
-/* Highlighting the command line text in the table for a subtle terminal feel */
-.command-line {
-    font-family: 'Consolas', 'Monaco', monospace;
-    color: #008000; /* Green color for user input */
-}
-
-/* Responsive adjustments */
-@media screen and (max-width: 600px) {
-    .nlptagger-table-container table {
-        display: block;
-        width: 100%;
-    }
-
-    /* Stack rows on small screens */
-    .nlptagger-table-container thead {
-        display: none;
-    }
-
-    .nlptagger-table-container tr {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-    }
-
-    .nlptagger-table-container td {
-        border-bottom: none;
-    }
-
-    .field-label {
-        background-color: #007bff;
-        color: white;
-        padding: 8px 15px;
-        border-radius: 5px 5px 0 0;
-    }
-
-    .field-value {
-        border-top: 1px solid #ddd;
-    }
+footer {
+    text-align: center;
+    padding: 1rem 0;
+    color: #666;
 }
