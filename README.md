@@ -266,16 +266,10 @@ The SQLite database stores:
 
 ## 🔮 Future Enhancements
 
-- [ ] More language support (Python, JavaScript, Rust)
-- [ ] Advanced NER with deep learning models
-- [ ] Cloud deployment integration
-- [ ] Collaborative intent sharing
-- [ ] Visual project structure editor
-- [ ] Real-time code analysis and suggestions
+- [ ] CSV to handler code generation
+- [ ] better learning and remembering intent
 
-## 📝 License
-
-This project is part of the nlptagger research initiative exploring AI-assisted code generation through natural language understanding.
+GPL 3
 
 ---
 
